@@ -46,6 +46,7 @@ interface AppState {
   createCommunity: (name: string) => Promise<void>;
   createChannel: (communityId: string, name: string, type: 'text' | 'voice') => Promise<void>;
   addMember: (communityId: string, nick: string) => Promise<void>;
+  removeMember: (communityId: string, userId: string) => Promise<void>;
   wireEvents: () => void;
 }
 
@@ -213,6 +214,33 @@ export const useAppStore = create<AppState>((set, get) => ({
       body: { user_id: target.id, wrapped_keys: wrapped },
     });
     // member_added broadcast triggers bootstrap refresh for everyone
+  },
+
+  // Owner flow: remove on the server, then rekey every affected channel by
+  // sealing a fresh key to each remaining member. Old epochs stay decryptable.
+  removeMember: async (communityId, userId) => {
+    const res = await api<{ affected_channel_ids: string[] }>(
+      `/communities/${communityId}/members/${userId}`,
+      { method: 'DELETE' },
+    );
+    await get().loadBootstrap(); // member list without the removed user
+    const { publicKeys, communities } = get();
+    const com = communities.find((c) => c.id === communityId);
+    if (!com) return;
+    const remaining = com.members.filter((m) => m.id !== userId);
+    for (const channelId of res.affected_channel_ids) {
+      const newKey = randomBytes(32);
+      const wrappedKeys = remaining.map((m) => {
+        const pk = publicKeys[m.id];
+        if (!pk) throw new Error(`${m.nick} için açık anahtar yok`);
+        return { user_id: m.id, wrapped_key: wrapKeyFor(newKey, pk) };
+      });
+      await api(`/channels/${channelId}/rotate`, {
+        method: 'POST',
+        body: { wrapped_keys: wrappedKeys },
+      });
+      // own epoch map updates via the channel:rotated → loadBootstrap handler
+    }
   },
 
   wireEvents: () => {

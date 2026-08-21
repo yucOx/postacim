@@ -11,8 +11,10 @@ import { useVoiceStore } from '../state/voiceStore';
 function Controls() {
   const micOn = useVoiceStore((s) => s.micOn);
   const camOn = useVoiceStore((s) => s.camOn);
+  const screenOn = useVoiceStore((s) => s.screenOn);
   const toggleMic = useVoiceStore((s) => s.toggleMic);
   const toggleCam = useVoiceStore((s) => s.toggleCam);
+  const toggleScreen = useVoiceStore((s) => s.toggleScreen);
   const leave = useVoiceStore((s) => s.leave);
   const local = useLocalParticipant();
 
@@ -35,6 +37,15 @@ function Controls() {
         title={camOn ? 'kamerayı kapat' : 'kamerayı aç'}
       >
         {camOn ? '📹' : '🚫'}
+      </button>
+      <button
+        onClick={() => void toggleScreen()}
+        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg ${
+          screenOn ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-neutral-700 hover:bg-neutral-600'
+        }`}
+        title={screenOn ? 'ekran paylaşımını durdur' : 'ekran paylaş'}
+      >
+        🖥️
       </button>
       <span className="ml-2 text-xs text-neutral-500">
         {local.isMicrophoneEnabled ? 'E2EE aktif 🔒' : 'mikrofon kapalı — açmak için 🎙️'}

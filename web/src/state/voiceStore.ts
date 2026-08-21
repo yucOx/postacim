@@ -16,8 +16,10 @@ export interface VoiceParticipant {
 interface VoiceState {
   joinedChannelId: string | null;
   room: Room | null;
+  keyProvider: ExternalE2EEKeyProvider | null;
   micOn: boolean;
   camOn: boolean;
+  screenOn: boolean;
   error: string | null;
   /** channelId -> participants (sidebar presence, from WS voice:update) */
   presence: Record<string, VoiceParticipant[]>;
@@ -25,6 +27,7 @@ interface VoiceState {
   leave: () => Promise<void>;
   toggleMic: () => Promise<void>;
   toggleCam: () => Promise<void>;
+  toggleScreen: () => Promise<void>;
   wire: () => void;
 }
 
@@ -40,8 +43,10 @@ const cleanup = (room: Room | null): void => {
 export const useVoiceStore = create<VoiceState>((set, get) => ({
   joinedChannelId: null,
   room: null,
+  keyProvider: null,
   micOn: false,
   camOn: false,
+  screenOn: false,
   error: null,
   presence: {},
 
@@ -53,7 +58,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (prev) {
       if (prevChannel) wsSend({ type: 'voice_state', channel_id: prevChannel, state: 'left' });
       cleanup(prev);
-      set({ room: null, joinedChannelId: null, micOn: false, camOn: false });
+      set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false });
     }
 
     set({ error: null });
@@ -79,7 +84,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           if (get().joinedChannelId) {
             wsSend({ type: 'voice_state', channel_id: get().joinedChannelId, state: 'left' });
           }
-          set({ room: null, joinedChannelId: null, micOn: false, camOn: false });
+          set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false });
         }
       });
       // setKey: random bytes → ArrayBuffer → HKDF path (all clients here are livekit-client)
@@ -87,7 +92,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       await room.setE2EEEnabled(true);
       await room.connect(url, token);
       wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
-      set({ room, joinedChannelId: channelId, micOn: false, camOn: false });
+      set({ room, keyProvider, joinedChannelId: channelId, micOn: false, camOn: false });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
       throw err;
@@ -98,7 +103,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     const { room, joinedChannelId } = get();
     if (joinedChannelId) wsSend({ type: 'voice_state', channel_id: joinedChannelId, state: 'left' });
     cleanup(room);
-    set({ room: null, joinedChannelId: null, micOn: false, camOn: false });
+    set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false });
   },
 
   toggleMic: async () => {
@@ -117,12 +122,34 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     set({ camOn: next });
   },
 
+  toggleScreen: async () => {
+    const room = get().room;
+    if (!room) return;
+    const next = !get().screenOn;
+    await room.localParticipant.setScreenShareEnabled(next);
+    set({ screenOn: next });
+  },
+
   wire: () => {
     onServerEvent((e) => {
       if (e.type === 'voice:update') {
         const channelId = e.channel_id as string;
         const participants = (e.participants as VoiceParticipant[]) ?? [];
         set((s) => ({ presence: { ...s.presence, [channelId]: participants } }));
+      } else if (e.type === 'channel:rotated') {
+        // live rekey: refresh epochs, then hand the new key to SFrame
+        const channelId = e.channel_id as string;
+        if (get().joinedChannelId === channelId && get().keyProvider) {
+          void (async () => {
+            try {
+              await useAppStore.getState().loadBootstrap();
+              const key = useAppStore.getState().currentKey(channelId);
+              if (key) await get().keyProvider!.setKey(key.slice().buffer as ArrayBuffer);
+            } catch {
+              // stay on old key; user can rejoin
+            }
+          })();
+        }
       }
     });
   },

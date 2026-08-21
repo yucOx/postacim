@@ -25,11 +25,12 @@ interface AuthState {
   kek: Uint8Array | null;
   register: (nick: string, password: string) => Promise<void>;
   login: (nick: string, password: string) => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   restore: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   status: 'loading',
   user: null,
   publicKey: null,
@@ -91,6 +92,32 @@ export const useAuthStore = create<AuthState>((set) => ({
       privateKey,
       kek,
     });
+  },
+
+  // Password change re-wraps the identity blob under the new KEK. Channel keys
+  // are untouched: they are sealed to the X25519 identity, not the password.
+  changePassword: async (oldPassword, newPassword) => {
+    await sodiumReady;
+    const nick = get().user?.nick;
+    const { publicKey, privateKey } = get();
+    if (!nick || !publicKey || !privateKey) throw new Error('giriş yapılmamış');
+    const params = await api<{ kdf_salt: string }>(
+      `/auth/kdf-params?nick=${encodeURIComponent(nick)}`,
+    );
+    const old = await deriveKeys(oldPassword, params.kdf_salt);
+    const newSalt = newKdfSaltHex();
+    const next = await deriveKeys(newPassword, newSalt);
+    await api('/auth/password', {
+      method: 'POST',
+      body: {
+        old_auth_material: b64(old.authMaterial),
+        new_kdf_salt: newSalt,
+        new_auth_material: b64(next.authMaterial),
+        new_key_blob: sealIdentityBlob(privateKey, next.kek),
+      },
+    });
+    saveKek(next.kek);
+    set({ kek: next.kek });
   },
 
   logout: async () => {

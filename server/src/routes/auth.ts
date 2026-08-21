@@ -93,4 +93,49 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     revokeSession(req.sessionToken);
     return reply.code(204).send();
   });
+
+  // Password change: verifies old material, replaces salt + verifier + blob.
+  // Channel keys are untouched — they are wrapped to the X25519 identity, which
+  // does not change with the password.
+  app.post(
+    '/auth/password',
+    {
+      config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+      schema: {
+        body: {
+          type: 'object',
+          required: ['old_auth_material', 'new_kdf_salt', 'new_auth_material', 'new_key_blob'],
+          additionalProperties: false,
+          properties: {
+            old_auth_material: { type: 'string', minLength: 44, maxLength: 44 },
+            new_kdf_salt: { type: 'string', minLength: 32, maxLength: 32, pattern: '^[0-9a-f]{32}$' },
+            new_auth_material: { type: 'string', minLength: 44, maxLength: 44 },
+            new_key_blob: { type: 'string', minLength: 48, maxLength: 1024 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const body = req.body as {
+        old_auth_material: string;
+        new_kdf_salt: string;
+        new_auth_material: string;
+        new_key_blob: string;
+      };
+      const row = db
+        .prepare('SELECT verifier FROM users WHERE id = ?')
+        .get(req.user.id) as { verifier: string } | undefined;
+      if (!row) return reply.code(404).send({ error: 'kullanıcı bulunamadı' });
+      const ok = await argon2.verify(row.verifier, body.old_auth_material).catch(() => false);
+      if (!ok) return reply.code(401).send({ error: 'eski şifre hatalı' });
+      const verifier = await argon2.hash(body.new_auth_material);
+      db.prepare('UPDATE users SET kdf_salt = ?, verifier = ?, key_blob = ? WHERE id = ?').run(
+        body.new_kdf_salt,
+        verifier,
+        body.new_key_blob,
+        req.user.id,
+      );
+      return reply.code(204).send();
+    },
+  );
 }

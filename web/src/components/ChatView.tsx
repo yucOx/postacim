@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useChatStore } from '../state/chatStore';
+import { formatDay, sameDay } from '../lib/format';
 import MessageRow from './MessageRow';
 import Composer from './Composer';
 
@@ -49,9 +50,22 @@ export default function ChatView({ channelId, channelName }: { channelId: string
             henüz mesaj yok — ilk şifreli mesajı sen yaz
           </div>
         )}
-        {messages.map((m, i) => (
-          <MessageRow key={m.id} m={m} prev={messages[i - 1] ?? null} />
-        ))}
+        {messages.map((m, i) => {
+          const prev = messages[i - 1] ?? null;
+          const newDay = !prev || !sameDay(prev.sentAt, m.sentAt);
+          return (
+            <div key={m.id}>
+              {newDay && (
+                <div className="my-2 flex items-center gap-3 px-4">
+                  <div className="h-px flex-1 bg-neutral-800" />
+                  <span className="text-[11px] text-neutral-500">{formatDay(m.sentAt)}</span>
+                  <div className="h-px flex-1 bg-neutral-800" />
+                </div>
+              )}
+              <MessageRow m={m} prev={prev} />
+            </div>
+          );
+        })}
         <div ref={bottomRef} />
       </div>
       <Composer channelId={channelId} />

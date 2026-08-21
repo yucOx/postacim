@@ -1,5 +1,5 @@
 {
-  "name": "@posta-guvercini/web",
+  "name": "@postacim/web",
   "private": true,
   "type": "module",
   "scripts": {

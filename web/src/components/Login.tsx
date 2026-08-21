@@ -32,7 +32,7 @@ export default function Login() {
         className="w-88 flex flex-col gap-4 rounded-xl border border-neutral-800 bg-neutral-900 p-6"
       >
         <div className="text-center">
-          <div className="text-2xl font-bold">posta-guvercini 🕊️</div>
+          <div className="text-2xl font-bold">postacim 🕊️</div>
           <p className="mt-1 text-xs text-neutral-500">
             uçtan uca şifreli sohbet — sunucu hiçbir şey göremez
           </p>

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { api } from '../api/client';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
 import Modal from './Modal';
@@ -7,6 +6,7 @@ import Modal from './Modal';
 export default function MemberList() {
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
   const addMember = useAppStore((s) => s.addMember);
+  const removeMember = useAppStore((s) => s.removeMember);
   const me = useAuthStore((s) => s.user);
   const [adding, setAdding] = useState(false);
   const [nick, setNick] = useState('');
@@ -32,8 +32,12 @@ export default function MemberList() {
   };
 
   const remove = async (userId: string, userNick: string): Promise<void> => {
-    if (!confirm(`${userNick} topluluktan çıkarılsın mı?`)) return;
-    await api(`/communities/${community.id}/members/${userId}`, { method: 'DELETE' });
+    if (!confirm(`${userNick} çıkarılsın mı? Odalar yeni anahtarla döndürülür.`)) return;
+    try {
+      await removeMember(community.id, userId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'çıkarılamadı');
+    }
   };
 
   return (

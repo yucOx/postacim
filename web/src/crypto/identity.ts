@@ -1,7 +1,7 @@
 import { sodium } from './sodium';
 import { b64, concat, unb64 } from './bytes';
 
-const IDENTITY_AAD = 'posta-guvercini/v1/identity';
+const IDENTITY_AAD = 'postacim/v1/identity';
 
 export interface Identity {
   publicKey: Uint8Array;
