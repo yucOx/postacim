@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { communityRoutes } from './routes/communities.js';
 import { channelRoutes } from './routes/channels.js';
+import { messageRoutes } from './routes/messages.js';
 import { attachWs } from './ws/index.js';
 
 export const app = Fastify({
@@ -45,6 +46,7 @@ await app.register(authRoutes, { prefix: '/api' });
 await app.register(bootstrapRoutes, { prefix: '/api' });
 await app.register(communityRoutes, { prefix: '/api' });
 await app.register(channelRoutes, { prefix: '/api' });
+await app.register(messageRoutes, { prefix: '/api' });
 
 attachWs(app);
 
