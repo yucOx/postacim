@@ -5,6 +5,10 @@ import './db.js'; // open + migrate on boot
 import './types.js';
 import { verifySession } from './auth/sessions.js';
 import { authRoutes } from './routes/auth.js';
+import { bootstrapRoutes } from './routes/bootstrap.js';
+import { communityRoutes } from './routes/communities.js';
+import { channelRoutes } from './routes/channels.js';
+import { attachWs } from './ws/index.js';
 
 export const app = Fastify({
   logger: {
@@ -38,6 +42,11 @@ app.addHook('onRequest', async (req, reply) => {
 app.get('/api/health', async () => ({ ok: true }));
 
 await app.register(authRoutes, { prefix: '/api' });
+await app.register(bootstrapRoutes, { prefix: '/api' });
+await app.register(communityRoutes, { prefix: '/api' });
+await app.register(channelRoutes, { prefix: '/api' });
+
+attachWs(app);
 
 const start = async (): Promise<void> => {
   await app.listen({ port: config.port, host: '0.0.0.0' });
