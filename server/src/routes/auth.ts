@@ -25,6 +25,11 @@ interface RegisterBody {
   auth_material: string;
   public_key: string;
   key_blob: string;
+  recovery?: {
+    kdf_salt: string;
+    auth_material: string;
+    blob: string;
+  };
 }
 interface LoginBody {
   nick: string;
@@ -56,13 +61,37 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     { config: { rateLimit: { max: config.registerRatePerHour, timeWindow: '1 hour' } }, schema: { body: registerSchema } },
     async (req, reply) => {
       const body = req.body as RegisterBody;
+      const rec = body.recovery;
+      if (
+        rec !== undefined &&
+        (!/^[0-9a-f]{32}$/.test(rec.kdf_salt) ||
+          typeof rec.auth_material !== 'string' ||
+          rec.auth_material.length !== 44 ||
+          typeof rec.blob !== 'string' ||
+          rec.blob.length < 48 ||
+          rec.blob.length > 1024)
+      ) {
+        return reply.code(400).send({ error: 'geçersiz kurtarma verisi' });
+      }
       try {
         const verifier = await argon2.hash(body.auth_material);
+        const recVerifier = rec ? await argon2.hash(rec.auth_material) : null;
         const id = crypto.randomUUID();
         db.prepare(
-          `INSERT INTO users(id, nick, kdf_salt, verifier, public_key, key_blob, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ).run(id, body.nick, body.kdf_salt, verifier, body.public_key, body.key_blob, Date.now());
+          `INSERT INTO users(id, nick, kdf_salt, verifier, public_key, key_blob, recovery_salt, recovery_blob, recovery_verifier, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          id,
+          body.nick,
+          body.kdf_salt,
+          verifier,
+          body.public_key,
+          body.key_blob,
+          rec?.kdf_salt ?? null,
+          rec?.blob ?? null,
+          recVerifier,
+          Date.now(),
+        );
         const token = issueSession(id);
         sessionCookie(reply, req, token);
         return reply.code(201).send({ token, user: publicUser(id, body.nick) });
@@ -159,6 +188,149 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       tx();
       reply.clearCookie(SESSION_COOKIE, { path: '/' });
       return reply.code(204).send();
+    },
+  );
+
+  // --- recovery phrase ---
+
+  // salt for the recovery KDF (mirrors kdf-params; 404 when no phrase is set)
+  app.get(
+    '/auth/recovery-params',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const nick = (req.query as { nick?: string }).nick;
+      if (typeof nick !== 'string' || !NICK_REGEX.test(nick)) {
+        return reply.code(400).send({ error: 'geçersiz nick' });
+      }
+      const row = db.prepare('SELECT recovery_salt FROM users WHERE nick = ?').get(nick) as
+        | { recovery_salt: string | null }
+        | undefined;
+      if (!row?.recovery_salt) return reply.code(404).send({ error: 'kurtarma ifadesi yok' });
+      return { recovery_salt: row.recovery_salt };
+    },
+  );
+
+  // attach a phrase to an existing logged-in account (accounts created before
+  // the ritual, or a fresh phrase after compromise fears)
+  app.post(
+    '/auth/recovery',
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    async (req, reply) => {
+      const body = req.body as { kdf_salt?: string; auth_material?: string; blob?: string };
+      if (
+        !/^[0-9a-f]{32}$/.test(body?.kdf_salt ?? '') ||
+        typeof body?.auth_material !== 'string' ||
+        body.auth_material.length !== 44 ||
+        typeof body?.blob !== 'string' ||
+        body.blob.length < 48 ||
+        body.blob.length > 1024
+      ) {
+        return reply.code(400).send({ error: 'geçersiz kurtarma verisi' });
+      }
+      const verifier = await argon2.hash(body.auth_material);
+      db.prepare(
+        'UPDATE users SET recovery_salt = ?, recovery_blob = ?, recovery_verifier = ? WHERE id = ?',
+      ).run(body.kdf_salt, body.blob, verifier, req.user.id);
+      return reply.code(204).send();
+    },
+  );
+
+  // "forgot password" step 1: prove the phrase → receive the recovery blob
+  // (identity wrapped under the phrase-derived KEK). Nothing changes yet.
+  app.post(
+    '/auth/recover/unlock',
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    async (req, reply) => {
+      const body = (req.body ?? {}) as { nick?: string; recovery_auth_material?: string };
+      if (typeof body?.nick !== 'string' || !NICK_REGEX.test(body.nick)) {
+        return reply.code(400).send({ error: 'geçersiz nick' });
+      }
+      if (typeof body?.recovery_auth_material !== 'string' || body.recovery_auth_material.length !== 44) {
+        return reply.code(400).send({ error: 'geçersiz kanıt' });
+      }
+      const row = db
+        .prepare('SELECT id, recovery_verifier, recovery_blob, public_key FROM users WHERE nick = ?')
+        .get(body.nick) as
+        | {
+            id: string;
+            recovery_verifier: string | null;
+            recovery_blob: string | null;
+            public_key: string;
+          }
+        | undefined;
+      if (!row?.recovery_verifier || !row.recovery_blob) {
+        return reply.code(401).send({ error: 'bu hesapta kurtarma ifadesi yok' });
+      }
+      const ok = await argon2
+        .verify(row.recovery_verifier, body.recovery_auth_material)
+        .catch(() => false);
+      if (!ok) return reply.code(401).send({ error: 'kurtarma ifadesi hatalı' });
+      return reply.code(200).send({ recovery_blob: row.recovery_blob, public_key: row.public_key });
+    },
+  );
+
+  // "forgot password" step 2: set the new password material + rewrapped blob.
+  // The identity (public key) stays the same; every existing session drops.
+  app.post(
+    '/auth/recover/finish',
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    async (req, reply) => {
+      const body = (req.body ?? {}) as {
+        nick?: string;
+        recovery_auth_material?: string;
+        new_kdf_salt?: string;
+        new_auth_material?: string;
+        new_key_blob?: string;
+      };
+      if (
+        typeof body?.nick !== 'string' ||
+        !NICK_REGEX.test(body.nick) ||
+        typeof body?.recovery_auth_material !== 'string' ||
+        body.recovery_auth_material.length !== 44 ||
+        !/^[0-9a-f]{32}$/.test(body?.new_kdf_salt ?? '') ||
+        typeof body?.new_auth_material !== 'string' ||
+        body.new_auth_material.length !== 44 ||
+        typeof body?.new_key_blob !== 'string' ||
+        body.new_key_blob.length < 48 ||
+        body.new_key_blob.length > 1024
+      ) {
+        return reply.code(400).send({ error: 'geçersiz veri' });
+      }
+      const row = db
+        .prepare('SELECT id, nick, recovery_verifier, public_key, key_blob FROM users WHERE nick = ?')
+        .get(body.nick) as
+        | {
+            id: string;
+            nick: string;
+            recovery_verifier: string | null;
+            public_key: string;
+            key_blob: string;
+          }
+        | undefined;
+      if (!row?.recovery_verifier) {
+        return reply.code(401).send({ error: 'bu hesapta kurtarma ifadesi yok' });
+      }
+      const ok = await argon2
+        .verify(row.recovery_verifier, body.recovery_auth_material)
+        .catch(() => false);
+      if (!ok) return reply.code(401).send({ error: 'kurtarma ifadesi hatalı' });
+      const verifier = await argon2.hash(body.new_auth_material);
+      const tx = db.transaction(() => {
+        db.prepare('UPDATE users SET kdf_salt = ?, verifier = ?, key_blob = ? WHERE id = ?').run(
+          body.new_kdf_salt,
+          verifier,
+          body.new_key_blob,
+          row.id,
+        );
+        revokeAllSessions(row.id);
+      });
+      tx();
+      const token = issueSession(row.id);
+      sessionCookie(reply, req, token);
+      return {
+        token,
+        user: { ...publicUser(row.id, row.nick), public_key: row.public_key, key_blob: body.new_key_blob },
+      };
     },
   );
 }

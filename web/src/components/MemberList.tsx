@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
+import ConfirmDialog from './ConfirmDialog';
 import Modal from './Modal';
+import { toast } from './Toast';
 
 export default function MemberList() {
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
@@ -35,13 +37,22 @@ export default function MemberList() {
     }
   };
 
-  const act = async (fn: () => Promise<void>, confirmText?: string): Promise<void> => {
-    if (confirmText && !confirm(confirmText)) return;
+  const [pendingAct, setPendingAct] = useState<{ fn: () => Promise<void>; text: string } | null>(null);
+  const runAct = async (fn: () => Promise<void>): Promise<void> => {
     try {
       await fn();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'işlem başarısız');
+      toast.error(err instanceof Error ? err.message : 'işlem başarısız');
+    } finally {
+      setPendingAct(null);
     }
+  };
+  const act = (fn: () => Promise<void>, confirmText?: string): void => {
+    if (confirmText) {
+      setPendingAct({ fn, text: confirmText });
+      return;
+    }
+    void runAct(fn);
   };
 
   return (
@@ -125,6 +136,16 @@ export default function MemberList() {
             </button>
           </div>
         </Modal>
+      )}
+      {pendingAct && (
+        <ConfirmDialog
+          title="Emin misin?"
+          message={pendingAct.text}
+          danger
+          confirmLabel="evet, devam"
+          onConfirm={() => void runAct(pendingAct.fn)}
+          onCancel={() => setPendingAct(null)}
+        />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { useAuthStore } from './state/authStore';
 import Login from './components/Login';
 import Shell from './components/Shell';
 import JoinScreen from './components/JoinScreen';
+import { ToastContainer } from './components/Toast';
 import { parseInviteLink, type ParsedInvite } from './crypto/invite';
 
 export default function App() {
@@ -20,12 +21,20 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
+  let screen: React.JSX.Element;
   if (status === 'loading') {
-    return (
-      <div className="flex h-screen items-center justify-center bg-neutral-950 text-4xl">🕊️</div>
-    );
+    screen = <div className="flex h-screen items-center justify-center bg-neutral-950 text-4xl">🕊️</div>;
+  } else if (status !== 'authed') {
+    screen = <Login />;
+  } else if (invite) {
+    screen = <JoinScreen invite={invite} />;
+  } else {
+    screen = <Shell />;
   }
-  if (status !== 'authed') return <Login />;
-  if (invite) return <JoinScreen invite={invite} />;
-  return <Shell />;
+  return (
+    <>
+      {screen}
+      <ToastContainer />
+    </>
+  );
 }

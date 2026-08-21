@@ -3,6 +3,7 @@ import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import { formatTime } from '../lib/format';
+import ConfirmDialog from './ConfirmDialog';
 import Modal from './Modal';
 
 function NewGroupModal({ onClose }: { onClose: () => void }) {
@@ -89,6 +90,7 @@ export default function DmHome() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [newGroup, setNewGroup] = useState(false);
+  const [unfriendNick, setUnfriendNick] = useState<string | null>(null);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -248,7 +250,7 @@ export default function DmHome() {
               mesaj
             </button>
             <button
-              onClick={() => confirm(`${f.nick} arkadaşlıktan çıkarılsın mı?`) && void unfriend(f.id)}
+              onClick={() => setUnfriendNick(f.nick)}
               className="text-xs text-neutral-600 hover:text-red-400 group-hover:inline"
               title="arkadaşlıktan çıkar"
             >
@@ -258,6 +260,19 @@ export default function DmHome() {
         ))}
       </div>
       {newGroup && <NewGroupModal onClose={() => setNewGroup(false)} />}
+      {unfriendNick && (
+        <ConfirmDialog
+          title="Arkadaşlıktan çıkar"
+          message={`${unfriendNick} arkadaşlıktan çıkarılsın mı? DM geçmişi okunur kalır, yeni mesaj gönderilemez.`}
+          danger
+          confirmLabel="çıkar"
+          onConfirm={() => {
+            const f = friends.find((x) => x.nick === unfriendNick);
+            if (f) void unfriend(f.id).catch(() => {});
+          }}
+          onCancel={() => setUnfriendNick(null)}
+        />
+      )}
     </div>
   );
 }

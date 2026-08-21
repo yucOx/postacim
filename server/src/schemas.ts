@@ -19,6 +19,16 @@ export const registerSchema = {
     auth_material: b64Schema(44, 44),
     public_key: b64Schema(44, 44),
     key_blob: b64Schema(48, 1024),
+    recovery: {
+      type: 'object',
+      required: ['kdf_salt', 'auth_material', 'blob'],
+      additionalProperties: false,
+      properties: {
+        kdf_salt: { type: 'string', minLength: 32, maxLength: 32, pattern: '^[0-9a-f]{32}$' },
+        auth_material: b64Schema(44, 44),
+        blob: b64Schema(48, 1024),
+      },
+    },
   },
 } as const;
 

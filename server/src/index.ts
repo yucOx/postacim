@@ -48,6 +48,9 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/kdf-params',
   '/api/auth/register',
   '/api/auth/login',
+  '/api/auth/recovery-params',
+  '/api/auth/recover/unlock',
+  '/api/auth/recover/finish',
 ]);
 
 app.addHook('onRequest', async (req, reply) => {

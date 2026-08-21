@@ -110,7 +110,7 @@ CREATE TABLE join_requests(
   status TEXT NOT NULL CHECK(status IN('pending','denied')),
   created_at INTEGER NOT NULL,
   PRIMARY KEY(community_id, user_id)
-),
+);
 `,
   // v5 — join-password wrapped key set (columns since v3)
   `
@@ -198,5 +198,13 @@ CREATE INDEX idx_gdm_messages ON gdm_messages(channel_id, id DESC);
   // the channel is frozen (no writes, no key handout) until staff rotate it
   `
 ALTER TABLE channels ADD COLUMN needs_rekey INTEGER NOT NULL DEFAULT 0;
+`,
+  // v9 — recovery phrase: a second wrap of the identity private key under an
+  // Argon2id key derived from a BIP-39 phrase, so a lost password does not
+  // mean a lost account. Server stores blobs + verifier, never the phrase.
+  `
+ALTER TABLE users ADD COLUMN recovery_salt TEXT;
+ALTER TABLE users ADD COLUMN recovery_blob TEXT;
+ALTER TABLE users ADD COLUMN recovery_verifier TEXT;
 `,
 ];

@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import type { AuthedUser } from '../api/types';
 import { b64, unb64 } from '../crypto/bytes';
 import { deriveKeys, newKdfSaltHex } from '../crypto/argon2';
+import { deriveRecoveryKeys } from '../crypto/recovery';
 import { generateIdentity, openIdentityBlob, sealIdentityBlob } from '../crypto/identity';
 import { sodiumReady } from '../crypto/sodium';
 
@@ -23,9 +24,11 @@ interface AuthState {
   publicKey: Uint8Array | null;
   privateKey: Uint8Array | null;
   kek: Uint8Array | null;
-  register: (nick: string, password: string) => Promise<void>;
+  register: (nick: string, password: string, recoveryWords?: string[]) => Promise<void>;
   login: (nick: string, password: string) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
+  setupRecovery: (recoveryWords: string[]) => Promise<void>;
+  recoverLogin: (nick: string, recoveryWords: string[], newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   restore: () => Promise<void>;
 }
@@ -37,11 +40,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   privateKey: null,
   kek: null,
 
-  register: async (nick, password) => {
+  register: async (nick, password, recoveryWords) => {
     await sodiumReady;
     const kdfSalt = newKdfSaltHex();
     const { authMaterial, kek } = await deriveKeys(password, kdfSalt);
     const identity = generateIdentity();
+    // second wrap of the identity under the recovery phrase — losing the
+    // password no longer loses the account
+    let recovery: { kdf_salt: string; auth_material: string; blob: string } | undefined;
+    if (recoveryWords?.length === 12) {
+      const recSalt = newKdfSaltHex();
+      const rec = await deriveRecoveryKeys(recoveryWords, recSalt);
+      recovery = {
+        kdf_salt: recSalt,
+        auth_material: b64(rec.authMaterial),
+        blob: sealIdentityBlob(identity.privateKey, rec.kek),
+      };
+    }
     const res = await api<{ token: string; user: { id: string; nick: string } }>(
       '/auth/register',
       {
@@ -52,6 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           auth_material: b64(authMaterial),
           public_key: b64(identity.publicKey),
           key_blob: sealIdentityBlob(identity.privateKey, kek),
+          ...(recovery ? { recovery } : {}),
         },
       },
     );
@@ -116,6 +132,62 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
     saveKek(next.kek);
     set({ kek: next.kek });
+  },
+
+  // attach a recovery phrase to a logged-in account (old accounts)
+  setupRecovery: async (recoveryWords) => {
+    await sodiumReady;
+    const { privateKey } = get();
+    if (!privateKey) throw new Error('giriş yapılmamış');
+    if (recoveryWords.length !== 12) throw new Error('ifade 12 kelime olmalı');
+    const recSalt = newKdfSaltHex();
+    const rec = await deriveRecoveryKeys(recoveryWords, recSalt);
+    await api('/auth/recovery', {
+      method: 'POST',
+      body: {
+        kdf_salt: recSalt,
+        auth_material: b64(rec.authMaterial),
+        blob: sealIdentityBlob(privateKey, rec.kek),
+      },
+    });
+  },
+
+  // "forgot password": phrase proves ownership; identity survives, password resets
+  recoverLogin: async (nick, recoveryWords, newPassword) => {
+    await sodiumReady;
+    if (recoveryWords.length !== 12) throw new Error('ifade 12 kelime olmalı');
+    const params = await api<{ recovery_salt: string }>(
+      `/auth/recovery-params?nick=${encodeURIComponent(nick)}`,
+    ).catch(() => {
+      throw new ApiError(404, 'bu hesapta kurtarma ifadesi yok');
+    });
+    const rec = await deriveRecoveryKeys(recoveryWords, params.recovery_salt);
+    const proof = b64(rec.authMaterial);
+    const unlock = await api<{ recovery_blob: string; public_key: string }>(
+      '/auth/recover/unlock',
+      { method: 'POST', body: { nick, recovery_auth_material: proof } },
+    );
+    const privateKey = openIdentityBlob(unlock.recovery_blob, rec.kek);
+    const newSalt = newKdfSaltHex();
+    const next = await deriveKeys(newPassword, newSalt);
+    const res = await api<{ token: string; user: AuthedUser }>('/auth/recover/finish', {
+      method: 'POST',
+      body: {
+        nick,
+        recovery_auth_material: proof,
+        new_kdf_salt: newSalt,
+        new_auth_material: b64(next.authMaterial),
+        new_key_blob: sealIdentityBlob(privateKey, next.kek),
+      },
+    });
+    saveKek(next.kek);
+    set({
+      status: 'authed',
+      user: { id: res.user.id, nick: res.user.nick },
+      publicKey: unb64(res.user.public_key),
+      privateKey,
+      kek: next.kek,
+    });
   },
 
   logout: async () => {

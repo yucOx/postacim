@@ -4,6 +4,7 @@ import { useDmChatStore } from '../state/dmChatStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { formatDay, sameDay } from '../lib/format';
+import ConfirmDialog from './ConfirmDialog';
 import MessageRow from './MessageRow';
 import Composer from './Composer';
 import Modal from './Modal';
@@ -68,6 +69,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const [adding, setAdding] = useState(false);
+  const [showLeave, setShowLeave] = useState(false);
 
   useEffect(() => {
     void loadHistory(dmId);
@@ -113,7 +115,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
               + üye
             </button>
             <button
-              onClick={() => confirm(`'${gdm.name}' grubundan ayrıl?`) && void leaveGdm(gdm.id).then(() => showDmHome())}
+              onClick={() => setShowLeave(true)}
               className="rounded-full border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-red-400"
             >
               ayrıl
@@ -172,6 +174,20 @@ export default function DmChat({ dmId }: { dmId: string }) {
         placeholder={dm ? `@${dm.peer.nick} — şifreli mesaj… (Enter: gönder)` : `${gdm!.name} — şifreli mesaj… (Enter: gönder)`}
       />
       {adding && gdm && <AddMemberModal gdmId={gdm.id} onClose={() => setAdding(false)} />}
+      {showLeave && gdm && (
+        <ConfirmDialog
+          title="Gruptan ayrıl"
+          message={`'${gdm.name}' grubundan ayrılmak istediğine emin misin? Bu geri alınamaz.`}
+          danger
+          confirmLabel="ayrıl"
+          onConfirm={() => {
+            void leaveGdm(gdm.id)
+              .then(() => showDmHome())
+              .catch(() => {});
+          }}
+          onCancel={() => setShowLeave(false)}
+        />
+      )}
     </div>
   );
 }
