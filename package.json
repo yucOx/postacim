@@ -1,0 +1,12 @@
+{
+  "name": "posta-guvercini",
+  "private": true,
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev:server": "npm -w server run dev",
+    "dev:web": "npm -w web run dev"
+  }
+}

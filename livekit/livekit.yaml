@@ -1,0 +1,13 @@
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # LAN/dev; set true + external_ip for public NAT deployments
+  use_external_ip: false
+turn:
+  # embedded TURN covers symmetric-NAT cases where direct ICE fails
+  enabled: true
+  udp_port: 3478
+keys:
+  devkey: pgv-dev-secret-please-change-me-0123456789abcdef

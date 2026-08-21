@@ -1,0 +1,27 @@
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.1
+    command: --config /etc/livekit.yaml
+    # Linux: host network so RTC UDP ranges need no port mapping.
+    # Non-Linux: drop network_mode, map 7880+7881/tcp, 50000-50100/udp, 3478/udp
+    network_mode: host
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      DATA_DIR: /data
+      # browser-facing URL, not container-facing
+      LIVEKIT_URL: http://localhost:7880
+      LIVEKIT_API_KEY: devkey
+      # must match livekit/livekit.yaml keys.devkey
+      LIVEKIT_SECRET: pgv-dev-secret-please-change-me-0123456789abcdef
+      SESSION_TTL_DAYS: 30
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

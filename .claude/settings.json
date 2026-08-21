@@ -1,0 +1,59 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CCE_PORT_FILE=/home/t4kinra/.cce/projects/posta-guvercini-8166b0/serve.port /home/t4kinra/.cce/hooks/cce_hook.sh SessionStart"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CCE_PORT_FILE=/home/t4kinra/.cce/projects/posta-guvercini-8166b0/serve.port /home/t4kinra/.cce/hooks/cce_hook.sh UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CCE_PORT_FILE=/home/t4kinra/.cce/projects/posta-guvercini-8166b0/serve.port /home/t4kinra/.cce/hooks/cce_hook.sh PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CCE_PORT_FILE=/home/t4kinra/.cce/projects/posta-guvercini-8166b0/serve.port /home/t4kinra/.cce/hooks/cce_hook.sh Stop"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CCE_PORT_FILE=/home/t4kinra/.cce/projects/posta-guvercini-8166b0/serve.port /home/t4kinra/.cce/hooks/cce_hook.sh SessionEnd"
+          }
+        ]
+      }
+    ]
+  }
+}
