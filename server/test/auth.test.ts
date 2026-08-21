@@ -274,3 +274,55 @@ describe('BIP-39 recovery', () => {
     expect(p.status).toBe(200);
   });
 });
+
+describe('cookie hardening details', () => {
+  it('Secure flag flips on when the proxy reports https', async () => {
+    const salt = newKdfSaltHex();
+    const { authMaterial, kek } = await deriveKeys('pw-secure-1', salt);
+    const id = generateIdentity();
+    const r = await fetch(`${srv.baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-forwarded-for': '10.30.6.1',
+        'x-forwarded-proto': 'https',
+      },
+      body: JSON.stringify({
+        nick: 'sec' + Math.floor(Math.random() * 1e9).toString(36),
+        kdf_salt: salt,
+        auth_material: b64(authMaterial),
+        public_key: b64(id.publicKey),
+        key_blob: sealIdentityBlob(id.privateKey, kek),
+      }),
+    });
+    const sc = r.headers.get('set-cookie') ?? '';
+    expect(/HttpOnly/i.test(sc)).toBe(true);
+    expect(/SameSite=Strict/i.test(sc)).toBe(true);
+    expect(/Secure/i.test(sc)).toBe(true); // only behind TLS
+  });
+
+  it('logout clears the cookie and kills the session server-side', async () => {
+    // fresh login to get a cookie
+    const { authMaterial } = await deriveKeys(alice.password, alice.salt);
+    const r = await fetch(`${srv.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.6.2' },
+      body: JSON.stringify({ nick: alice.nick, auth_material: b64(authMaterial) }),
+    });
+    const cookie = /pgv_session=[^;]+/.exec(r.headers.get('set-cookie') ?? '')![0];
+    const me1 = await fetch(`${srv.baseUrl}/auth/me`, {
+      headers: { cookie, 'x-forwarded-for': '10.30.6.2' },
+    });
+    expect(me1.status).toBe(200);
+    const out = await fetch(`${srv.baseUrl}/auth/logout`, {
+      method: 'POST',
+      headers: { cookie, 'x-forwarded-for': '10.30.6.2' },
+    });
+    expect(out.status).toBe(204);
+    expect(/pgv_session=;/.test(out.headers.get('set-cookie') ?? '')).toBe(true);
+    const me2 = await fetch(`${srv.baseUrl}/auth/me`, {
+      headers: { cookie, 'x-forwarded-for': '10.30.6.2' },
+    });
+    expect(me2.status).toBe(401); // revoked, not just forgotten by the browser
+  });
+});

@@ -205,3 +205,58 @@ describe('websocket push', () => {
     ws.close();
   });
 });
+
+describe('voice presence over WS', () => {
+  it('voice_state frames broadcast to community peers with the right shape', async () => {
+    // fresh community so presence state is isolated from other suites
+    const vOwner = await makeUser(srv.baseUrl, 'vp');
+    const com = await vOwner.call('POST', '/communities', {
+      name: 'ses-test',
+      channels: [
+        { name: 'genel', type: 'text', wrapped_key: W('T') },
+        { name: 'ses', type: 'voice', wrapped_key: W('V') },
+      ],
+    });
+    expect(com.status).toBe(201);
+    const comJ = (await com.json()) as { community: { id: string }; channels: { id: string; type: string }[] };
+    const voiceCh = comJ.channels.find((c) => c.type === 'voice')!.id;
+
+    const { WebSocket } = await import('ws');
+    const ws = new WebSocket(srv.baseUrl.replace('/api', '').replace(/^http/, 'ws') + '/ws', {});
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('ws ready timeout')), 5000);
+      ws.on('message', (d: { toString(): string }) => {
+        const e = JSON.parse(d.toString()) as { type: string };
+        if (e.type === 'ready') {
+          clearTimeout(t);
+          resolve();
+        }
+      });
+      ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: vOwner.token })));
+      ws.on('error', reject);
+    });
+    const events: string[] = [];
+    let presenceShape = false;
+    ws.on('message', (d: { toString(): string }) => {
+      const e = JSON.parse(d.toString()) as { type: string; participants?: unknown[]; channel_id?: string };
+      events.push(e.type);
+      if (e.type === 'voice:update' && Array.isArray(e.participants) && e.channel_id === voiceCh) {
+        presenceShape = true;
+      }
+    });
+    ws.send(JSON.stringify({ type: 'voice_state', channel_id: voiceCh, state: 'joined' }));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(events).toContain('voice:update');
+    expect(presenceShape).toBe(true);
+    // leaving also broadcasts
+    const before = events.length;
+    ws.send(JSON.stringify({ type: 'voice_state', channel_id: voiceCh, state: 'left' }));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(events.length).toBeGreaterThan(before);
+    // invalid channel id is ignored (no crash, socket stays open)
+    ws.send(JSON.stringify({ type: 'voice_state', channel_id: 'nope', state: 'joined' }));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(ws.readyState).toBe(1); // OPEN
+    ws.close();
+  });
+});

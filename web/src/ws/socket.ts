@@ -1,3 +1,5 @@
+import { nextDelay } from './backoff';
+
 export interface ServerEvent {
   type: string;
   [key: string]: unknown;
@@ -28,14 +30,13 @@ export function onWsStatus(h: (s: WsStatus) => void): () => void {
 
 function scheduleReconnect(): void {
   if (stopped) return;
-  // exponential backoff with jitter, capped at 30s — retries forever; the UI
-  // shows an offline badge so the user is never left guessing
-  const jitter = backoffMs * (0.8 + Math.random() * 0.4);
+  // retries forever; the UI shows an offline badge so the user is never left guessing
+  const delay = nextDelay(retry);
   backoffMs = Math.min(backoffMs * 2, 30_000);
   retry++;
   setTimeout(() => {
     if (!stopped) open();
-  }, jitter);
+  }, delay);
 }
 
 function open(): void {

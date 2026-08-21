@@ -114,15 +114,17 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Otomatik testler
 
 ```bash
-npm test    # 52 test: kripto birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 64 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
 ```
 
-- `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma
-- `server/test/auth.test.ts` — kayıt/giriş, IP başına limitler, httpOnly çerez + WS çerez auth, şifre değişimi oturum düşürme, BIP-39 kurtarma döngüsü
+- `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
+- `server/test/auth.test.ts` — kayıt/giriş, IP başına limitler, httpOnly çerez (+ Secure bayrağı TLS arkasında) + WS çerez auth, logout iptali, şifre değişimi oturum düşürme, BIP-39 kurtarma döngüsü
+- `server/test/messages.test.ts` — geçmiş sayfalama imleci, kullanıcı başına (IP değil) gönderim limiti, rotate kadro doğrulaması
 - `server/test/moderation.test.ts` — roller, kick→dondur→rotate, ban, kanal limiti
 - `server/test/join.test.ts` — açık/hedefli davet, süre/kullanım limiti, başvurular, katılım şifresi
-- `server/test/social.test.ts` — arkadaşlık, DM, grup DM rekey, WS canlı olay
+- `server/test/social.test.ts` — arkadaşlık, DM, grup DM rekey, WS canlı olay + sesli durum yayını
 - `server/test/boot.test.ts` — zayıf secret reddi, taze DB migration zinciri
+- `.github/workflows/ci.yml` — push/PR'da tip kontrolü + tüm testler
 
 ## Elle test (iki tarayıcı profili)
 

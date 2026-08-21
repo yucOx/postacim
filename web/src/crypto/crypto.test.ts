@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { b64, unb64, randomBytes } from './bytes';
 import { deriveKeys, newKdfSaltHex } from './argon2';
 import { generateIdentity, openIdentityBlob, sealIdentityBlob, wrapKeyFor, unwrapMyKey } from './identity';
@@ -132,5 +132,79 @@ describe('invite link', () => {
   it('non-invite / malformed links parse to null', () => {
     expect(parseInviteLink('https://x.example/')).toBeNull();
     expect(parseInviteLink('https://x.example/#invite=ABC')).toBeNull();
+  });
+});
+
+// --- UI-supporting pure logic (Sprint 2/3 additions) ---
+
+describe('password strength heuristic', () => {
+  it('short/common input scores 0-1, long varied input reaches 3+', async () => {
+    const { passwordScore } = await import('../components/PasswordInput');
+    expect(passwordScore('')).toBe(0);
+    expect(passwordScore('1234')).toBeLessThanOrEqual(1);
+    expect(passwordScore('aaaaaaaa')).toBeLessThanOrEqual(1);
+    expect(passwordScore(' Password!2026 ')).toBeGreaterThanOrEqual(3);
+    // bounds: any input stays within 0..4
+    expect(passwordScore('a'.repeat(100))).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('recovery quiz positions', () => {
+  it('distinct, in range, requested count', async () => {
+    const { quizPositions } = await import('./bip39');
+    for (let i = 0; i < 20; i++) {
+      const q = quizPositions(3);
+      expect(q).toHaveLength(3);
+      expect(new Set(q).size).toBe(3);
+      q.forEach((n) => {
+        expect(n).toBeGreaterThanOrEqual(0);
+        expect(n).toBeLessThan(12);
+      });
+    }
+  });
+});
+
+describe('ws reconnect delay', () => {
+  it('grows exponentially, caps at 30s, jitter stays within ±20%', async () => {
+    const { nextDelay } = await import('../ws/backoff');
+    // bounds hold for every attempt
+    for (let attempt = 0; attempt < 12; attempt++) {
+      for (let s = 0; s < 30; s++) {
+        const d = nextDelay(attempt);
+        const raw = Math.min(500 * 2 ** attempt, 30_000);
+        expect(d).toBeGreaterThanOrEqual(Math.floor(raw * 0.8) - 1);
+        expect(d).toBeLessThanOrEqual(Math.ceil(raw * 1.2) + 1);
+      }
+    }
+    // growth check on raw scale: attempt 0 ≈ 500ms, attempt 10 capped at 30s
+    const d0 = nextDelay(0);
+    expect(d0).toBeGreaterThanOrEqual(400);
+    expect(d0).toBeLessThanOrEqual(600);
+    const d10 = nextDelay(10);
+    expect(d10).toBeLessThanOrEqual(36_000);
+    expect(d10).toBeGreaterThanOrEqual(24_000);
+  });
+});
+
+describe('unread counter', () => {
+  it('counts messages newer than the read marker, tolerates empty lists', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+    const { unreadCount, useUnreadStore } = await import('../state/unreadStore');
+    const msgs = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 9 }];
+    expect(unreadCount('ch', undefined)).toBe(0);
+    expect(unreadCount('ch', [])).toBe(0);
+    expect(unreadCount('ch', msgs)).toBe(4); // nothing read yet
+    useUnreadStore.getState().markRead('ch', 2);
+    expect(unreadCount('ch', msgs)).toBe(2); // 3 and 9
+    useUnreadStore.getState().markRead('ch', 9);
+    expect(unreadCount('ch', msgs)).toBe(0);
+    // marker never moves backwards
+    useUnreadStore.getState().markRead('ch', 3);
+    expect(unreadCount('ch', msgs)).toBe(0);
+    vi.unstubAllGlobals();
   });
 });
