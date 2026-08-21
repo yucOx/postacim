@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useJoinStore } from '../state/joinStore';
 import type { ParsedInvite } from '../crypto/invite';
 
@@ -8,6 +8,9 @@ export default function JoinScreen({ invite }: { invite: ParsedInvite }) {
   const communityName = useJoinStore((s) => s.communityName);
   const start = useJoinStore((s) => s.start);
   const complete = useJoinStore((s) => s.complete);
+  const submitPassword = useJoinStore((s) => s.submitPassword);
+  const [password, setPassword] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
 
   useEffect(() => {
     void start(invite.code, invite.ephPriv);
@@ -48,7 +51,35 @@ export default function JoinScreen({ invite }: { invite: ParsedInvite }) {
           </div>
         )}
         {status === 'needs_password' && (
-          <p className="mt-4 text-sm text-amber-400">bu topluluk katılım şifresi istiyor (yakında)</p>
+          <div className="mt-4 flex flex-col gap-3">
+            <p className="text-sm">
+              <span className="font-semibold">{communityName}</span> topluluğu katılım şifresi istiyor
+            </p>
+            <input
+              type="password"
+              autoFocus
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => password && e.key === 'Enter' && void (async () => {
+                setPwBusy(true);
+                await submitPassword(password);
+                setPwBusy(false);
+              })()}
+              placeholder="katılım şifresi"
+              className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+            />
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            <button
+              onClick={() => {
+                setPwBusy(true);
+                void submitPassword(password).finally(() => setPwBusy(false));
+              }}
+              disabled={pwBusy || !password}
+              className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {pwBusy ? 'doğrulanıyor…' : 'devam'}
+            </button>
+          </div>
         )}
       </div>
     </div>

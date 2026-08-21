@@ -3,8 +3,10 @@ import { api } from '../api/client';
 import { useAuthStore } from './authStore';
 import { useAppStore } from './appStore';
 import { b64 } from '../crypto/bytes';
+import { deriveKeys } from '../crypto/argon2';
 import { sodiumReady } from '../crypto/sodium';
 import { unsealWithEphemeral } from '../crypto/invite';
+import { openJoinKey } from '../crypto/joinpw';
 import { unwrapMyKey, wrapKeyFor } from '../crypto/identity';
 
 export interface SealedChannelKey {
@@ -24,6 +26,7 @@ interface JoinState {
   status: 'idle' | 'loading' | 'needs_password' | 'ready' | 'joining' | 'joined';
   error: string | null;
   communityName: string | null;
+  joinSalt: string | null;
   code: string | null;
   ephPriv: Uint8Array | null;
   sealedKeys: SealedChannelKey[] | null;
@@ -54,6 +57,7 @@ export const useJoinStore = create<JoinState>((set, get) => ({
   status: 'idle',
   error: null,
   communityName: null,
+  joinSalt: null,
   code: null,
   ephPriv: null,
   sealedKeys: null,
@@ -65,8 +69,12 @@ export const useJoinStore = create<JoinState>((set, get) => ({
     try {
       const info = await api<RedeemInfo>(`/invites/${encodeURIComponent(code)}`);
       if (info.requires_password) {
-        // Faz D: password gate — sealed keys arrive only after the proof
-        set({ status: 'needs_password', communityName: info.community.name, sealedKeys: [] });
+        set({
+          status: 'needs_password',
+          communityName: info.community.name,
+          joinSalt: info.join_kdf_salt ?? null,
+          sealedKeys: [],
+        });
         return;
       }
       set({ communityName: info.community.name, sealedKeys: info.wrapped_keys ?? [], status: 'ready' });
@@ -75,9 +83,26 @@ export const useJoinStore = create<JoinState>((set, get) => ({
     }
   },
 
-  submitPassword: async () => {
-    // implemented with the join-password package (Faz D)
-    set({ error: 'şifre kapısı henüz bu sürümde değil' });
+  // Password gate: derive proof + JW, exchange proof for the JW-sealed keys.
+  submitPassword: async (password) => {
+    const { code, joinSalt } = get();
+    if (!code || !joinSalt) return;
+    set({ error: null });
+    try {
+      const { authMaterial, kek } = await deriveKeys(password, joinSalt);
+      const res = await api<{ community: { id: string; name: string }; wrapped_keys: SealedChannelKey[] }>(
+        `/invites/${encodeURIComponent(code)}/redeem-password`,
+        { method: 'POST', body: { auth_material: b64(authMaterial) } },
+      );
+      const keys = res.wrapped_keys.map((w) => ({
+        channel_id: w.channel_id,
+        key_version: w.key_version,
+        key: openJoinKey(w.wrapped_key, kek),
+      }));
+      set({ keys, communityName: res.community.name, status: 'ready' });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'şifre doğrulanamadı' });
+    }
   },
 
   complete: async () => {
@@ -117,5 +142,14 @@ export const useJoinStore = create<JoinState>((set, get) => ({
   },
 
   reset: () =>
-    set({ status: 'idle', error: null, communityName: null, code: null, ephPriv: null, sealedKeys: null, keys: null }),
+    set({
+      status: 'idle',
+      error: null,
+      communityName: null,
+      joinSalt: null,
+      code: null,
+      ephPriv: null,
+      sealedKeys: null,
+      keys: null,
+    }),
 }));

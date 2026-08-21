@@ -61,6 +61,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       }
       // old-version sealed sets can no longer be redeemed; owners regenerate them
       db.prepare('DELETE FROM invite_keys WHERE channel_id = ? AND key_version = ?').run(id, channel.key_version);
+      db.prepare('DELETE FROM join_pw_keys WHERE channel_id = ? AND key_version = ?').run(id, channel.key_version);
     });
     tx();
     hub.broadcast(channel.community_id, {

@@ -18,6 +18,7 @@ export interface BootstrapCommunity {
     my_wrapped_key: string | null;
   }[];
   pending_join_requests: number;
+  has_join_password: boolean;
 }
 
 export interface ChatMessage {

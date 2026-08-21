@@ -15,6 +15,7 @@ interface BootstrapCommunity {
     my_wrapped_key: string | null;
   }[];
   pending_join_requests: number;
+  has_join_password: boolean;
 }
 
 // One call hydrates the whole app: communities, members, channels and the
@@ -50,6 +51,11 @@ export async function bootstrapRoutes(app: FastifyInstance): Promise<void> {
               .get(c.id) as { n: number }
           ).n
         : 0;
+      const hasJoinPassword = !!(
+        db
+          .prepare('SELECT join_verifier FROM communities WHERE id = ?')
+          .get(c.id) as { join_verifier: string | null }
+      ).join_verifier;
       return {
         ...c,
         members: members.map((m) => {
@@ -64,6 +70,7 @@ export async function bootstrapRoutes(app: FastifyInstance): Promise<void> {
           my_wrapped_key: keyByChannel.get(ch.id) ?? null,
         })),
         pending_join_requests: pending,
+        has_join_password: hasJoinPassword,
       };
     });
 

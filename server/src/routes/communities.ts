@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
+import argon2 from 'argon2';
 import { db } from '../db.js';
 import { NICK_REGEX } from '../schemas.js';
 import {
@@ -445,6 +446,73 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
       .prepare("UPDATE join_requests SET status = 'denied' WHERE community_id = ? AND user_id = ? AND status = 'pending'")
       .run(id, uid);
     if (info.changes === 0) return reply.code(404).send({ error: 'bekleyen başvuru yok' });
+    return reply.code(204).send();
+  });
+
+  // --- join password (second factor for invite redemption) ---
+  // Client derives proof + JW from the password (Argon2id); channel keys arrive
+  // XChaCha-encrypted under JW — the server stores only the verifier and blobs.
+  app.post('/communities/:id/join-password', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (memberRole(id, req.user.id) !== 'owner') {
+      return reply.code(403).send({ error: 'sadece sahip şifre kurabilir' });
+    }
+    const body = req.body as {
+      kdf_salt?: string;
+      verifier_input?: string;
+      wrapped_keys?: { channel_id: string; key_version: number; wrapped_key: string }[];
+    };
+    const channels = communityChannels(id);
+    const wrapped = body?.wrapped_keys;
+    if (
+      typeof body?.kdf_salt !== 'string' ||
+      !/^[0-9a-f]{32}$/.test(body.kdf_salt) ||
+      typeof body?.verifier_input !== 'string' ||
+      body.verifier_input.length !== 44 ||
+      !Array.isArray(wrapped) ||
+      new Set(wrapped.map((w) => w.channel_id)).size !== channels.length ||
+      !channels.every((ch) =>
+        wrapped.some(
+          (w) => w.channel_id === ch.id && w.key_version === ch.key_version && validWrapped(w.wrapped_key),
+        ),
+      )
+    ) {
+      return reply.code(400).send({ error: 'geçersiz şifre verisi (kapsam/sürüm eksik olabilir)' });
+    }
+    const verifier = await argon2.hash(body.verifier_input);
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE communities SET join_kdf_salt = ?, join_verifier = ? WHERE id = ?').run(
+        body.kdf_salt,
+        verifier,
+        id,
+      );
+      db.prepare(
+        'DELETE FROM join_pw_keys WHERE channel_id IN (SELECT id FROM channels WHERE community_id = ?)',
+      ).run(id);
+      for (const w of wrapped) {
+        db.prepare(
+          'INSERT INTO join_pw_keys(channel_id, key_version, wrapped_key) VALUES (?, ?, ?)',
+        ).run(w.channel_id, w.key_version, w.wrapped_key);
+      }
+    });
+    tx();
+    hub.broadcast(id, { type: 'community:join_password', community_id: id });
+    return reply.code(204).send();
+  });
+
+  app.delete('/communities/:id/join-password', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (memberRole(id, req.user.id) !== 'owner') {
+      return reply.code(403).send({ error: 'sadece sahip kaldırabilir' });
+    }
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE communities SET join_kdf_salt = NULL, join_verifier = NULL WHERE id = ?').run(id);
+      db.prepare(
+        'DELETE FROM join_pw_keys WHERE channel_id IN (SELECT id FROM channels WHERE community_id = ?)',
+      ).run(id);
+    });
+    tx();
+    hub.broadcast(id, { type: 'community:join_password', community_id: id });
     return reply.code(204).send();
   });
 

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
+import argon2 from 'argon2';
 import { db } from '../db.js';
 import { communityChannels, getCommunity, isStaff, memberRole } from '../lib/access.js';
 import { hub } from '../ws/hub.js';
@@ -183,6 +184,47 @@ export async function inviteRoutes(app: FastifyInstance): Promise<void> {
         )
         .all(invite.id);
       return { community: { id: community.id, name: community.name }, requires_password: false, wrapped_keys: keys };
+    },
+  );
+
+  // --- redeem with password proof (pw-protected communities) ---
+  app.post(
+    '/invites/:code/redeem-password',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const { code } = req.params as { code: string };
+      const { auth_material } = (req.body ?? {}) as { auth_material?: string };
+      if (typeof auth_material !== 'string' || auth_material.length !== 44) {
+        return reply.code(400).send({ error: 'geçersiz kanıt' });
+      }
+      const invite = db
+        .prepare('SELECT * FROM invites WHERE code = ?')
+        .get(code) as InviteRow | undefined;
+      if (!invite) return reply.code(404).send({ error: 'davet bulunamadı' });
+      const err = inviteUsable(invite, req.user.id);
+      if (err) return reply.code(409).send({ error: err });
+      const community = getCommunity(invite.community_id)!;
+      const row = db
+        .prepare('SELECT join_kdf_salt, join_verifier FROM communities WHERE id = ?')
+        .get(invite.community_id) as { join_kdf_salt: string | null; join_verifier: string | null };
+      if (!row.join_verifier || !row.join_kdf_salt) {
+        return reply.code(400).send({ error: 'bu topluluk şifre istemiyor' });
+      }
+      const ok = await argon2.verify(row.join_verifier, auth_material).catch(() => false);
+      if (!ok) return reply.code(401).send({ error: 'katılım şifresi hatalı' });
+      // pw set must still cover every channel at the current version
+      const channels = communityChannels(invite.community_id);
+      const keys = db
+        .prepare(
+          `SELECT k.channel_id, k.key_version, k.wrapped_key
+           FROM join_pw_keys k JOIN channels ch ON ch.id = k.channel_id
+           WHERE ch.community_id = ? AND k.key_version = ch.key_version`,
+        )
+        .all(invite.community_id);
+      if (keys.length !== channels.length) {
+        return reply.code(409).send({ error: 'şifre anahtarları yenilenmelidir — sahibine haber ver' });
+      }
+      return { community: { id: community.id, name: community.name }, wrapped_keys: keys };
     },
   );
 

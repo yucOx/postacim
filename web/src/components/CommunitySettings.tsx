@@ -213,10 +213,75 @@ function RequestsTab({ communityId }: { communityId: string }) {
   );
 }
 
+function PasswordTab({ communityId }: { communityId: string }) {
+  const setJoinPassword = useAppStore((s) => s.setJoinPassword);
+  const removeJoinPassword = useAppStore((s) => s.removeJoinPassword);
+  const hasPassword = useAppStore(
+    (s) => s.communities.find((c) => c.id === s.activeCommunityId)?.has_join_password ?? false,
+  );
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (): Promise<void> => {
+    if (pw !== pw2) {
+      setError('şifreler eşleşmiyor');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await setJoinPassword(communityId, pw);
+      setMsg(hasPassword ? 'şifre güncellendi' : 'şifre kuruldu — davetler artık ikinci faktör isteyecek');
+      setPw('');
+      setPw2('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'hata');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-neutral-500">
+        {hasPassword
+          ? 'katılım şifresi aktif — davet linki + şifre ikisi birden gerekir'
+          : 'şifre kurulursa davet linkine ek olarak katılım şifresi de istenir'}
+      </p>
+      <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="katılım şifresi" minLength={4}
+        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500" />
+      <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder="tekrar" minLength={4}
+        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500" />
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      {msg && <p className="text-sm text-emerald-400">{msg}</p>}
+      <div className="flex gap-2">
+        <button onClick={() => void submit()} disabled={busy || pw.length < 4}
+          className="flex-1 rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50">
+          {busy ? 'işleniyor…' : hasPassword ? 'değiştir' : 'kur'}
+        </button>
+        {hasPassword && (
+          <button onClick={() => void removeJoinPassword(communityId).then(() => setMsg('şifre kaldırıldı'))}
+            className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800">
+            kaldır
+          </button>
+        )}
+      </div>
+      <p className="text-[11px] text-neutral-600">
+        anahtar rotasyonundan sonra şifre anahtarları yenilenmelidir (yeniden kur)
+      </p>
+    </div>
+  );
+}
+
 export default function CommunitySettings({ communityId, onClose }: { communityId: string; onClose: () => void }) {
   const myRole = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId)?.role);
   const pendingCount = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId)?.pending_join_requests ?? 0);
-  const [tab, setTab] = useState<'requests' | 'invites' | 'bans'>('requests');
+  const isOwner = myRole === 'owner';
+  const [tab, setTab] = useState<'requests' | 'invites' | 'bans' | 'password'>('requests');
   const [bans, setBans] = useState<BanRow[] | null>(null);
 
   useEffect(() => {
@@ -234,14 +299,15 @@ export default function CommunitySettings({ communityId, onClose }: { communityI
     <Modal title="Topluluk ayarları" onClose={onClose}>
       <div className="flex flex-col gap-4">
         <div className="flex gap-2 text-xs">
-          {(['requests', 'invites', 'bans'] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={`relative flex-1 rounded px-2 py-1 ${tab === t ? 'bg-neutral-700' : 'bg-neutral-800 text-neutral-400'}`}>
-              {t === 'requests' ? `Başvurular${pendingCount ? ` (${pendingCount})` : ''}` : t === 'invites' ? 'Davetler' : 'Banlılar'}
+          {(['requests', 'invites', 'bans', ...(isOwner ? (['password'] as const) : [])] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={`flex-1 rounded px-2 py-1 ${tab === t ? 'bg-neutral-700' : 'bg-neutral-800 text-neutral-400'}`}>
+              {t === 'requests' ? `Başvurular${pendingCount ? ` (${pendingCount})` : ''}` : t === 'invites' ? 'Davetler' : t === 'bans' ? 'Banlılar' : 'Şifre'}
             </button>
           ))}
         </div>
         {tab === 'requests' && <RequestsTab communityId={communityId} />}
         {tab === 'invites' && <InvitesTab communityId={communityId} />}
+        {tab === 'password' && isOwner && <PasswordTab communityId={communityId} />}
         {tab === 'bans' && (
           <div>
             {bans === null && <p className="text-sm text-neutral-500">yükleniyor…</p>}

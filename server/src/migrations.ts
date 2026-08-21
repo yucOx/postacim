@@ -110,6 +110,14 @@ CREATE TABLE join_requests(
   status TEXT NOT NULL CHECK(status IN('pending','denied')),
   created_at INTEGER NOT NULL,
   PRIMARY KEY(community_id, user_id)
+),
+`,
+  // v5 — join-password wrapped key set (columns since v3)
+  `
+CREATE TABLE join_pw_keys(
+  channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+  key_version INTEGER NOT NULL,
+  wrapped_key TEXT NOT NULL
 );
 `,
 ];

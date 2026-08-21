@@ -3,7 +3,9 @@ import { api } from '../api/client';
 import type { BootstrapCommunity } from '../api/types';
 import { useAuthStore } from './authStore';
 import { b64, randomBytes } from '../crypto/bytes';
+import { deriveKeys, newKdfSaltHex } from '../crypto/argon2';
 import { generateIdentity, unwrapMyKey, wrapKeyFor } from '../crypto/identity';
+import { sealJoinKey } from '../crypto/joinpw';
 import { buildInviteLink } from '../crypto/invite';
 import { onServerEvent } from '../ws/socket';
 
@@ -27,6 +29,7 @@ export interface Community {
   members: Member[];
   channels: Channel[];
   pending_join_requests?: number;
+  has_join_password?: boolean;
 }
 
 // channelId -> key_version -> raw channel key; epochs kept so rotated history stays readable
@@ -57,6 +60,8 @@ interface AppState {
     communityId: string,
     opts: { targetNick?: string; maxUses?: number; ttlHours?: number },
   ) => Promise<string>;
+  setJoinPassword: (communityId: string, password: string) => Promise<void>;
+  removeJoinPassword: (communityId: string) => Promise<void>;
   wireEvents: () => void;
 }
 
@@ -314,6 +319,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     return link;
   },
 
+  // Join password: Argon2id gives proof (server verifier) + JW (key wrap);
+  // channel keys leave sealed under JW — the password itself never leaves.
+  setJoinPassword: async (communityId, password) => {
+    const com = get().communities.find((c) => c.id === communityId);
+    if (!com) throw new Error('topluluk bulunamadı');
+    const kdfSalt = newKdfSaltHex();
+    const { authMaterial, kek } = await deriveKeys(password, kdfSalt);
+    const wrappedKeys = [];
+    for (const ch of com.channels) {
+      const key = await get().ensureChannelKey(ch.id);
+      wrappedKeys.push({ channel_id: ch.id, key_version: ch.key_version, wrapped_key: sealJoinKey(key, kek) });
+    }
+    await api(`/communities/${communityId}/join-password`, {
+      method: 'POST',
+      body: { kdf_salt: kdfSalt, verifier_input: b64(authMaterial), wrapped_keys: wrappedKeys },
+    });
+    await get().loadBootstrap();
+  },
+
+  removeJoinPassword: async (communityId) => {
+    await api(`/communities/${communityId}/join-password`, { method: 'DELETE' });
+    await get().loadBootstrap();
+  },
+
   wireEvents: () => {
     onServerEvent((e) => {
       const me = useAuthStore.getState().user?.id;
@@ -340,7 +369,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         e.type === 'channel:created' ||
         e.type === 'channel:rotated' ||
         e.type === 'community:roles_updated' ||
-        e.type === 'join_request:new'
+        e.type === 'join_request:new' ||
+        e.type === 'community:join_password'
       ) {
         void get().loadBootstrap();
       }
