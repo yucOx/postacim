@@ -59,6 +59,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
           'INSERT INTO wrapped_channel_keys(channel_id, user_id, key_version, wrapped_key) VALUES (?, ?, ?, ?)',
         ).run(id, w.user_id, newVersion, w.wrapped_key);
       }
+      // old-version sealed sets can no longer be redeemed; owners regenerate them
+      db.prepare('DELETE FROM invite_keys WHERE channel_id = ? AND key_version = ?').run(id, channel.key_version);
     });
     tx();
     hub.broadcast(channel.community_id, {

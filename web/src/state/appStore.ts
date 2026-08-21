@@ -3,7 +3,8 @@ import { api } from '../api/client';
 import type { BootstrapCommunity } from '../api/types';
 import { useAuthStore } from './authStore';
 import { b64, randomBytes } from '../crypto/bytes';
-import { unwrapMyKey, wrapKeyFor } from '../crypto/identity';
+import { generateIdentity, unwrapMyKey, wrapKeyFor } from '../crypto/identity';
+import { buildInviteLink } from '../crypto/invite';
 import { onServerEvent } from '../ws/socket';
 
 export interface Channel {
@@ -51,6 +52,10 @@ interface AppState {
   removeMember: (communityId: string, userId: string) => Promise<void>;
   banMember: (communityId: string, userId: string) => Promise<void>;
   setRole: (communityId: string, userId: string, makeAdmin: boolean) => Promise<void>;
+  createInvite: (
+    communityId: string,
+    opts: { targetNick?: string; maxUses?: number; ttlHours?: number },
+  ) => Promise<string>;
   wireEvents: () => void;
 }
 
@@ -267,6 +272,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...(makeAdmin ? { body: { user_id: userId } } : {}),
     });
     // roles_updated event refreshes bootstrap
+  },
+
+  // Open invite: keys sealed to an ephemeral keypair whose private half lives in
+  // the link (never on the server) → owner can be offline when it is redeemed.
+  // Targeted invite: sealed straight to the target's identity key.
+  createInvite: async (communityId, opts) => {
+    const com = get().communities.find((c) => c.id === communityId);
+    if (!com) throw new Error('topluluk bulunamadı');
+    let target: { id: string; public_key: string } | null = null;
+    if (opts.targetNick) {
+      target = await api<{ id: string; public_key: string }>(
+        `/users/lookup?nick=${encodeURIComponent(opts.targetNick)}`,
+      );
+    }
+    const eph = opts.targetNick ? null : generateIdentity();
+    const wrappedKeys = [];
+    for (const ch of com.channels) {
+      const key = await get().ensureChannelKey(ch.id);
+      const sealTo = eph ? b64(eph.publicKey) : target!.public_key;
+      wrappedKeys.push({ channel_id: ch.id, key_version: ch.key_version, wrapped_key: wrapKeyFor(key, sealTo) });
+    }
+    const res = await api<{ invite: { id: string; code: string } }>(
+      `/communities/${communityId}/invites`,
+      {
+        method: 'POST',
+        body: {
+          ...(target ? { target_user_id: target.id } : {}),
+          max_uses: opts.maxUses,
+          ttl_hours: opts.ttlHours,
+          wrapped_keys: wrappedKeys,
+        },
+      },
+    );
+    const link = buildInviteLink(res.invite.code, eph ? eph.privateKey : undefined);
+    // only the client can rebuild open-invite links; keep them per-browser
+    const stored = JSON.parse(localStorage.getItem('pgv_invite_links') ?? '{}') as Record<string, string>;
+    stored[res.invite.id] = link;
+    localStorage.setItem('pgv_invite_links', JSON.stringify(stored));
+    return link;
   },
 
   wireEvents: () => {

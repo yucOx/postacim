@@ -79,4 +79,27 @@ CREATE TABLE bans(
   PRIMARY KEY(community_id, user_id)
 );
 `,
+  // v3 — invites (open + targeted); join-password columns land here too (used in v4)
+  `
+CREATE TABLE invites(
+  id TEXT PRIMARY KEY,
+  community_id TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  code TEXT NOT NULL UNIQUE,
+  target_user_id TEXT,
+  max_uses INTEGER,
+  uses INTEGER NOT NULL DEFAULT 0,
+  expires_at INTEGER,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE invite_keys(
+  invite_id TEXT NOT NULL REFERENCES invites(id) ON DELETE CASCADE,
+  channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  key_version INTEGER NOT NULL,
+  wrapped_key TEXT NOT NULL,
+  PRIMARY KEY(invite_id, channel_id)
+);
+ALTER TABLE communities ADD COLUMN join_kdf_salt TEXT;
+ALTER TABLE communities ADD COLUMN join_verifier TEXT;
+`,
 ];

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAppStore } from '../state/appStore';
 import Modal from './Modal';
+import { parseInviteLink } from '../crypto/invite';
 
 export default function ServerRail() {
   const communities = useAppStore((s) => s.communities);
@@ -11,6 +12,8 @@ export default function ServerRail() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [inviteLink, setInviteLink] = useState('');
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -49,6 +52,45 @@ export default function ServerRail() {
       >
         +
       </button>
+      <button
+        onClick={() => setJoining(true)}
+        title="davet linkiyle katıl"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-800 text-lg text-neutral-400 transition-all hover:rounded-2xl hover:bg-indigo-600 hover:text-white"
+      >
+        ↗
+      </button>
+
+      {joining && (
+        <Modal title="Davetle katıl" onClose={() => setJoining(false)}>
+          <div className="flex flex-col gap-3">
+            <input
+              autoFocus
+              value={inviteLink}
+              onChange={(e) => setInviteLink(e.target.value)}
+              placeholder="https://…/#/davet/COD…"
+              className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+            />
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            <button
+              onClick={() => {
+                if (!parseInviteLink(inviteLink)) {
+                  setError('geçerli bir davet linki değil');
+                  return;
+                }
+                // reuse the link's own fragment verbatim (ephemeral key encoding preserved)
+                const idx = inviteLink.indexOf('#/davet/');
+                setJoining(false);
+                setInviteLink('');
+                location.hash = inviteLink.slice(idx);
+              }}
+              disabled={!inviteLink.trim()}
+              className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
+            >
+              devam
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {creating && (
         <Modal title="Yeni topluluk" onClose={() => setCreating(false)}>
