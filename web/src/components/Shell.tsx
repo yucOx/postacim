@@ -8,8 +8,12 @@ import MemberList from './MemberList';
 import ChatView from './ChatView';
 import VoiceRoom from './VoiceRoom';
 import DmHome from './DmHome';
+import DmChat from './DmChat';
+import IncomingCall from './IncomingCall';
+import CallView from './CallView';
 import Modal from './Modal';
 import { useChatStore } from '../state/chatStore';
+import { useDmChatStore } from '../state/dmChatStore';
 import { useVoiceStore } from '../state/voiceStore';
 
 function PasswordModal({ onClose }: { onClose: () => void }) {
@@ -72,10 +76,12 @@ export default function Shell() {
   const channel = useAppStore((s) => s.activeChannel());
   const view = useAppStore((s) => s.view);
   const activeDm = useAppStore((s) => (s.activeDmId ? s.dms.find((d) => d.id === s.activeDmId) ?? null : null));
+  const isDmCall = useVoiceStore((s) => s.isDmCall);
 
   useEffect(() => {
     wireEvents();
     useChatStore.getState().wire();
+    useDmChatStore.getState().wire();
     useVoiceStore.getState().wire();
     const token = localStorage.getItem('pgv_token');
     if (token) wsConnect(token);
@@ -107,13 +113,7 @@ export default function Shell() {
         <ServerRail />
         {view === 'dm' ? (
           <main className="flex min-w-0 flex-1 flex-col">
-            {activeDm ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">
-                DM sohbeti yükleniyor… (paket E2)
-              </div>
-            ) : (
-              <DmHome />
-            )}
+            {activeDm ? <DmChat dmId={activeDm.id} /> : <DmHome />}
           </main>
         ) : (
           <>
@@ -138,6 +138,8 @@ export default function Shell() {
         )}
       </div>
       {pwModal && <PasswordModal onClose={() => setPwModal(false)} />}
+      {isDmCall && <CallView />}
+      <IncomingCall />
     </div>
   );
 }

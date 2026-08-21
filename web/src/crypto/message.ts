@@ -7,15 +7,19 @@ export interface PlainMessage {
   sent: number;
 }
 
-// AAD binds ciphertext to channel + key epoch: the server cannot relocate a
-// captured ciphertext into another channel or replay it under another epoch.
-const aad = (channelId: string, version: number): string => `ch:${channelId}:v${version}`;
+// AAD binds ciphertext to scope + channel + key epoch: the server cannot
+// relocate a captured ciphertext into another context or replay it under
+// another epoch. Scope: 'ch' = community channel, 'dm' = direct message.
+export type MsgScope = 'ch' | 'dm';
+const aad = (scope: MsgScope, channelId: string, version: number): string =>
+  `${scope}:${channelId}:v${version}`;
 
 export function encryptText(
   channelId: string,
   version: number,
   key: Uint8Array,
   body: string,
+  scope: MsgScope = 'ch',
 ): { nonce: string; ciphertext: string } {
   const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
   const plain = new TextEncoder().encode(
@@ -23,7 +27,7 @@ export function encryptText(
   );
   const ct = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     plain,
-    aad(channelId, version),
+    aad(scope, channelId, version),
     null,
     nonce,
     key,
@@ -43,13 +47,14 @@ export function decryptText(
   key: Uint8Array,
   nonceB64: string,
   ciphertextB64: string,
+  scope: MsgScope = 'ch',
 ): PlainMessage {
   let pt: Uint8Array;
   try {
     pt = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
       null,
       unb64(ciphertextB64),
-      aad(channelId, version),
+      aad(scope, channelId, version),
       unb64(nonceB64),
       key,
     );

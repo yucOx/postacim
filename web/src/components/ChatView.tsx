@@ -9,6 +9,8 @@ export default function ChatView({ channelId, channelName }: { channelId: string
   const hasMore = useChatStore((s) => s.hasMore[channelId] ?? false);
   const loadHistory = useChatStore((s) => s.loadHistory);
   const loadOlder = useChatStore((s) => s.loadOlder);
+  const sending = useChatStore((s) => s.sending);
+  const send = useChatStore((s) => s.send);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -68,7 +70,11 @@ export default function ChatView({ channelId, channelName }: { channelId: string
         })}
         <div ref={bottomRef} />
       </div>
-      <Composer channelId={channelId} />
+      <Composer
+        send={(body) => send(channelId, body)}
+        sending={sending}
+        placeholder="Şifreli mesaj yaz… (Enter: gönder, Shift+Enter: satır)"
+      />
     </div>
   );
 }

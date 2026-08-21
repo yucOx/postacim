@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { useChatStore } from '../state/chatStore';
 
-export default function Composer({ channelId }: { channelId: string }) {
+export default function Composer({
+  send,
+  sending,
+  placeholder,
+}: {
+  send: (body: string) => Promise<void>;
+  sending: boolean;
+  placeholder: string;
+}) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const sending = useChatStore((s) => s.sending);
-  const send = useChatStore((s) => s.send);
 
   const submit = async (): Promise<void> => {
     const body = text.trim();
@@ -14,7 +19,7 @@ export default function Composer({ channelId }: { channelId: string }) {
     setError(null);
     try {
       setText('');
-      await send(channelId, body);
+      await send(body);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'gönderilemedi');
       setText(body);
@@ -36,7 +41,7 @@ export default function Composer({ channelId }: { channelId: string }) {
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKey}
         rows={1}
-        placeholder="Şifreli mesaj yaz… (Enter: gönder, Shift+Enter: satır)"
+        placeholder={placeholder}
         className="max-h-40 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2.5 text-sm text-neutral-200 outline-none placeholder:text-neutral-500 focus:border-neutral-500"
       />
     </div>

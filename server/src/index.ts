@@ -12,6 +12,7 @@ import { messageRoutes } from './routes/messages.js';
 import { voiceRoutes } from './routes/voice.js';
 import { inviteRoutes } from './routes/invites.js';
 import { friendRoutes } from './routes/friends.js';
+import { dmRoutes } from './routes/dms.js';
 import { attachWs } from './ws/index.js';
 
 export const app = Fastify({
@@ -53,6 +54,7 @@ await app.register(messageRoutes, { prefix: '/api' });
 await app.register(voiceRoutes, { prefix: '/api' });
 await app.register(inviteRoutes, { prefix: '/api' });
 await app.register(friendRoutes, { prefix: '/api' });
+await app.register(dmRoutes, { prefix: '/api' });
 
 attachWs(app);
 

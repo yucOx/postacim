@@ -81,9 +81,14 @@ class Hub {
 
   /** to every socket of one user regardless of room membership */
   sendToUser(userId: string, payload: unknown): void {
+    this.sendToUsers([userId], payload);
+  }
+
+  sendToUsers(userIds: string[], payload: unknown): void {
+    const set = new Set(userIds);
     const data = JSON.stringify(payload);
     for (const [ws, c] of this.clients) {
-      if (c.userId === userId && ws.readyState === ws.OPEN) ws.send(data);
+      if (set.has(c.userId) && ws.readyState === ws.OPEN) ws.send(data);
     }
   }
 

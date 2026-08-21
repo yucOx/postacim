@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { verifySession } from '../auth/sessions.js';
 import { hub } from './hub.js';
 import { db } from '../db.js';
+import { getDm } from '../lib/social.js';
 
 // Auth-first-frame protocol: the first message must authenticate the socket,
 // anything else closes it. After that only voice_state is accepted.
@@ -51,6 +52,41 @@ export function attachWs(app: FastifyInstance): void {
           | undefined;
         if (!nick) return;
         hub.setVoice(userId, nick.nick, channel.community_id, msg.channel_id, msg.state === 'joined');
+        return;
+      }
+
+      // --- 1:1 DM call signaling (caller/relayed; media goes through LiveKit) ---
+      const CALL_MSGS = ['call:ring', 'call:accept', 'call:decline', 'call:cancel'] as const;
+      if (
+        typeof msg?.type === 'string' &&
+        (CALL_MSGS as readonly string[]).includes(msg.type) &&
+        typeof msg.channel_id === 'string'
+      ) {
+        const dm = getDm(msg.channel_id, userId);
+        if (!dm) return;
+        const peerId = dm.user_a === userId ? dm.user_b : dm.user_a;
+        const nick = db.prepare('SELECT nick FROM users WHERE id = ?').get(userId) as
+          | { nick: string }
+          | undefined;
+        const nickStr = nick?.nick ?? '?';
+        switch (msg.type) {
+          case 'call:ring':
+            hub.sendToUser(peerId, {
+              type: 'call:incoming',
+              channel_id: msg.channel_id,
+              from: { id: userId, nick: nickStr },
+            });
+            break;
+          case 'call:accept':
+            hub.sendToUser(peerId, { type: 'call:accepted', channel_id: msg.channel_id });
+            break;
+          case 'call:decline':
+            hub.sendToUser(peerId, { type: 'call:declined', channel_id: msg.channel_id });
+            break;
+          case 'call:cancel':
+            hub.sendToUser(peerId, { type: 'call:cancelled', channel_id: msg.channel_id });
+            break;
+        }
       }
     });
 
