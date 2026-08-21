@@ -194,4 +194,9 @@ CREATE TABLE gdm_messages(
 );
 CREATE INDEX idx_gdm_messages ON gdm_messages(channel_id, id DESC);
 `,
+  // v8 — pending rekey: a removed member still holds the raw channel key, so
+  // the channel is frozen (no writes, no key handout) until staff rotate it
+  `
+ALTER TABLE channels ADD COLUMN needs_rekey INTEGER NOT NULL DEFAULT 0;
+`,
 ];

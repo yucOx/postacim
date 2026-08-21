@@ -14,6 +14,7 @@ export interface Channel {
   name: string;
   type: 'text' | 'voice';
   key_version: number;
+  needs_rekey?: boolean;
   my_wrapped_key?: string | null;
 }
 export type Role = 'owner' | 'admin' | 'member';

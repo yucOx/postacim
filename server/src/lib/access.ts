@@ -12,9 +12,17 @@ export interface ChannelRow {
   name: string;
   type: 'text' | 'voice';
   key_version: number;
+  /** 1 = a member was removed and the channel awaits a rekey before it can be
+   *  written to or handed out again (the removed user still holds the raw key) */
+  needs_rekey: number;
 }
 
 export type Role = 'owner' | 'admin' | 'member';
+
+/** any channel of the community still awaiting a rekey? */
+export function communityNeedsRekey(communityId: string): boolean {
+  return !!db.prepare('SELECT 1 FROM channels WHERE community_id = ? AND needs_rekey = 1').get(communityId);
+}
 
 export function memberRole(communityId: string, userId: string): Role | null {
   const row = db

@@ -13,6 +13,9 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
     if (!memberRole(channel.community_id, req.user.id)) {
       return reply.code(403).send({ error: 'üye değilsin' });
     }
+    if (channel.needs_rekey) {
+      return reply.code(409).send({ error: 'kanal yeniden anahtarlanmalı — sahip/admin anahtarı yenilesin' });
+    }
     // a wrapped key row is proof this member received the channel key
     const hasKey = db
       .prepare(

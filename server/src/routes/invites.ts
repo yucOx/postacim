@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
 import argon2 from 'argon2';
 import { db } from '../db.js';
-import { communityChannels, getCommunity, isStaff, memberRole } from '../lib/access.js';
+import { communityChannels, communityNeedsRekey, getCommunity, isStaff, memberRole } from '../lib/access.js';
 import { hub } from '../ws/hub.js';
 
 interface CreateInviteBody {
@@ -48,15 +48,26 @@ function inviteUsable(invite: InviteRow, userId: string): RedeemError | null {
     return 'bu topluluktan banlısın';
   }
   if (memberRole(invite.community_id, userId)) return 'zaten üyesin';
+  // member was removed and keys not yet rotated — the invite would hand out
+  // wrapped keys at the compromised version
+  if (communityNeedsRekey(invite.community_id)) {
+    return 'topluluk anahtarları yenileniyor — sonra tekrar dene';
+  }
   return null;
 }
 
 export async function inviteRoutes(app: FastifyInstance): Promise<void> {
   // --- create (owner/admin) ---
-  app.post('/communities/:id/invites', async (req, reply) => {
+  app.post(
+    '/communities/:id/invites',
+    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!isStaff(memberRole(id, req.user.id))) {
       return reply.code(403).send({ error: 'sadece sahip veya admin davet üretebilir' });
+    }
+    if (communityNeedsRekey(id)) {
+      return reply.code(409).send({ error: 'önce kanalların anahtarını yenile' });
     }
     const body = req.body as CreateInviteBody;
     const channels = communityChannels(id);

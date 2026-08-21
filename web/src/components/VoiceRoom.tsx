@@ -6,6 +6,7 @@ import {
   ParticipantTile,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
+import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 
 function Controls() {
@@ -102,10 +103,16 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
   const joined = useVoiceStore((s) => s.joinedChannelId);
   const error = useVoiceStore((s) => s.error);
   const join = useVoiceStore((s) => s.join);
+  const needsRekey = useAppStore(
+    (s) =>
+      !!s.communities
+        .find((c) => c.id === s.activeCommunityId)
+        ?.channels.find((ch) => ch.id === channelId)?.needs_rekey,
+  );
 
   useEffect(() => {
-    if (joined !== channelId) void join(channelId).catch(() => {});
-  }, [channelId, joined, join]);
+    if (!needsRekey && joined !== channelId) void join(channelId).catch(() => {});
+  }, [channelId, joined, join, needsRekey]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -115,6 +122,11 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
           uçtan uca şifreli (SFrame)
         </span>
       </div>
+      {needsRekey && (
+        <div className="bg-amber-950/50 px-4 py-2 text-sm text-amber-300">
+          ⚠️ Bir üye çıkarıldı — sahip/admin kanal anahtarını yenileyene kadar oda kilitli.
+        </div>
+      )}
       {error && <div className="bg-red-950/50 px-4 py-2 text-sm text-red-400">{error}</div>}
       {!room ? (
         <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">

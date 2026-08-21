@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useAppStore } from '../state/appStore';
 import { useChatStore } from '../state/chatStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { formatDay, sameDay } from '../lib/format';
@@ -12,6 +13,17 @@ export default function ChatView({ channelId, channelName }: { channelId: string
   const loadOlder = useChatStore((s) => s.loadOlder);
   const sending = useChatStore((s) => s.sending);
   const send = useChatStore((s) => s.send);
+  const communityId = useAppStore((s) => s.activeCommunityId);
+  const needsRekey = useAppStore(
+    (s) =>
+      !!s.communities
+        .find((c) => c.id === s.activeCommunityId)
+        ?.channels.find((ch) => ch.id === channelId)?.needs_rekey,
+  );
+  const isStaff =
+    useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId)?.role) !== 'member';
+  const rekeyAffected = useAppStore((s) => s.rekeyAffected);
+  const [rekeying, setRekeying] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -44,6 +56,25 @@ export default function ChatView({ channelId, channelName }: { channelId: string
         # {channelName}
         <span className="ml-2 text-[11px] font-normal text-emerald-500/80">uçtan uca şifreli</span>
       </div>
+      {needsRekey && (
+        <div className="flex items-center gap-2 border-b border-amber-900/40 bg-amber-950/40 px-4 py-2 text-xs text-amber-300">
+          <span>⚠️ Bir üye çıkarıldı — eski anahtar risk altında, yazışma kilitli.</span>
+          {isStaff && communityId && (
+            <button
+              onClick={() => {
+                setRekeying(true);
+                void rekeyAffected(communityId, [channelId])
+                  .catch(() => {})
+                  .finally(() => setRekeying(false));
+              }}
+              disabled={rekeying}
+              className="rounded-full bg-amber-600/80 px-3 py-0.5 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+            >
+              {rekeying ? 'yenileniyor…' : 'anahtarı yenile'}
+            </button>
+          )}
+        </div>
+      )}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto py-2">
         {hasMore && (
           <div className="flex justify-center py-2">
@@ -81,7 +112,8 @@ export default function ChatView({ channelId, channelName }: { channelId: string
       <Composer
         send={(body) => send(channelId, body)}
         sending={sending}
-        placeholder="Şifreli mesaj yaz… (Enter: gönder, Shift+Enter: satır)"
+        disabled={needsRekey}
+        placeholder={needsRekey ? 'kanal yeniden anahtarlanana kadar kilitli…' : 'Şifreli mesaj yaz… (Enter: gönder, Shift+Enter: satır)'}
       />
     </div>
   );

@@ -3,7 +3,7 @@ import argon2 from 'argon2';
 import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { loginSchema, NICK_REGEX, registerSchema } from '../schemas.js';
-import { issueSession, revokeSession } from '../auth/sessions.js';
+import { issueSession, revokeAllSessions, revokeSession } from '../auth/sessions.js';
 import { config } from '../config.js';
 
 interface RegisterBody {
@@ -130,12 +130,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const ok = await argon2.verify(row.verifier, body.old_auth_material).catch(() => false);
       if (!ok) return reply.code(401).send({ error: 'eski şifre hatalı' });
       const verifier = await argon2.hash(body.new_auth_material);
-      db.prepare('UPDATE users SET kdf_salt = ?, verifier = ?, key_blob = ? WHERE id = ?').run(
-        body.new_kdf_salt,
-        verifier,
-        body.new_key_blob,
-        req.user.id,
-      );
+      const tx = db.transaction(() => {
+        db.prepare('UPDATE users SET kdf_salt = ?, verifier = ?, key_blob = ? WHERE id = ?').run(
+          body.new_kdf_salt,
+          verifier,
+          body.new_key_blob,
+          req.user.id,
+        );
+        // every session drops — including a hijacker's; the client re-logs in
+        revokeAllSessions(req.user.id);
+      });
+      tx();
       return reply.code(204).send();
     },
   );

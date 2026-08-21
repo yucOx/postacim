@@ -6,10 +6,12 @@ import { NICK_REGEX } from '../schemas.js';
 import {
   communityChannels,
   communityMembers,
+  communityNeedsRekey,
   getCommunity,
   isStaff,
   memberRole,
 } from '../lib/access.js';
+import { evictFromRooms } from '../livekit.js';
 import { hub } from '../ws/hub.js';
 
 interface CreateCommunityBody {
@@ -27,18 +29,40 @@ interface AddMemberBody {
 }
 
 const NAME_MAX = 64;
+const CHANNELS_MAX = 50;
 const validName = (n: unknown): n is string =>
   typeof n === 'string' && n.trim().length >= 1 && n.trim().length <= NAME_MAX;
 const validType = (t: unknown): t is 'text' | 'voice' => t === 'text' || t === 'voice';
 const validWrapped = (w: unknown): w is string =>
   typeof w === 'string' && w.length >= 48 && w.length <= 1024 && /^[A-Za-z0-9+/]+={0,2}$/.test(w);
 
+// Removal tail shared by kick and ban: freeze channels until rekey (the
+// removed user holds the raw keys), kill outstanding invites (they hand out
+// keys at the now-compromised version), evict live rooms, notify sockets.
+function memberRemovedCleanup(communityId: string, userId: string, wasMember: boolean): void {
+  if (!wasMember) return;
+  const channels = communityChannels(communityId);
+  db.prepare('UPDATE channels SET needs_rekey = 1 WHERE community_id = ?').run(communityId);
+  // sealed sets on outstanding invites are keys at the compromised version
+  db.prepare('DELETE FROM invites WHERE community_id = ?').run(communityId);
+  void evictFromRooms(
+    { id: userId },
+    channels.filter((c) => c.type === 'voice').map((c) => c.id),
+  );
+}
+
 export async function communityRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/communities', async (req, reply) => {
+  app.post(
+    '/communities',
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    async (req, reply) => {
     const body = req.body as CreateCommunityBody;
     if (!validName(body?.name)) return reply.code(400).send({ error: 'geçersiz topluluk adı' });
     if (!Array.isArray(body?.channels) || body.channels.length === 0) {
       return reply.code(400).send({ error: 'en az bir kanal gerekli' });
+    }
+    if (body.channels.length > CHANNELS_MAX) {
+      return reply.code(400).send({ error: `en fazla ${CHANNELS_MAX} kanal` });
     }
     for (const ch of body.channels) {
       if (!validName(ch?.name) || !validType(ch?.type) || !validWrapped(ch?.wrapped_key)) {
@@ -76,7 +100,10 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
 
   // wrapped_keys must cover every current member — the owner client wraps the
   // new channel key for everyone so no one is left keyless.
-  app.post('/communities/:id/channels', async (req, reply) => {
+  app.post(
+    '/communities/:id/channels',
+    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = req.body as CreateChannelBody;
     const community = getCommunity(id);
@@ -135,11 +162,18 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post('/communities/:id/members', async (req, reply) => {
+  app.post(
+    '/communities/:id/members',
+    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = req.body as AddMemberBody;
     if (!isStaff(memberRole(id, req.user.id))) {
       return reply.code(403).send({ error: 'sadece sahip veya admin ekleyebilir' });
+    }
+    // a rekey is pending: keys would be handed out at the compromised version
+    if (communityNeedsRekey(id)) {
+      return reply.code(409).send({ error: 'önce kanalların anahtarını yenile' });
     }
     const target = body?.user_id
       ? (db.prepare('SELECT id, nick, public_key FROM users WHERE id = ?').get(body.user_id) as
@@ -211,6 +245,7 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
       ).run(uid, id);
     });
     tx();
+    memberRemovedCleanup(id, uid, true);
     const affected = channels.map((c) => c.id);
     // target sockets still sit in the community room: they receive the event, then we part them
     hub.broadcast(id, {
@@ -297,6 +332,7 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
       );
     });
     tx();
+    memberRemovedCleanup(id, user_id, wasMember);
     const affected = wasMember ? channels.map((c) => c.id) : [];
     if (wasMember) {
       hub.broadcast(id, {
@@ -396,6 +432,9 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
       .prepare("SELECT * FROM join_requests WHERE community_id = ? AND user_id = ? AND status = 'pending'")
       .get(id, uid) as { community_id: string; user_id: string } | undefined;
     if (!row) return reply.code(404).send({ error: 'bekleyen başvuru yok' });
+    if (communityNeedsRekey(id)) {
+      return reply.code(409).send({ error: 'önce kanalların anahtarını yenile' });
+    }
     const channels = communityChannels(id);
     const wrapped = (req.body as { wrapped_keys?: { channel_id: string; key_version: number; wrapped_key: string }[] })
       ?.wrapped_keys;
@@ -452,7 +491,10 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
   // --- join password (second factor for invite redemption) ---
   // Client derives proof + JW from the password (Argon2id); channel keys arrive
   // XChaCha-encrypted under JW — the server stores only the verifier and blobs.
-  app.post('/communities/:id/join-password', async (req, reply) => {
+  app.post(
+    '/communities/:id/join-password',
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    async (req, reply) => {
     const { id } = req.params as { id: string };
     if (memberRole(id, req.user.id) !== 'owner') {
       return reply.code(403).send({ error: 'sadece sahip şifre kurabilir' });
@@ -500,7 +542,10 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(204).send();
   });
 
-  app.delete('/communities/:id/join-password', async (req, reply) => {
+  app.delete(
+    '/communities/:id/join-password',
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    async (req, reply) => {
     const { id } = req.params as { id: string };
     if (memberRole(id, req.user.id) !== 'owner') {
       return reply.code(403).send({ error: 'sadece sahip kaldırabilir' });

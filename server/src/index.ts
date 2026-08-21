@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import crypto from 'node:crypto';
 import { config } from './config.js';
 import './db.js'; // open + migrate on boot
 import './types.js';
@@ -17,6 +18,9 @@ import { gdmRoutes } from './routes/gdms.js';
 import { attachWs } from './ws/index.js';
 
 export const app = Fastify({
+  // we sit behind nginx, which sets X-Forwarded-For — without this every
+  // caller shares one IP and per-IP rate limits collapse into a global bucket
+  trustProxy: true,
   logger: {
     level: 'info',
     redact: { paths: ['req.headers.authorization'], remove: true },
@@ -24,7 +28,16 @@ export const app = Fastify({
   bodyLimit: 1024 * 1024,
 });
 
-await app.register(rateLimit, { global: false });
+await app.register(rateLimit, {
+  global: false,
+  // Authenticated requests are bucketed per token (≈ per user) so one heavy
+  // user cannot exhaust everyone's quota; anonymous ones fall back to client IP.
+  keyGenerator: (req) => {
+    const auth = req.headers.authorization;
+    if (auth) return 'u:' + crypto.createHash('sha256').update(auth).digest('hex').slice(0, 32);
+    return req.ip;
+  },
+});
 
 // Routes reachable without a session
 const PUBLIC_PATHS = new Set([

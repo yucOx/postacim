@@ -15,6 +15,8 @@ export interface BootstrapCommunity {
     name: string;
     type: 'text' | 'voice';
     key_version: number;
+    /** frozen after a member removal until staff rotate the key */
+    needs_rekey: boolean;
     my_wrapped_key: string | null;
   }[];
   pending_join_requests: number;

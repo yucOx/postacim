@@ -59,6 +59,9 @@ export default function ChannelSidebar() {
         <span className={`flex-1 truncate ${unread > 0 && id !== activeChannelId ? 'font-semibold text-neutral-200' : ''}`}>
           {chName}
         </span>
+        {community?.channels.find((ch) => ch.id === id)?.needs_rekey && (
+          <span title="anahtar yenilenmeli" className="text-amber-500">⚠️</span>
+        )}
         {unread > 0 && id !== activeChannelId && (
           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
             {unread > 99 ? '99+' : unread}
@@ -122,6 +125,7 @@ export default function ChannelSidebar() {
               >
                 <span className="text-neutral-500">🔊</span>
                 <span className="truncate">{c.name}</span>
+                {c.needs_rekey && <span title="anahtar yenilenmeli" className="text-amber-500">⚠️</span>}
                 {(voicePresence[c.id]?.length ?? 0) > 0 && (
                   <span className="ml-auto text-[10px] text-emerald-500">
                     {voicePresence[c.id]!.length}

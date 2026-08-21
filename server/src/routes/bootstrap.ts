@@ -70,6 +70,7 @@ export async function bootstrapRoutes(app: FastifyInstance): Promise<void> {
           name: ch.name,
           type: ch.type,
           key_version: ch.key_version,
+          needs_rekey: !!ch.needs_rekey,
           my_wrapped_key: keyByChannel.get(ch.id) ?? null,
         })),
         pending_join_requests: pending,

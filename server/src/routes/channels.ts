@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db.js';
-import { getChannel, memberRole } from '../lib/access.js';
+import { getChannel, isStaff, memberRole } from '../lib/access.js';
 import { hub } from '../ws/hub.js';
 
 interface RotateBody {
@@ -32,12 +32,14 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
   // Rekey after member removal. Old-version wrapped rows for remaining members
   // are kept on purpose: they decrypt pre-rotation history after a reload.
+  // Owner OR admin — the kicking admin must be able to finish the rekey even
+  // when the owner is offline (the channel stays frozen until then).
   app.post('/channels/:id/rotate', async (req, reply) => {
     const { id } = req.params as { id: string };
     const channel = getChannel(id);
     if (!channel) return reply.code(404).send({ error: 'kanal bulunamadı' });
-    if (memberRole(channel.community_id, req.user.id) !== 'owner') {
-      return reply.code(403).send({ error: 'sadece sahip döndürebilir' });
+    if (!isStaff(memberRole(channel.community_id, req.user.id))) {
+      return reply.code(403).send({ error: 'sadece sahip veya admin döndürebilir' });
     }
     const members = db
       .prepare('SELECT user_id FROM members WHERE community_id = ?')
@@ -53,7 +55,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     }
     const newVersion = channel.key_version + 1;
     const tx = db.transaction(() => {
-      db.prepare('UPDATE channels SET key_version = ? WHERE id = ?').run(newVersion, id);
+      db.prepare('UPDATE channels SET key_version = ?, needs_rekey = 0 WHERE id = ?').run(newVersion, id);
       for (const w of wrapped) {
         db.prepare(
           'INSERT INTO wrapped_channel_keys(channel_id, user_id, key_version, wrapped_key) VALUES (?, ?, ?, ?)',

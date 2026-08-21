@@ -19,6 +19,7 @@ import { useVoiceStore } from '../state/voiceStore';
 
 function PasswordModal({ onClose }: { onClose: () => void }) {
   const changePassword = useAuthStore((s) => s.changePassword);
+  const logout = useAuthStore((s) => s.logout);
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [newPw2, setNewPw2] = useState('');
@@ -47,9 +48,14 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
     <Modal title="Şifre değiştir" onClose={onClose}>
       {done ? (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-emerald-400">şifre güncellendi — kimlik aynı, geçmiş okunur</p>
-          <button onClick={onClose} className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500">
-            tamam
+          <p className="text-sm text-emerald-400">
+            şifre güncellendi — tüm oturumlar kapandı, yeni şifrenle tekrar giriş yap
+          </p>
+          <button
+            onClick={() => void logout().finally(onClose)}
+            className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500"
+          >
+            giriş ekranına dön
           </button>
         </div>
       ) : (

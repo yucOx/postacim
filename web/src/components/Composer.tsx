@@ -5,17 +5,19 @@ export default function Composer({
   send,
   sending,
   placeholder,
+  disabled = false,
 }: {
   send: (body: string) => Promise<void>;
   sending: boolean;
   placeholder: string;
+  disabled?: boolean;
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (): Promise<void> => {
     const body = text.trim();
-    if (!body || sending) return;
+    if (!body || sending || disabled) return;
     setError(null);
     try {
       setText('');
@@ -42,7 +44,8 @@ export default function Composer({
         onKeyDown={onKey}
         rows={1}
         placeholder={placeholder}
-        className="max-h-40 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2.5 text-sm text-neutral-200 outline-none placeholder:text-neutral-500 focus:border-neutral-500"
+        disabled={disabled}
+        className="max-h-40 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2.5 text-sm text-neutral-200 outline-none placeholder:text-neutral-500 focus:border-neutral-500 disabled:opacity-50"
       />
     </div>
   );

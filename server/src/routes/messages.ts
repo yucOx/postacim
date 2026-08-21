@@ -45,6 +45,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       if (!memberRole(channel.community_id, req.user.id)) {
         return reply.code(403).send({ error: 'üye değilsin' });
       }
+      // frozen after a member removal until staff rotate — the removed user
+      // still holds the raw key, so new ciphertext must not appear under it
+      if (channel.needs_rekey) {
+        return reply.code(409).send({ error: 'kanal yeniden anahtarlanmalı — sahip/admin anahtarı yenilesin' });
+      }
       const body = req.body as PostBody;
       const nonceOk = typeof body?.nonce === 'string' && body.nonce.length === 32 && B64_RE.test(body.nonce);
       const ctOk =

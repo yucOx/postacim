@@ -39,3 +39,9 @@ export function verifySession(token: string): SessionUser | null {
 export function revokeSession(token: string): void {
   db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha256(token));
 }
+
+/** kill every session of a user — used after a password change so a stolen
+ *  token cannot outlive the credential rotation */
+export function revokeAllSessions(userId: string): void {
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+}
