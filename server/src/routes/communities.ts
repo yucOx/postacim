@@ -6,6 +6,7 @@ import {
   communityChannels,
   communityMembers,
   getCommunity,
+  isStaff,
   memberRole,
 } from '../lib/access.js';
 import { hub } from '../ws/hub.js';
@@ -79,8 +80,8 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     const body = req.body as CreateChannelBody;
     const community = getCommunity(id);
     if (!community) return reply.code(404).send({ error: 'topluluk bulunamadı' });
-    if (memberRole(id, req.user.id) !== 'owner') {
-      return reply.code(403).send({ error: 'sadece sahip ekleyebilir' });
+    if (!isStaff(memberRole(id, req.user.id))) {
+      return reply.code(403).send({ error: 'sadece sahip veya admin ekleyebilir' });
     }
     if (!validName(body?.name) || !validType(body?.type)) {
       return reply.code(400).send({ error: 'geçersiz kanal verisi' });
@@ -136,8 +137,8 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
   app.post('/communities/:id/members', async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = req.body as AddMemberBody;
-    if (memberRole(id, req.user.id) !== 'owner') {
-      return reply.code(403).send({ error: 'sadece sahip ekleyebilir' });
+    if (!isStaff(memberRole(id, req.user.id))) {
+      return reply.code(403).send({ error: 'sadece sahip veya admin ekleyebilir' });
     }
     const target = body?.user_id
       ? (db.prepare('SELECT id, nick, public_key FROM users WHERE id = ?').get(body.user_id) as
@@ -147,6 +148,9 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     if (!target) return reply.code(404).send({ error: 'kullanıcı bulunamadı' });
     if (memberRole(id, target.id)) {
       return reply.code(409).send({ error: 'zaten üye' });
+    }
+    if (db.prepare('SELECT 1 FROM bans WHERE community_id = ? AND user_id = ?').get(id, target.id)) {
+      return reply.code(409).send({ error: 'bu kullanıcı banlı' });
     }
     const channels = communityChannels(id);
     const wrapped = body?.wrapped_keys;
@@ -182,13 +186,21 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/communities/:id/members/:uid', async (req, reply) => {
     const { id, uid } = req.params as { id: string; uid: string };
-    if (memberRole(id, req.user.id) !== 'owner') {
-      return reply.code(403).send({ error: 'sadece sahip çıkarabilir' });
+    const requesterRole = memberRole(id, req.user.id);
+    if (!isStaff(requesterRole)) {
+      return reply.code(403).send({ error: 'sadece sahip veya admin çıkarabilir' });
     }
     if (uid === req.user.id) {
-      return reply.code(400).send({ error: 'sahip kendini çıkaramaz' });
+      return reply.code(400).send({ error: 'kendini çıkaramazsın' });
     }
-    if (!memberRole(id, uid)) return reply.code(404).send({ error: 'üye bulunamadı' });
+    const targetRole = memberRole(id, uid);
+    if (!targetRole) return reply.code(404).send({ error: 'üye bulunamadı' });
+    if (targetRole === 'owner') {
+      return reply.code(400).send({ error: 'sahip çıkarılamaz' });
+    }
+    if (requesterRole === 'admin' && targetRole === 'admin') {
+      return reply.code(403).send({ error: 'admin başka admini çıkaramaz' });
+    }
     const channels = communityChannels(id);
     const tx = db.transaction(() => {
       db.prepare('DELETE FROM members WHERE community_id = ? AND user_id = ?').run(id, uid);
@@ -208,6 +220,120 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     });
     hub.leaveCommunity(uid, id);
     return { affected_channel_ids: affected };
+  });
+
+  // --- roles ---
+  app.post('/communities/:id/admins', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (memberRole(id, req.user.id) !== 'owner') {
+      return reply.code(403).send({ error: 'sadece sahip admin atayabilir' });
+    }
+    const { user_id } = (req.body ?? {}) as { user_id?: string };
+    const targetRole = user_id ? memberRole(id, user_id) : null;
+    if (!targetRole) return reply.code(404).send({ error: 'üye bulunamadı' });
+    if (targetRole === 'owner') return reply.code(400).send({ error: 'sahip zaten en yüksek rol' });
+    if (targetRole === 'admin') return reply.code(409).send({ error: 'zaten admin' });
+    db.prepare('UPDATE members SET role = ? WHERE community_id = ? AND user_id = ?').run(
+      'admin',
+      id,
+      user_id,
+    );
+    hub.broadcast(id, { type: 'community:roles_updated', community_id: id });
+    return reply.code(204).send();
+  });
+
+  app.delete('/communities/:id/admins/:uid', async (req, reply) => {
+    const { id, uid } = req.params as { id: string; uid: string };
+    if (memberRole(id, req.user.id) !== 'owner') {
+      return reply.code(403).send({ error: 'sadece sahip admin kaldırabilir' });
+    }
+    if (memberRole(id, uid) !== 'admin') return reply.code(404).send({ error: 'admin bulunamadı' });
+    db.prepare('UPDATE members SET role = ? WHERE community_id = ? AND user_id = ?').run(
+      'member',
+      id,
+      uid,
+    );
+    hub.broadcast(id, { type: 'community:roles_updated', community_id: id });
+    return reply.code(204).send();
+  });
+
+  // --- bans ---
+  // Ban also removes membership + wrapped keys (rekey responsibility stays client-side).
+  app.post('/communities/:id/bans', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const requesterRole = memberRole(id, req.user.id);
+    if (!isStaff(requesterRole)) {
+      return reply.code(403).send({ error: 'sadece sahip veya admin banlayabilir' });
+    }
+    const { user_id } = (req.body ?? {}) as { user_id?: string };
+    if (!user_id || !db.prepare('SELECT 1 FROM users WHERE id = ?').get(user_id)) {
+      return reply.code(404).send({ error: 'kullanıcı bulunamadı' });
+    }
+    if (memberRole(id, user_id) === 'owner') {
+      return reply.code(400).send({ error: 'sahip banlanamaz' });
+    }
+    if (requesterRole === 'admin' && memberRole(id, user_id) === 'admin') {
+      return reply.code(403).send({ error: 'admin başka admini banlayamaz' });
+    }
+    if (db.prepare('SELECT 1 FROM bans WHERE community_id = ? AND user_id = ?').get(id, user_id)) {
+      return reply.code(409).send({ error: 'zaten banlı' });
+    }
+    const wasMember = memberRole(id, user_id) !== null;
+    const channels = communityChannels(id);
+    const tx = db.transaction(() => {
+      if (wasMember) {
+        db.prepare('DELETE FROM members WHERE community_id = ? AND user_id = ?').run(id, user_id);
+        db.prepare(
+          `DELETE FROM wrapped_channel_keys
+           WHERE user_id = ? AND channel_id IN (SELECT id FROM channels WHERE community_id = ?)`,
+        ).run(user_id, id);
+      }
+      db.prepare('INSERT INTO bans(community_id, user_id, banned_by, created_at) VALUES (?, ?, ?, ?)').run(
+        id,
+        user_id,
+        req.user.id,
+        Date.now(),
+      );
+    });
+    tx();
+    const affected = wasMember ? channels.map((c) => c.id) : [];
+    if (wasMember) {
+      hub.broadcast(id, {
+        type: 'community:member_removed',
+        community_id: id,
+        user_id,
+        affected_channel_ids: affected,
+      });
+      hub.leaveCommunity(user_id, id);
+    }
+    return { affected_channel_ids: affected };
+  });
+
+  app.get('/communities/:id/bans', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!isStaff(memberRole(id, req.user.id))) {
+      return reply.code(403).send({ error: 'yetkin yok' });
+    }
+    const rows = db
+      .prepare(
+        `SELECT b.user_id, u.nick, b.created_at
+         FROM bans b JOIN users u ON u.id = b.user_id
+         WHERE b.community_id = ? ORDER BY b.created_at DESC`,
+      )
+      .all(id) as { user_id: string; nick: string; created_at: number }[];
+    return { bans: rows };
+  });
+
+  app.delete('/communities/:id/bans/:uid', async (req, reply) => {
+    const { id, uid } = req.params as { id: string; uid: string };
+    if (!isStaff(memberRole(id, req.user.id))) {
+      return reply.code(403).send({ error: 'yetkin yok' });
+    }
+    const info = db
+      .prepare('DELETE FROM bans WHERE community_id = ? AND user_id = ?')
+      .run(id, uid);
+    if (info.changes === 0) return reply.code(404).send({ error: 'ban bulunamadı' });
+    return reply.code(204).send();
   });
 
   app.get('/communities/:id/public-keys', async (req, reply) => {

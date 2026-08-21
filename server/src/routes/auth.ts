@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { loginSchema, NICK_REGEX, registerSchema } from '../schemas.js';
 import { issueSession, revokeSession } from '../auth/sessions.js';
+import { config } from '../config.js';
 
 interface RegisterBody {
   nick: string;
@@ -39,7 +40,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     '/auth/register',
-    { config: { rateLimit: { max: 3, timeWindow: '1 hour' } }, schema: { body: registerSchema } },
+    { config: { rateLimit: { max: config.registerRatePerHour, timeWindow: '1 hour' } }, schema: { body: registerSchema } },
     async (req, reply) => {
       const body = req.body as RegisterBody;
       try {

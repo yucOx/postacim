@@ -14,12 +14,17 @@ export interface ChannelRow {
   key_version: number;
 }
 
-export function memberRole(communityId: string, userId: string): 'owner' | 'member' | null {
+export type Role = 'owner' | 'admin' | 'member';
+
+export function memberRole(communityId: string, userId: string): Role | null {
   const row = db
     .prepare('SELECT role FROM members WHERE community_id = ? AND user_id = ?')
-    .get(communityId, userId) as { role: 'owner' | 'member' } | undefined;
+    .get(communityId, userId) as { role: Role } | undefined;
   return row?.role ?? null;
 }
+
+/** owner or admin — the two roles allowed to manage members/invites */
+export const isStaff = (role: Role | null): boolean => role === 'owner' || role === 'admin';
 
 export function getCommunity(id: string): CommunityRow | undefined {
   return db.prepare('SELECT * FROM communities WHERE id = ?').get(id) as CommunityRow | undefined;
@@ -38,7 +43,7 @@ export function communityChannels(communityId: string): ChannelRow[] {
 export function communityMembers(communityId: string): {
   id: string;
   nick: string;
-  role: 'owner' | 'member';
+  role: Role;
   public_key: string;
 }[] {
   return db
@@ -47,5 +52,5 @@ export function communityMembers(communityId: string): {
        FROM members m JOIN users u ON u.id = m.user_id
        WHERE m.community_id = ? ORDER BY m.joined_at`,
     )
-    .all(communityId) as { id: string; nick: string; role: 'owner' | 'member'; public_key: string }[];
+    .all(communityId) as { id: string; nick: string; role: Role; public_key: string }[];
 }

@@ -13,15 +13,16 @@ export interface Channel {
   key_version: number;
   my_wrapped_key?: string | null;
 }
+export type Role = 'owner' | 'admin' | 'member';
 export interface Member {
   id: string;
   nick: string;
-  role: 'owner' | 'member';
+  role: Role;
 }
 export interface Community {
   id: string;
   name: string;
-  role: 'owner' | 'member';
+  role: Role;
   members: Member[];
   channels: Channel[];
 }
@@ -43,10 +44,13 @@ interface AppState {
   selectChannel: (id: string) => void;
   currentKey: (channelId: string) => Uint8Array | null;
   ensureChannelKey: (channelId: string) => Promise<Uint8Array>;
+  rekeyAffected: (communityId: string, channelIds: string[]) => Promise<void>;
   createCommunity: (name: string) => Promise<void>;
   createChannel: (communityId: string, name: string, type: 'text' | 'voice') => Promise<void>;
   addMember: (communityId: string, nick: string) => Promise<void>;
   removeMember: (communityId: string, userId: string) => Promise<void>;
+  banMember: (communityId: string, userId: string) => Promise<void>;
+  setRole: (communityId: string, userId: string, makeAdmin: boolean) => Promise<void>;
   wireEvents: () => void;
 }
 
@@ -148,6 +152,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     return key;
   },
 
+  // Shared kick/ban tail: refresh (member already gone server-side), then seal a
+  // fresh key per affected channel to every remaining member.
+  rekeyAffected: async (communityId, channelIds) => {
+    await get().loadBootstrap();
+    const { publicKeys, communities } = get();
+    const com = communities.find((c) => c.id === communityId);
+    if (!com) return;
+    for (const channelId of channelIds) {
+      const newKey = randomBytes(32);
+      const wrappedKeys = com.members.map((m) => {
+        const pk = publicKeys[m.id];
+        if (!pk) throw new Error(`${m.nick} için açık anahtar yok`);
+        return { user_id: m.id, wrapped_key: wrapKeyFor(newKey, pk) };
+      });
+      await api(`/channels/${channelId}/rotate`, {
+        method: 'POST',
+        body: { wrapped_keys: wrappedKeys },
+      });
+      // own epoch map updates via the channel:rotated → loadBootstrap handler
+    }
+  },
+
   createCommunity: async (name) => {
     const { publicKey } = useAuthStore.getState();
     if (!publicKey) throw new Error('kimlik yok');
@@ -216,31 +242,31 @@ export const useAppStore = create<AppState>((set, get) => ({
     // member_added broadcast triggers bootstrap refresh for everyone
   },
 
-  // Owner flow: remove on the server, then rekey every affected channel by
+  // Owner/admin flow: remove on the server, then rekey every affected channel by
   // sealing a fresh key to each remaining member. Old epochs stay decryptable.
   removeMember: async (communityId, userId) => {
     const res = await api<{ affected_channel_ids: string[] }>(
       `/communities/${communityId}/members/${userId}`,
       { method: 'DELETE' },
     );
-    await get().loadBootstrap(); // member list without the removed user
-    const { publicKeys, communities } = get();
-    const com = communities.find((c) => c.id === communityId);
-    if (!com) return;
-    const remaining = com.members.filter((m) => m.id !== userId);
-    for (const channelId of res.affected_channel_ids) {
-      const newKey = randomBytes(32);
-      const wrappedKeys = remaining.map((m) => {
-        const pk = publicKeys[m.id];
-        if (!pk) throw new Error(`${m.nick} için açık anahtar yok`);
-        return { user_id: m.id, wrapped_key: wrapKeyFor(newKey, pk) };
-      });
-      await api(`/channels/${channelId}/rotate`, {
-        method: 'POST',
-        body: { wrapped_keys: wrappedKeys },
-      });
-      // own epoch map updates via the channel:rotated → loadBootstrap handler
-    }
+    await get().rekeyAffected(communityId, res.affected_channel_ids);
+  },
+
+  // Ban = kick (server-side, incl. wrapped-key purge) + ban row + rekey.
+  banMember: async (communityId, userId) => {
+    const res = await api<{ affected_channel_ids: string[] }>(
+      `/communities/${communityId}/bans`,
+      { method: 'POST', body: { user_id: userId } },
+    );
+    await get().rekeyAffected(communityId, res.affected_channel_ids);
+  },
+
+  setRole: async (communityId, userId, makeAdmin) => {
+    await api(`/communities/${communityId}/admins${makeAdmin ? '' : `/${userId}`}`, {
+      method: makeAdmin ? 'POST' : 'DELETE',
+      ...(makeAdmin ? { body: { user_id: userId } } : {}),
+    });
+    // roles_updated event refreshes bootstrap
   },
 
   wireEvents: () => {
@@ -265,7 +291,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         } else {
           void get().loadBootstrap();
         }
-      } else if (e.type === 'channel:created' || e.type === 'channel:rotated') {
+      } else if (e.type === 'channel:created' || e.type === 'channel:rotated' || e.type === 'community:roles_updated') {
         void get().loadBootstrap();
       }
     });

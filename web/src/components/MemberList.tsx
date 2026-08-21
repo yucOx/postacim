@@ -7,6 +7,8 @@ export default function MemberList() {
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
   const addMember = useAppStore((s) => s.addMember);
   const removeMember = useAppStore((s) => s.removeMember);
+  const banMember = useAppStore((s) => s.banMember);
+  const setRole = useAppStore((s) => s.setRole);
   const me = useAuthStore((s) => s.user);
   const [adding, setAdding] = useState(false);
   const [nick, setNick] = useState('');
@@ -15,7 +17,9 @@ export default function MemberList() {
 
   if (!community) return <div className="w-56 shrink-0 border-l border-neutral-800/60 bg-neutral-900/40" />;
 
-  const isOwner = community.role === 'owner';
+  const myRole = community.role;
+  const isOwner = myRole === 'owner';
+  const isStaff = isOwner || myRole === 'admin';
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -31,12 +35,12 @@ export default function MemberList() {
     }
   };
 
-  const remove = async (userId: string, userNick: string): Promise<void> => {
-    if (!confirm(`${userNick} çıkarılsın mı? Odalar yeni anahtarla döndürülür.`)) return;
+  const act = async (fn: () => Promise<void>, confirmText?: string): Promise<void> => {
+    if (confirmText && !confirm(confirmText)) return;
     try {
-      await removeMember(community.id, userId);
+      await fn();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'çıkarılamadı');
+      alert(err instanceof Error ? err.message : 'işlem başarısız');
     }
   };
 
@@ -44,33 +48,56 @@ export default function MemberList() {
     <div className="flex w-56 shrink-0 flex-col border-l border-neutral-800/60 bg-neutral-900/40">
       <div className="flex items-center justify-between border-b border-neutral-800/60 px-4 py-3 text-[11px] font-semibold tracking-wide text-neutral-500">
         ÜYELER — {community.members.length}
-        {isOwner && (
+        {isStaff && (
           <button onClick={() => setAdding(true)} className="text-neutral-400 hover:text-neutral-200" title="üye ekle">
             +
           </button>
         )}
       </div>
       <div className="flex-1 overflow-y-auto p-2">
-        {community.members.map((m) => (
-          <div key={m.id} className="group flex items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-800/60">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-900/60 text-xs font-bold text-indigo-300">
-              {m.nick[0]?.toUpperCase()}
+        {community.members.map((m) => {
+          const canActOn =
+            isStaff && m.id !== me?.id && m.role !== 'owner' && !(myRole === 'admin' && m.role === 'admin');
+          return (
+            <div key={m.id} className="group flex items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-800/60">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-900/60 text-xs font-bold text-indigo-300">
+                {m.nick[0]?.toUpperCase()}
+              </div>
+              <span className={`flex-1 truncate text-sm ${m.id === me?.id ? 'text-neutral-200' : 'text-neutral-400'}`}>
+                {m.nick}
+              </span>
+              {m.role === 'owner' && <span className="text-[10px] text-amber-500">sahip</span>}
+              {m.role === 'admin' && <span className="text-[10px] text-sky-400">admin</span>}
+              {canActOn && (
+                <div className="hidden items-center gap-1 group-hover:flex">
+                  {isOwner && (
+                    <button
+                      onClick={() => void act(() => setRole(community.id, m.id, m.role === 'member'))}
+                      className="text-[10px] text-neutral-500 hover:text-sky-400"
+                      title={m.role === 'member' ? 'admin yap' : 'admin kaldır'}
+                    >
+                      {m.role === 'member' ? '⭐' : '☆'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => void act(() => banMember(community.id, m.id), `${m.nick} atılıp BANLANSIN mı? Odalar yeni anahtara döner.`)}
+                    className="text-[10px] text-neutral-500 hover:text-red-400"
+                    title="çıkar + banla"
+                  >
+                    🚫
+                  </button>
+                  <button
+                    onClick={() => void act(() => removeMember(community.id, m.id), `${m.nick} çıkarılsın mı? Odalar yeni anahtara döner.`)}
+                    className="text-xs text-neutral-500 hover:text-red-400"
+                    title="çıkar"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
             </div>
-            <span className={`flex-1 truncate text-sm ${m.id === me?.id ? 'text-neutral-200' : 'text-neutral-400'}`}>
-              {m.nick}
-            </span>
-            {m.role === 'owner' && <span className="text-[10px] text-amber-500">sahip</span>}
-            {isOwner && m.id !== me?.id && (
-              <button
-                onClick={() => void remove(m.id, m.nick)}
-                className="hidden text-xs text-neutral-500 hover:text-red-400 group-hover:block"
-                title="çıkar"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {adding && (

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 import Modal from './Modal';
+import CommunitySettings from './CommunitySettings';
 
 export default function ChannelSidebar() {
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
@@ -20,6 +21,8 @@ export default function ChannelSidebar() {
   }
 
   const isOwner = community.role === 'owner';
+  const isStaff = isOwner || community.role === 'admin';
+  const [settings, setSettings] = useState(false);
   const textChannels = community.channels.filter((c) => c.type === 'text');
   const voiceChannels = community.channels.filter((c) => c.type === 'voice');
 
@@ -53,7 +56,18 @@ export default function ChannelSidebar() {
 
   return (
     <div className="flex w-60 shrink-0 flex-col border-r border-neutral-800/60 bg-neutral-900/40">
-      <div className="border-b border-neutral-800/60 px-4 py-3 font-semibold">{community.name}</div>
+      <div className="flex items-center justify-between border-b border-neutral-800/60 px-4 py-3 font-semibold">
+        <span className="truncate">{community.name}</span>
+        {isStaff && (
+          <button
+            onClick={() => setSettings(true)}
+            className="ml-2 text-neutral-500 hover:text-neutral-200"
+            title="topluluk ayarları"
+          >
+            ⚙️
+          </button>
+        )}
+      </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
         <div className="mb-1 flex items-center justify-between px-2 text-[11px] font-semibold tracking-wide text-neutral-500">
           YAZI ODALARI
@@ -111,6 +125,8 @@ export default function ChannelSidebar() {
           ))}
         </div>
       </div>
+
+      {settings && <CommunitySettings communityId={community.id} onClose={() => setSettings(false)} />}
 
       {modalType && (
         <Modal

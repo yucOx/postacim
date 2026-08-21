@@ -15,4 +15,6 @@ export const config = {
   livekitSecret:
     process.env.LIVEKIT_SECRET ?? 'pgv-dev-secret-please-change-me-0123456789abcdef',
   sessionTtlDays: num(process.env.SESSION_TTL_DAYS, 30),
+  /** dev/testing knob — keep 3 in production */
+  registerRatePerHour: num(process.env.REGISTER_RATE_PER_HOUR, 3),
 };

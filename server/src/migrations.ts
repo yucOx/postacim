@@ -58,4 +58,25 @@ CREATE TABLE messages(
 CREATE INDEX idx_messages_channel ON messages(channel_id, id DESC);
 CREATE INDEX idx_wck_user ON wrapped_channel_keys(user_id);
 `,
+  // v2 — roles (owner/admin/member) + bans
+  // members.role CHECK rebuilt: SQLite cannot alter CHECK constraints
+  `
+CREATE TABLE members_v2(
+  community_id TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'member' CHECK(role IN('owner','admin','member')),
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY(community_id, user_id)
+);
+INSERT INTO members_v2 SELECT community_id, user_id, role, joined_at FROM members;
+DROP TABLE members;
+ALTER TABLE members_v2 RENAME TO members;
+CREATE TABLE bans(
+  community_id TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  banned_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(community_id, user_id)
+);
+`,
 ];

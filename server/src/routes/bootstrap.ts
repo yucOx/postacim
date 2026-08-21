@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db.js';
-import { communityChannels, communityMembers } from '../lib/access.js';
+import { communityChannels, communityMembers, type Role } from '../lib/access.js';
 
 interface BootstrapCommunity {
   id: string;
   name: string;
-  role: 'owner' | 'member';
-  members: { id: string; nick: string; role: 'owner' | 'member' }[];
+  role: Role;
+  members: { id: string; nick: string; role: Role }[];
   channels: {
     id: string;
     name: string;
@@ -26,7 +26,7 @@ export async function bootstrapRoutes(app: FastifyInstance): Promise<void> {
          JOIN members m ON m.community_id = c.id
          WHERE m.user_id = ? ORDER BY c.created_at`,
       )
-      .all(req.user.id) as { id: string; name: string; role: 'owner' | 'member' }[];
+      .all(req.user.id) as { id: string; name: string; role: Role }[];
 
     const myKeys = db
       .prepare(
