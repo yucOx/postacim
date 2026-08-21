@@ -111,7 +111,20 @@ npm -w web run dev                # Web  (localhost:5173)
 
 Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 
-## Test (iki tarayıcı profili)
+## Otomatik testler
+
+```bash
+npm test    # 52 test: kripto birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+```
+
+- `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma
+- `server/test/auth.test.ts` — kayıt/giriş, IP başına limitler, httpOnly çerez + WS çerez auth, şifre değişimi oturum düşürme, BIP-39 kurtarma döngüsü
+- `server/test/moderation.test.ts` — roller, kick→dondur→rotate, ban, kanal limiti
+- `server/test/join.test.ts` — açık/hedefli davet, süre/kullanım limiti, başvurular, katılım şifresi
+- `server/test/social.test.ts` — arkadaşlık, DM, grup DM rekey, WS canlı olay
+- `server/test/boot.test.ts` — zayıf secret reddi, taze DB migration zinciri
+
+## Elle test (iki tarayıcı profili)
 
 1. Profil A: kayıt ol (ör. `alice`) → topluluk oluştur → `genel` yazı odasına mesaj yaz
 2. Profil B: kayıt ol (`bob`) → Alice üye listesinden `+` ile bob'u ekle
