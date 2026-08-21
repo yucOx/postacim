@@ -9,5 +9,3 @@ turn:
   # embedded TURN covers symmetric-NAT cases where direct ICE fails
   enabled: true
   udp_port: 3478
-keys:
-  devkey: pgv-dev-secret-please-change-me-0123456789abcdef

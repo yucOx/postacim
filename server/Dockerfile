@@ -1,8 +1,30 @@
+# context = repo root (npm workspaces)
+FROM node:22-slim AS buildtools
+# native modules (better-sqlite3, argon2) may fall back to source builds
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM buildtools AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY server/package.json server/tsconfig.json ./server/
+COPY web/package.json ./web/
+RUN npm ci -w server
+COPY server/src ./server/src
+RUN cd server && npx tsc -p tsconfig.json
+
+FROM buildtools AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY server/package.json ./server/
+COPY web/package.json ./web/
+RUN npm ci -w server --omit=dev && npm cache clean --force
+
 FROM node:22-slim
 WORKDIR /app
-COPY package.json ./
-RUN npm install
-COPY tsconfig.json ./
-COPY src ./src
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/server/dist ./server/dist
+WORKDIR /app/server
 EXPOSE 4000
-CMD ["npx", "tsx", "src/index.ts"]
+CMD ["node", "dist/index.js"]

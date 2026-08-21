@@ -33,17 +33,39 @@ düz hâlini **hiçbir zaman** görmez.
 ```
 posta-guvercini/
 ├── server/   Node 22 + Fastify + SQLite — Bearer auth, WS (/ws), LiveKit token
+│             (çok aşamalı Dockerfile: tsc derlemesi + node dist)
 ├── web/      React 19 + Vite + Tailwind — tüm kripto tarayıcıda (libsodium, hash-wasm)
+│             (Dockerfile: vite build → nginx; /api ve /ws reverse proxy)
 └── livekit/  LiveKit SFU (Docker) — medyayı çözmeden iletir
 ```
 
-## Çalıştırma
+## Deploy (tek komut)
+
+```bash
+cp .env.example .env          # isteğe göre düzenle (aşağıda)
+docker compose up -d --build  # livekit + server + web
+```
+
+- Web arayüzü: `http://<sunucu-ip>/` (port `.env` → `WEB_PORT`)
+- Doğrulama: `curl http://localhost/api/health` → `{"ok":true}`
+- Veritabanı: `./data/` volume — yedekle/sil, her şey orada
+
+**`.env` ayarları:**
+- `LIVEKIT_URL` — tarayıcının LiveKit'e ulaşabildiği adres. Sunucu makinesinde
+  `http://localhost:7880`; LAN üzerinden erişim için `http://<sunucu-ip>:7880` yap.
+- `LIVEKIT_API_KEY` / `LIVEKIT_SECRET` — LiveKit ile server'ın ortak anahtarı;
+  prod için güçlü çift üret: `docker run --rm livekit/livekit-server:v1.13.1 generate-keys`
+- `WEB_PORT` — web'in yayın portu (default 80)
+
+Güncelleme: `git pull && docker compose up -d --build`.
+
+## Geliştirme (konteynersiz)
 
 Gereksinimler: Node 22+, Docker.
 
 ```bash
 npm install
-docker compose up -d livekit      # LiveKit SFU (localhost:7880)
+docker compose up -d livekit      # yalnız LiveKit (localhost:7880)
 npm -w server run dev             # API  (localhost:4000)
 npm -w web run dev                # Web  (localhost:5173)
 ```
@@ -65,7 +87,7 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 - Oturum token'ları DB'de sha256; 30 gün TTL; Authorization header'ı loglardan redakte
 - WS: ilk kare auth zorunlu (aksi halde 4001 ile kapanır), maxPayload 1 MiB, ping reaper
 - Dev: localhost secure context; prod için Caddy (HTTPS) + LiveKit TLS + coturn TLS önerilir — MVP dışı
-- LiveKit secret'ı `docker-compose.yml` + `livekit/livekit.yaml` içinde eşleşmeli; prod'da değiştirin
+- LiveKit anahtarları `.env` üzerinden livekit (`--keys`) ve server'a aynı anda dağıtılır — tek kaynak
 
 ## Durum
 
