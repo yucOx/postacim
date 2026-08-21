@@ -43,7 +43,7 @@ düz hâlini **hiçbir zaman** görmez.
 | Ses/görüntü | Aynı kanal anahtarı → LiveKit SFrame (HKDF) — SFU opak bayt görür |
 | Anahtar epokları | `key_version`; eski epoklar saklanır → rotasyon öncesi geçmiş okunmaya devam eder |
 
-**Bilinen sınırlar (MVP):** MLS/forward-secrecy yok (çıkarılan üye öncesi mesajları zaten görmüşse okur); tek kimlik blob'u (cihaz iptali yok); kanal anahtarı rotasyonu açık davet linklerini ve katılım şifresi anahtarlarını geçersiz kılar (yeni üretilmeli — başvuru onayı etkilenmez); ban, yeni nick açılmasını engellemez (e-postasız sistemde yapısal sınır — katılım şifresi buna karşı direnir); kanal adları/üye listesi/zaman damgaları/roller/davet metadata'sı sunucuya açıktır (içerik değil). TLS sonlandırma (HTTPS/WSS) reverse-proxy'ye bırakılmıştır — prod'da nginx/Caddy arkasında çalıştırın; `LIVEKIT_SECRET` bilinen örnek değerlerdeyse sunucu açılmayı reddeder.
+**Bilinen sınırlar (MVP):** MLS/forward-secrecy yok (çıkarılan üye öncesi mesajları zaten görmüşse okur); tek kimlik blob'u (cihaz iptali yok); kanal anahtarı rotasyonu açık davet linklerini ve katılım şifresi anahtarlarını geçersiz kılar (yeni üretilmeli — başvuru onayı etkilenmez); ban, yeni nick açılmasını engellemez (e-postasız sistemde yapısal sınır — katılım şifresi buna karşı direnir); kanal adları/üye listesi/zaman damgaları/roller/davet metadata'sı sunucuya açıktır (içerik değil). Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
 
 ## Mimari
 
@@ -68,13 +68,35 @@ docker compose up -d --build  # livekit + server + web
 - Veritabanı: `./data/` volume — yedekle/sil, her şey orada
 
 **`.env` ayarları:**
-- `LIVEKIT_URL` — tarayıcının LiveKit'e ulaşabildiği adres. Sunucu makinesinde
-  `http://localhost:7880`; LAN üzerinden erişim için `http://<sunucu-ip>:7880` yap.
+- `LIVEKIT_URL` — tarayıcının LiveKit'e ulaşabildiği adres. Web proxy'si `/livekit`
+  yolunu SFU'ya ilettiği için aynı origin kullanılır: sunucu makinesinde
+  `http://localhost/livekit`; LAN erişimi için `http://<sunucu-ip>/livekit`
+  (TLS modunda `https://<sunucu-ip>/livekit`).
 - `LIVEKIT_API_KEY` / `LIVEKIT_SECRET` — LiveKit ile server'ın ortak anahtarı;
   prod için güçlü çift üret: `docker run --rm livekit/livekit-server:v1.13.1 generate-keys`
+  (bilinen örnek değerlerde sunucu açılmayı reddeder)
 - `WEB_PORT` — web'in yayın portu (default 80)
 
 Güncelleme: `git pull && docker compose up -d --build`.
+
+### HTTPS/WSS (TLS overlay)
+
+Ağ üzerinde şifrelenmemiş bağlantı `auth_material` + oturum çerezini taşır — gizlilik
+ürününde TLS şart. Self-signed ile (kendi LAN'ında):
+
+```bash
+cp .env.example .env                      # anahtar çiftini üret/gir (yukarıda)
+./scripts/gen-certs.sh                    # certs/ altına localhost + makine IP'li sertifika
+# .env içinde: LIVEKIT_URL=https://<makine-adı-veya-ip>/livekit
+docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+```
+
+- 80 → 443 yönlendirme, HSTS, CSP ve diğer güvenlik başlıkları nginx'de hazır
+- Doğrulama: `curl -skI https://localhost/ | grep -i strict-transport`
+- LiveKit sinyali de (`/livekit` → WSS) aynı sertifika üzerinden proxylanır; medya
+  zaten DTLS/SRTP ile şifreli
+- Herkese açık dağıtımda self-signed yeterli değildir — Let's Encrypt gibi gerçek
+  sertifika kullan (`certs/` yerine mount et)
 
 ## Geliştirme (konteynersiz)
 

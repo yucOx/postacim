@@ -3,8 +3,21 @@ import argon2 from 'argon2';
 import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { loginSchema, NICK_REGEX, registerSchema } from '../schemas.js';
-import { issueSession, revokeAllSessions, revokeSession } from '../auth/sessions.js';
+import { issueSession, revokeAllSessions, revokeSession, SESSION_COOKIE } from '../auth/sessions.js';
 import { config } from '../config.js';
+
+// Cookie mirrors the Bearer token 1:1. httpOnly + SameSite=strict keeps it out
+// of JS and cross-site requests; Secure flips on automatically behind TLS.
+function sessionCookie(reply: { setCookie: (n: string, v: string, o: object) => void }, req: { headers: Record<string, unknown> }, token: string): void {
+  const proto = req.headers['x-forwarded-proto'];
+  reply.setCookie(SESSION_COOKIE, token, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: proto === 'https',
+    maxAge: config.sessionTtlDays * 86_400,
+  });
+}
 
 interface RegisterBody {
   nick: string;
@@ -51,6 +64,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
         ).run(id, body.nick, body.kdf_salt, verifier, body.public_key, body.key_blob, Date.now());
         const token = issueSession(id);
+        sessionCookie(reply, req, token);
         return reply.code(201).send({ token, user: publicUser(id, body.nick) });
       } catch (err) {
         if (err instanceof Error && err.message.includes('UNIQUE')) {
@@ -75,6 +89,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const ok = await argon2.verify(row.verifier, body.auth_material).catch(() => false);
       if (!ok) return reply.code(401).send({ error: 'nick veya şifre hatalı' });
       const token = issueSession(row.id);
+      sessionCookie(reply, req, token);
       return {
         token,
         user: { ...publicUser(row.id, row.nick), public_key: row.public_key, key_blob: row.key_blob },
@@ -92,6 +107,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/auth/logout', async (req, reply) => {
     revokeSession(req.sessionToken);
+    reply.clearCookie(SESSION_COOKIE, { path: '/' });
     return reply.code(204).send();
   });
 
@@ -141,6 +157,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         revokeAllSessions(req.user.id);
       });
       tx();
+      reply.clearCookie(SESSION_COOKIE, { path: '/' });
       return reply.code(204).send();
     },
   );

@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@fastify/rate-limit": "^11.2.0",
     "argon2": "^0.45.1",
     "better-sqlite3": "^13.0.3",

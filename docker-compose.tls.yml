@@ -1,0 +1,20 @@
+# TLS overlay: docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+# Requires ./certs/fullchain.pem + privkey.pem (scripts/gen-certs.sh for a
+# self-signed pair; real certs for production).
+#
+# LiveKit signaling is proxied through nginx at /livekit → set
+# LIVEKIT_URL=https://<host-or-ip>/livekit in .env (no separate LiveKit TLS
+# needed; media is DTLS/SRTP encrypted by WebRTC itself).
+#
+# NOTE: self-signed certs are fine on a LAN you control; browsers will not
+# accept them for a public deployment — use Let's Encrypt there.
+name: postacim
+
+services:
+  web:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./web/nginx-tls.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/certs:ro

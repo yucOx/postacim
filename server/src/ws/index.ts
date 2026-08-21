@@ -10,9 +10,13 @@ import { getDm } from '../lib/social.js';
 export function attachWs(app: FastifyInstance): void {
   const wss = new WebSocketServer({ server: app.server, path: '/ws', maxPayload: 1 << 20 });
 
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', (ws: WebSocket, req) => {
     let authed = false;
     let userId = '';
+
+    // cookie fallback: browsers carry the httpOnly session cookie on the
+    // upgrade request, so the auth frame needs no token at all
+    const cookieToken = /(?:^|;\s*)pgv_session=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
 
     ws.on('message', (raw) => {
       let msg: { type?: string; token?: string; channel_id?: string; state?: string };
@@ -23,11 +27,12 @@ export function attachWs(app: FastifyInstance): void {
         return;
       }
       if (!authed) {
-        if (msg?.type !== 'auth' || typeof msg.token !== 'string') {
+        if (msg?.type !== 'auth') {
           ws.close(4001, 'önce auth');
           return;
         }
-        const user = verifySession(msg.token);
+        const token = typeof msg.token === 'string' ? msg.token : cookieToken;
+        const user = token ? verifySession(token) : null;
         if (!user) {
           ws.close(4003, 'geçersiz oturum');
           return;

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, ApiError, restoreToken, setToken } from '../api/client';
+import { api, ApiError } from '../api/client';
 import type { AuthedUser } from '../api/types';
 import { b64, unb64 } from '../crypto/bytes';
 import { deriveKeys, newKdfSaltHex } from '../crypto/argon2';
@@ -55,7 +55,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         },
       },
     );
-    setToken(res.token);
     saveKek(kek);
     set({
       status: 'authed',
@@ -83,7 +82,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       throw new ApiError(401, 'şifre hatalı');
     }
-    setToken(res.token);
     saveKek(kek);
     set({
       status: 'authed',
@@ -122,15 +120,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
-    setToken(null);
     clearKek();
     set({ status: 'anonymous', user: null, publicKey: null, privateKey: null, kek: null });
   },
 
   restore: async () => {
-    const token = restoreToken();
     const kek = loadKek();
-    if (!token || !kek) {
+    if (!kek) {
       set({ status: 'anonymous' });
       return;
     }
@@ -146,7 +142,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         kek,
       });
     } catch {
-      setToken(null);
       clearKek();
       set({ status: 'anonymous' });
     }

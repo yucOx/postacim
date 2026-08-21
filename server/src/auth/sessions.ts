@@ -7,6 +7,9 @@ export interface SessionUser {
   nick: string;
 }
 
+/** name of the httpOnly session cookie set on login */
+export const SESSION_COOKIE = 'pgv_session';
+
 const sha256 = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
 

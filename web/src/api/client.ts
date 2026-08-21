@@ -7,28 +7,17 @@ export class ApiError extends Error {
   }
 }
 
-let token: string | null = null;
-
-export function setToken(t: string | null): void {
-  token = t;
-  if (t) localStorage.setItem('pgv_token', t);
-  else localStorage.removeItem('pgv_token');
-}
-
-export function restoreToken(): string | null {
-  token = localStorage.getItem('pgv_token');
-  return token;
-}
-
+// Auth rides the httpOnly session cookie set by the server — no token in
+// JS-readable storage. Same-origin fetches send it automatically.
 export async function api<T>(
   path: string,
   opts: { method?: string; body?: unknown } = {},
 ): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: opts.method ?? 'GET',
+    credentials: 'same-origin',
     headers: {
       ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });

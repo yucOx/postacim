@@ -1,10 +1,11 @@
 import Fastify from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import cookie from '@fastify/cookie';
 import crypto from 'node:crypto';
 import { config } from './config.js';
 import './db.js'; // open + migrate on boot
 import './types.js';
-import { verifySession } from './auth/sessions.js';
+import { verifySession, SESSION_COOKIE } from './auth/sessions.js';
 import { authRoutes } from './routes/auth.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { communityRoutes } from './routes/communities.js';
@@ -28,12 +29,14 @@ export const app = Fastify({
   bodyLimit: 1024 * 1024,
 });
 
+await app.register(cookie);
+
 await app.register(rateLimit, {
   global: false,
-  // Authenticated requests are bucketed per token (≈ per user) so one heavy
+  // Authenticated requests are bucketed per session (≈ per user) so one heavy
   // user cannot exhaust everyone's quota; anonymous ones fall back to client IP.
   keyGenerator: (req) => {
-    const auth = req.headers.authorization;
+    const auth = req.headers.authorization ?? req.cookies?.[SESSION_COOKIE];
     if (auth) return 'u:' + crypto.createHash('sha256').update(auth).digest('hex').slice(0, 32);
     return req.ip;
   },
@@ -51,7 +54,10 @@ app.addHook('onRequest', async (req, reply) => {
   if (!req.url.startsWith('/api')) return;
   if (PUBLIC_PATHS.has(req.url.split('?')[0])) return;
   const header = req.headers.authorization;
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  // Bearer header (scripts/tests) or the httpOnly session cookie (browser —
+  // XSS cannot read it, unlike a localStorage token)
+  const token =
+    (header?.startsWith('Bearer ') ? header.slice(7) : null) ?? req.cookies?.[SESSION_COOKIE] ?? null;
   const user = token ? verifySession(token) : null;
   if (!user) return reply.code(401).send({ error: 'oturum gerekli' });
   req.user = user;

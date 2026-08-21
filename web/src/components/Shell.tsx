@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
-import { wsConnect, wsDisconnect } from '../ws/socket';
+import { wsConnect, wsDisconnect, onWsStatus, type WsStatus } from '../ws/socket';
 import ServerRail from './ServerRail';
 import ChannelSidebar from './ChannelSidebar';
 import MemberList from './MemberList';
@@ -99,16 +99,28 @@ export default function Shell() {
     useChatStore.getState().wire();
     useDmChatStore.getState().wire();
     useVoiceStore.getState().wire();
-    const token = localStorage.getItem('pgv_token');
-    if (token) wsConnect(token);
+    wsConnect();
     void loadBootstrap();
     return () => wsDisconnect();
   }, [wireEvents, loadBootstrap]);
+
+  // live connection badge — the socket retries forever; this says when it's down
+  const [wsStat, setWsStat] = useState<WsStatus>('offline');
+  useEffect(() => onWsStatus(setWsStat), []);
 
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-200">
       <header className="flex h-10 items-center justify-between border-b border-neutral-800/60 px-4">
         <span className="text-sm font-semibold">postacim 🕊️</span>
+        {wsStat !== 'open' && (
+          <span
+            className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              wsStat === 'connecting' ? 'bg-amber-900/50 text-amber-300' : 'bg-red-900/50 text-red-300'
+            }`}
+          >
+            {wsStat === 'connecting' ? 'bağlanıyor…' : 'bağlantı yok — yeniden deneniyor'}
+          </span>
+        )}
         <div className="flex items-center gap-3 text-sm">
           <span className="text-neutral-400">{user?.nick}</span>
           <button
