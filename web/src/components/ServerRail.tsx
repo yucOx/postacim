@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { api } from '../api/client';
 import { useAppStore } from '../state/appStore';
+import { useDmChatStore } from '../state/dmChatStore';
+import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import Modal from './Modal';
 import { parseInviteLink } from '../crypto/invite';
 
@@ -11,6 +13,10 @@ export default function ServerRail() {
   const createCommunity = useAppStore((s) => s.createCommunity);
   const view = useAppStore((s) => s.view);
   const showDmHome = useAppStore((s) => s.showDmHome);
+  const dms = useAppStore((s) => s.dms);
+  const dmMessages = useDmChatStore((s) => s.messages);
+  useUnreadStore((s) => s.readMap);
+  const dmUnread = dms.reduce((n, d) => n + unreadCount(d.id, dmMessages[d.id]), 0);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,13 +45,18 @@ export default function ServerRail() {
       <button
         onClick={showDmHome}
         title="özel mesajlar / arkadaşlar"
-        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg transition-all ${
+        className={`relative flex h-11 w-11 items-center justify-center rounded-full text-lg transition-all ${
           view === 'dm'
             ? 'rounded-2xl bg-indigo-600 text-white'
             : 'bg-neutral-800 text-neutral-300 hover:rounded-2xl hover:bg-neutral-700'
         }`}
       >
         🕊️
+        {dmUnread > 0 && view !== 'dm' && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+            {dmUnread > 99 ? '99+' : dmUnread}
+          </span>
+        )}
       </button>
       <div className="h-px w-8 bg-neutral-800" />
       {communities.map((c) => (

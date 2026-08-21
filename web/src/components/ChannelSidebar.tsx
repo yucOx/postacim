@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useAppStore } from '../state/appStore';
+import { useChatStore } from '../state/chatStore';
+import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
 import Modal from './Modal';
 import CommunitySettings from './CommunitySettings';
@@ -11,6 +13,8 @@ export default function ChannelSidebar() {
   const createChannel = useAppStore((s) => s.createChannel);
   const voicePresence = useVoiceStore((s) => s.presence);
   const joinedVoice = useVoiceStore((s) => s.joinedChannelId);
+  const chatMessages = useChatStore((s) => s.messages);
+  useUnreadStore((s) => s.readMap); // re-render when markers change
   const [modalType, setModalType] = useState<'text' | 'voice' | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,18 +45,28 @@ export default function ChannelSidebar() {
     }
   };
 
-  const row = (prefix: string, id: string, chName: string): React.ReactNode => (
-    <button
-      key={id}
-      onClick={() => selectChannel(id)}
-      className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm ${
-        id === activeChannelId ? 'bg-neutral-700/60 text-white' : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
-      }`}
-    >
-      <span className="text-neutral-500">{prefix}</span>
-      <span className="truncate">{chName}</span>
-    </button>
-  );
+  const row = (prefix: string, id: string, chName: string): React.ReactNode => {
+    const unread = unreadCount(id, chatMessages[id]);
+    return (
+      <button
+        key={id}
+        onClick={() => selectChannel(id)}
+        className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm ${
+          id === activeChannelId ? 'bg-neutral-700/60 text-white' : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
+        }`}
+      >
+        <span className="text-neutral-500">{prefix}</span>
+        <span className={`flex-1 truncate ${unread > 0 && id !== activeChannelId ? 'font-semibold text-neutral-200' : ''}`}>
+          {chName}
+        </span>
+        {unread > 0 && id !== activeChannelId && (
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   return (
     <div className="flex w-60 shrink-0 flex-col border-r border-neutral-800/60 bg-neutral-900/40">

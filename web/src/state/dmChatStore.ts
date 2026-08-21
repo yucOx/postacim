@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import type { ChatMessage } from '../api/types';
 import { useAppStore } from './appStore';
 import { decryptText, encryptText } from '../crypto/message';
+import { playPop } from '../lib/sound';
 import { onServerEvent } from '../ws/socket';
 
 export interface DmDisplayMessage {
@@ -116,6 +117,8 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
       set((s) => ({
         messages: { ...s.messages, [raw.channel_id]: insertSorted(s.messages[raw.channel_id] ?? [], toDisplay(raw)) },
       }));
+      // notification for background DMs (sender nick is plaintext metadata we already have)
+      if (useAppStore.getState().activeDmId !== raw.channel_id) playPop();
     });
   },
 }));

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useChatStore } from '../state/chatStore';
+import { useUnreadStore } from '../state/unreadStore';
 import { formatDay, sameDay } from '../lib/format';
 import MessageRow from './MessageRow';
 import Composer from './Composer';
@@ -18,6 +19,13 @@ export default function ChatView({ channelId, channelName }: { channelId: string
   useEffect(() => {
     void loadHistory(channelId);
   }, [channelId, loadHistory]);
+
+  // active channel is read as messages arrive
+  const markRead = useUnreadStore((s) => s.markRead);
+  const lastId = messages.length ? messages[messages.length - 1]!.id : 0;
+  useEffect(() => {
+    if (lastId) markRead(channelId, lastId);
+  }, [channelId, lastId, markRead]);
 
   // keep pinned to bottom while the user is at the bottom; preserve position otherwise
   useEffect(() => {

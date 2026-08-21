@@ -1,16 +1,23 @@
 import { useState } from 'react';
 import { useAppStore } from '../state/appStore';
+import { useDmChatStore } from '../state/dmChatStore';
+import { unreadCount, useUnreadStore } from '../state/unreadStore';
+import { formatTime } from '../lib/format';
 
 export default function DmHome() {
   const friends = useAppStore((s) => s.friends);
   const incoming = useAppStore((s) => s.friendIncoming);
   const outgoing = useAppStore((s) => s.friendOutgoing);
   const dms = useAppStore((s) => s.dms);
+  const activeDmId = useAppStore((s) => s.activeDmId);
   const openDm = useAppStore((s) => s.openDm);
+  const openDmChat = useAppStore((s) => s.openDmChat);
   const sendFriendRequest = useAppStore((s) => s.sendFriendRequest);
   const acceptFriend = useAppStore((s) => s.acceptFriend);
   const declineFriend = useAppStore((s) => s.declineFriend);
   const unfriend = useAppStore((s) => s.unfriend);
+  const dmMessages = useDmChatStore((s) => s.messages);
+  useUnreadStore((s) => s.readMap);
   const [nick, setNick] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +37,6 @@ export default function DmHome() {
       setBusy(false);
     }
   };
-
-  const dmNick = (dmId: string): string => dms.find((d) => d.id === dmId)?.peer.nick ?? '';
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-6">
@@ -91,6 +96,39 @@ export default function DmHome() {
         </div>
       )}
 
+      {dms.length > 0 && (
+        <div className="mt-6 max-w-md">
+          <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-neutral-500">KONUŞMALAR</h2>
+          {dms.map((d) => {
+            const unread = unreadCount(d.id, dmMessages[d.id]);
+            return (
+              <button
+                key={d.id}
+                onClick={() => openDmChat(d.id)}
+                className={`flex w-full items-center gap-2 rounded px-1 py-1.5 text-left hover:bg-neutral-800/60 ${
+                  d.id === activeDmId ? 'bg-neutral-800/80' : ''
+                }`}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-900/60 text-sm font-bold text-indigo-300">
+                  {d.peer.nick[0]?.toUpperCase()}
+                </div>
+                <span className={`flex-1 truncate text-sm ${unread > 0 ? 'font-semibold text-neutral-200' : 'text-neutral-300'}`}>
+                  {d.peer.nick}
+                </span>
+                {d.last_message_at && (
+                  <span className="text-[10px] text-neutral-600">{formatTime(d.last_message_at)}</span>
+                )}
+                {unread > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="mt-6 max-w-md">
         <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-neutral-500">ARKADAŞLAR</h2>
         {friends.length === 0 && <p className="text-sm text-neutral-500">henüz arkadaş yok</p>}        {friends.map((f) => (
@@ -114,11 +152,6 @@ export default function DmHome() {
             </button>
           </div>
         ))}
-        {dms.length > 0 && (
-          <p className="mt-2 text-[11px] text-neutral-600">
-            açık DM'lar: {dms.map((d) => dmNick(d.id)).join(', ')}
-          </p>
-        )}
       </div>
     </div>
   );

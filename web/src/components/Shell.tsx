@@ -14,6 +14,7 @@ import CallView from './CallView';
 import Modal from './Modal';
 import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
+import { useUnreadStore, unreadCount } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
 
 function PasswordModal({ onClose }: { onClose: () => void }) {
@@ -77,6 +78,15 @@ export default function Shell() {
   const view = useAppStore((s) => s.view);
   const activeDm = useAppStore((s) => (s.activeDmId ? s.dms.find((d) => d.id === s.activeDmId) ?? null : null));
   const isDmCall = useVoiceStore((s) => s.isDmCall);
+  const dms = useAppStore((s) => s.dms);
+  const dmMessages = useDmChatStore((s) => s.messages);
+  useUnreadStore((s) => s.readMap);
+
+  // browser-tab badge: total unread DMs
+  const dmUnreadTotal = dms.reduce((n, d) => n + unreadCount(d.id, dmMessages[d.id]), 0);
+  useEffect(() => {
+    document.title = dmUnreadTotal > 0 ? `(${dmUnreadTotal}) postacim` : 'postacim';
+  }, [dmUnreadTotal]);
 
   useEffect(() => {
     wireEvents();

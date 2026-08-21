@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
+import { useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { formatDay, sameDay } from '../lib/format';
 import MessageRow from './MessageRow';
@@ -23,6 +24,13 @@ export default function DmChat({ dmId }: { dmId: string }) {
   useEffect(() => {
     void loadHistory(dmId);
   }, [dmId, loadHistory]);
+
+  // active DM is read as messages arrive
+  const markRead = useUnreadStore((s) => s.markRead);
+  const lastId = messages.length ? messages[messages.length - 1]!.id : 0;
+  useEffect(() => {
+    if (lastId) markRead(dmId, lastId);
+  }, [dmId, lastId, markRead]);
 
   useEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView();
