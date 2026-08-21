@@ -120,4 +120,44 @@ CREATE TABLE join_pw_keys(
   wrapped_key TEXT NOT NULL
 );
 `,
+  // v6 — friends + DMs
+  `
+CREATE TABLE friend_requests(
+  from_user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(from_user, to_user)
+);
+CREATE TABLE friends(
+  user_a TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_b TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(user_a, user_b)
+);
+CREATE TABLE dm_channels(
+  id TEXT PRIMARY KEY,
+  user_a TEXT NOT NULL REFERENCES users(id),
+  user_b TEXT NOT NULL REFERENCES users(id),
+  key_version INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  UNIQUE(user_a, user_b)
+);
+CREATE TABLE dm_keys(
+  channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  key_version INTEGER NOT NULL,
+  wrapped_key TEXT NOT NULL,
+  PRIMARY KEY(channel_id, user_id, key_version)
+);
+CREATE TABLE dm_messages(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL,
+  key_version INTEGER NOT NULL,
+  nonce TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  sent_at INTEGER NOT NULL
+);
+CREATE INDEX idx_dm_messages ON dm_messages(channel_id, id DESC);
+`,
 ];

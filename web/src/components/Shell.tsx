@@ -7,6 +7,7 @@ import ChannelSidebar from './ChannelSidebar';
 import MemberList from './MemberList';
 import ChatView from './ChatView';
 import VoiceRoom from './VoiceRoom';
+import DmHome from './DmHome';
 import Modal from './Modal';
 import { useChatStore } from '../state/chatStore';
 import { useVoiceStore } from '../state/voiceStore';
@@ -69,6 +70,8 @@ export default function Shell() {
   const loadBootstrap = useAppStore((s) => s.loadBootstrap);
   const wireEvents = useAppStore((s) => s.wireEvents);
   const channel = useAppStore((s) => s.activeChannel());
+  const view = useAppStore((s) => s.view);
+  const activeDm = useAppStore((s) => (s.activeDmId ? s.dms.find((d) => d.id === s.activeDmId) ?? null : null));
 
   useEffect(() => {
     wireEvents();
@@ -102,8 +105,20 @@ export default function Shell() {
       </header>
       <div className="flex min-h-0 flex-1">
         <ServerRail />
-        <ChannelSidebar />
-        <main className="flex min-w-0 flex-1 flex-col">
+        {view === 'dm' ? (
+          <main className="flex min-w-0 flex-1 flex-col">
+            {activeDm ? (
+              <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">
+                DM sohbeti yükleniyor… (paket E2)
+              </div>
+            ) : (
+              <DmHome />
+            )}
+          </main>
+        ) : (
+          <>
+            <ChannelSidebar />
+            <main className="flex min-w-0 flex-1 flex-col">
           {!loaded ? (
             <div className="flex flex-1 items-center justify-center text-neutral-600">yükleniyor…</div>
           ) : channel ? (
@@ -117,8 +132,10 @@ export default function Shell() {
               soldan bir topluluk ve oda seç
             </div>
           )}
-        </main>
-        <MemberList />
+            </main>
+            <MemberList />
+          </>
+        )}
       </div>
       {pwModal && <PasswordModal onClose={() => setPwModal(false)} />}
     </div>

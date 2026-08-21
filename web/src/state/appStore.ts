@@ -32,13 +32,37 @@ export interface Community {
   has_join_password?: boolean;
 }
 
+export interface FriendInfo {
+  id: string;
+  nick: string;
+  public_key: string;
+}
+export interface FriendBrief {
+  id: string;
+  nick: string;
+}
+export interface DmInfo {
+  id: string;
+  peer: { id: string; nick: string };
+  key_version: number;
+  my_wrapped_key: string | null;
+  last_message_at: number | null;
+}
+
 // channelId -> key_version -> raw channel key; epochs kept so rotated history stays readable
 type KeyEpochs = Record<string, Record<number, Uint8Array>>;
 
 interface AppState {
   loaded: boolean;
+  view: 'community' | 'dm';
   communities: Community[];
   publicKeys: Record<string, string>;
+  friends: FriendInfo[];
+  friendIncoming: FriendBrief[];
+  friendOutgoing: FriendBrief[];
+  dms: DmInfo[];
+  dmChannelKeys: KeyEpochs;
+  activeDmId: string | null;
   activeCommunityId: string | null;
   activeChannelId: string | null;
   channelKeys: KeyEpochs;
@@ -62,6 +86,14 @@ interface AppState {
   ) => Promise<string>;
   setJoinPassword: (communityId: string, password: string) => Promise<void>;
   removeJoinPassword: (communityId: string) => Promise<void>;
+  showDmHome: () => void;
+  openDmChat: (dmId: string) => void;
+  backToCommunity: () => void;
+  sendFriendRequest: (nick: string) => Promise<void>;
+  acceptFriend: (userId: string) => Promise<void>;
+  declineFriend: (userId: string) => Promise<void>;
+  unfriend: (userId: string) => Promise<void>;
+  openDm: (userId: string) => Promise<void>;
   wireEvents: () => void;
 }
 
@@ -95,19 +127,52 @@ function unwrapBootstrap(
 
 export const useAppStore = create<AppState>((set, get) => ({
   loaded: false,
+  view: 'community',
   communities: [],
   publicKeys: {},
+  friends: [],
+  friendIncoming: [],
+  friendOutgoing: [],
+  dms: [],
+  dmChannelKeys: {},
+  activeDmId: null,
   activeCommunityId: null,
   activeChannelId: null,
   channelKeys: {},
 
   loadBootstrap: async () => {
-    const data = await api<{ communities: BootstrapCommunity[]; public_keys: Record<string, string> }>(
-      '/bootstrap',
-    );
+    const data = await api<{
+      communities: BootstrapCommunity[];
+      public_keys: Record<string, string>;
+      friends: { friends: FriendInfo[]; incoming: FriendBrief[]; outgoing: FriendBrief[] };
+      dms?: DmInfo[];
+    }>('/bootstrap');
     const { communities, keys } = unwrapBootstrap(data.communities, get().channelKeys);
+    // DM keys: unwrap into a separate epoch map (dm channel ids never collide with community ids)
+    const { publicKey, privateKey } = useAuthStore.getState();
+    if (!publicKey || !privateKey) throw new Error('kimlik yok');
+    const dmKeys: KeyEpochs = { ...get().dmChannelKeys };
+    const dms: DmInfo[] = (data.dms ?? []).map((d) => {
+      if (d.my_wrapped_key) {
+        dmKeys[d.id] = {
+          ...(dmKeys[d.id] ?? {}),
+          [d.key_version]: unwrapMyKey(d.my_wrapped_key, publicKey, privateKey),
+        };
+      }
+      return { ...d, my_wrapped_key: null };
+    });
     const prevActiveChannel = get().activeChannelId;
-    set({ loaded: true, communities, publicKeys: data.public_keys, channelKeys: keys });
+    set({
+      loaded: true,
+      communities,
+      publicKeys: data.public_keys,
+      friends: data.friends.friends,
+      friendIncoming: data.friends.incoming,
+      friendOutgoing: data.friends.outgoing,
+      dms,
+      dmChannelKeys: dmKeys,
+      channelKeys: keys,
+    });
     // keep selection if still valid, otherwise pick first text channel of first community
     const stillThere = communities.some((c) => c.channels.some((ch) => ch.id === prevActiveChannel));
     if (!stillThere) {
@@ -131,7 +196,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   selectCommunity: (id) => {
     const com = get().communities.find((c) => c.id === id);
-    set({ activeCommunityId: id, activeChannelId: com?.channels.find((c) => c.type === 'text')?.id ?? null });
+    set({
+      view: 'community',
+      activeDmId: null,
+      activeCommunityId: id,
+      activeChannelId: com?.channels.find((c) => c.type === 'text')?.id ?? null,
+    });
   },
 
   selectChannel: (id) => {
@@ -343,6 +413,67 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().loadBootstrap();
   },
 
+  showDmHome: () => set({ view: 'dm', activeDmId: null }),
+  openDmChat: (dmId) => set({ view: 'dm', activeDmId: dmId }),
+  backToCommunity: () => {
+    const state = get();
+    const first = state.communities[0];
+    set({
+      view: 'community',
+      activeDmId: null,
+      activeCommunityId: state.activeCommunityId ?? first?.id ?? null,
+      activeChannelId:
+        state.activeChannelId ??
+        first?.channels.find((c) => c.type === 'text')?.id ??
+        null,
+    });
+  },
+
+  sendFriendRequest: async (nick) => {
+    await api('/friends/requests', { method: 'POST', body: { nick } });
+    await get().loadBootstrap();
+  },
+  acceptFriend: async (userId) => {
+    await api(`/friends/requests/${userId}/accept`, { method: 'POST' });
+    await get().loadBootstrap();
+  },
+  declineFriend: async (userId) => {
+    await api(`/friends/requests/${userId}/decline`, { method: 'POST' });
+    await get().loadBootstrap();
+  },
+  unfriend: async (userId) => {
+    await api(`/friends/${userId}`, { method: 'DELETE' });
+    await get().loadBootstrap();
+  },
+
+  // DM open: idempotent; new pair → key sealed to both identities by the opener.
+  openDm: async (userId) => {
+    const existing = get().dms.find((d) => d.peer.id === userId);
+    if (existing) {
+      set({ view: 'dm', activeDmId: existing.id });
+      return;
+    }
+    const { publicKey } = useAuthStore.getState();
+    const friend = get().friends.find((f) => f.id === userId);
+    if (!publicKey || !friend) throw new Error('arkadaş bulunamadı');
+    const key = randomBytes(32);
+    const res = await api<{ channel: { id: string; existing: boolean } }>('/dms', {
+      method: 'POST',
+      body: {
+        user_id: userId,
+        wrapped_keys: [
+          { user_id: userId, wrapped_key: wrapKeyFor(key, friend.public_key) },
+          { user_id: useAuthStore.getState().user!.id, wrapped_key: wrapKeyFor(key, b64(publicKey)) },
+        ],
+      },
+    });
+    if (!res.channel.existing) {
+      set({ dmChannelKeys: setKeyEpoch(get().dmChannelKeys, res.channel.id, 1, key) });
+    }
+    await get().loadBootstrap();
+    set({ view: 'dm', activeDmId: res.channel.id });
+  },
+
   wireEvents: () => {
     onServerEvent((e) => {
       const me = useAuthStore.getState().user?.id;
@@ -370,7 +501,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         e.type === 'channel:rotated' ||
         e.type === 'community:roles_updated' ||
         e.type === 'join_request:new' ||
-        e.type === 'community:join_password'
+        e.type === 'community:join_password' ||
+        e.type === 'friend_request:new' ||
+        e.type === 'friend:new' ||
+        e.type === 'friend:removed' ||
+        e.type === 'dm:new'
       ) {
         void get().loadBootstrap();
       }

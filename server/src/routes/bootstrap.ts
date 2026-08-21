@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db.js';
 import { communityChannels, communityMembers, type Role } from '../lib/access.js';
+import { friendsPayload } from './friends.js';
 
 interface BootstrapCommunity {
   id: string;
@@ -74,6 +75,6 @@ export async function bootstrapRoutes(app: FastifyInstance): Promise<void> {
       };
     });
 
-    return { communities: result, public_keys: publicKeys };
+    return { communities: result, public_keys: publicKeys, friends: friendsPayload(req.user.id) };
   });
 }

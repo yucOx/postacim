@@ -9,6 +9,8 @@ export default function ServerRail() {
   const activeId = useAppStore((s) => s.activeCommunityId);
   const selectCommunity = useAppStore((s) => s.selectCommunity);
   const createCommunity = useAppStore((s) => s.createCommunity);
+  const view = useAppStore((s) => s.view);
+  const showDmHome = useAppStore((s) => s.showDmHome);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -34,13 +36,25 @@ export default function ServerRail() {
 
   return (
     <div className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-neutral-800/60 bg-neutral-900/60 py-3">
+      <button
+        onClick={showDmHome}
+        title="özel mesajlar / arkadaşlar"
+        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg transition-all ${
+          view === 'dm'
+            ? 'rounded-2xl bg-indigo-600 text-white'
+            : 'bg-neutral-800 text-neutral-300 hover:rounded-2xl hover:bg-neutral-700'
+        }`}
+      >
+        🕊️
+      </button>
+      <div className="h-px w-8 bg-neutral-800" />
       {communities.map((c) => (
         <button
           key={c.id}
           onClick={() => selectCommunity(c.id)}
           title={c.name}
           className={`flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold transition-all ${
-            c.id === activeId
+            c.id === activeId && view === 'community'
               ? 'rounded-2xl bg-indigo-600 text-white'
               : 'bg-neutral-800 text-neutral-300 hover:rounded-2xl hover:bg-neutral-700'
           }`}
