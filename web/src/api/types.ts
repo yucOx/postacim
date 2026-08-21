@@ -8,8 +8,8 @@ export interface AuthedUser {
 export interface BootstrapCommunity {
   id: string;
   name: string;
-  role: 'owner' | 'member';
-  members: { id: string; nick: string; role: 'owner' | 'member' }[];
+  role: 'owner' | 'admin' | 'member';
+  members: { id: string; nick: string; role: 'owner' | 'admin' | 'member' }[];
   channels: {
     id: string;
     name: string;
@@ -17,6 +17,7 @@ export interface BootstrapCommunity {
     key_version: number;
     my_wrapped_key: string | null;
   }[];
+  pending_join_requests: number;
 }
 
 export interface ChatMessage {

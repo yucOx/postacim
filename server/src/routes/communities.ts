@@ -336,6 +336,118 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(204).send();
   });
 
+  // --- join requests ---
+  app.post('/communities/:id/join-requests', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!getCommunity(id)) return reply.code(404).send({ error: 'topluluk bulunamadı' });
+    if (db.prepare('SELECT 1 FROM bans WHERE community_id = ? AND user_id = ?').get(id, req.user.id)) {
+      return reply.code(403).send({ error: 'bu topluluktan banlısın' });
+    }
+    if (memberRole(id, req.user.id)) {
+      return reply.code(409).send({ error: 'zaten üyesin' });
+    }
+    const existing = db
+      .prepare('SELECT status FROM join_requests WHERE community_id = ? AND user_id = ?')
+      .get(id, req.user.id) as { status: string } | undefined;
+    if (existing?.status === 'pending') {
+      return reply.code(409).send({ error: 'başvurun zaten beklemede' });
+    }
+    if (existing) {
+      db.prepare(
+        "UPDATE join_requests SET status = 'pending', created_at = ? WHERE community_id = ? AND user_id = ?",
+      ).run(Date.now(), id, req.user.id);
+    } else {
+      db.prepare(
+        "INSERT INTO join_requests(community_id, user_id, status, created_at) VALUES (?, ?, 'pending', ?)",
+      ).run(id, req.user.id, Date.now());
+    }
+    hub.broadcast(id, {
+      type: 'join_request:new',
+      community_id: id,
+      user: { id: req.user.id, nick: req.user.nick },
+    });
+    return reply.code(204).send();
+  });
+
+  app.get('/communities/:id/join-requests', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!isStaff(memberRole(id, req.user.id))) {
+      return reply.code(403).send({ error: 'yetkin yok' });
+    }
+    const rows = db
+      .prepare(
+        `SELECT r.user_id, u.nick, u.public_key, r.created_at
+         FROM join_requests r JOIN users u ON u.id = r.user_id
+         WHERE r.community_id = ? AND r.status = 'pending' ORDER BY r.created_at`,
+      )
+      .all(id);
+    return { requests: rows };
+  });
+
+  // Approve: the approver's client supplies keys sealed to the applicant.
+  app.post('/communities/:id/join-requests/:uid/approve', async (req, reply) => {
+    const { id, uid } = req.params as { id: string; uid: string };
+    if (!getCommunity(id)) return reply.code(404).send({ error: 'topluluk bulunamadı' });
+    if (!isStaff(memberRole(id, req.user.id))) {
+      return reply.code(403).send({ error: 'sadece sahip veya admin onaylayabilir' });
+    }
+    const row = db
+      .prepare("SELECT * FROM join_requests WHERE community_id = ? AND user_id = ? AND status = 'pending'")
+      .get(id, uid) as { community_id: string; user_id: string } | undefined;
+    if (!row) return reply.code(404).send({ error: 'bekleyen başvuru yok' });
+    const channels = communityChannels(id);
+    const wrapped = (req.body as { wrapped_keys?: { channel_id: string; key_version: number; wrapped_key: string }[] })
+      ?.wrapped_keys;
+    if (
+      !Array.isArray(wrapped) ||
+      new Set(wrapped.map((w) => w.channel_id)).size !== channels.length ||
+      !channels.every((ch) =>
+        wrapped.some(
+          (w) => w.channel_id === ch.id && w.key_version === ch.key_version && validWrapped(w.wrapped_key),
+        ),
+      )
+    ) {
+      return reply.code(400).send({ error: 'sarılı anahtar seti eksik veya sürümü eski' });
+    }
+    const applicant = db
+      .prepare('SELECT id, nick, public_key FROM users WHERE id = ?')
+      .get(uid) as { id: string; nick: string; public_key: string };
+    const tx = db.transaction(() => {
+      db.prepare(
+        'INSERT INTO members(community_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)',
+      ).run(id, uid, 'member', Date.now());
+      for (const w of wrapped) {
+        db.prepare(
+          'INSERT INTO wrapped_channel_keys(channel_id, user_id, key_version, wrapped_key) VALUES (?, ?, ?, ?)',
+        ).run(w.channel_id, uid, w.key_version, w.wrapped_key);
+      }
+      db.prepare('DELETE FROM join_requests WHERE community_id = ? AND user_id = ?').run(id, uid);
+    });
+    tx();
+    hub.joinCommunity(applicant.id, id);
+    const payload = {
+      type: 'community:member_added',
+      community_id: id,
+      user: { id: applicant.id, nick: applicant.nick },
+      public_key: applicant.public_key,
+    };
+    hub.broadcast(id, payload);
+    hub.sendToUser(applicant.id, payload);
+    return reply.code(204).send();
+  });
+
+  app.post('/communities/:id/join-requests/:uid/deny', async (req, reply) => {
+    const { id, uid } = req.params as { id: string; uid: string };
+    if (!isStaff(memberRole(id, req.user.id))) {
+      return reply.code(403).send({ error: 'sadece sahip veya admin reddedebilir' });
+    }
+    const info = db
+      .prepare("UPDATE join_requests SET status = 'denied' WHERE community_id = ? AND user_id = ? AND status = 'pending'")
+      .run(id, uid);
+    if (info.changes === 0) return reply.code(404).send({ error: 'bekleyen başvuru yok' });
+    return reply.code(204).send();
+  });
+
   app.get('/communities/:id/public-keys', async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!memberRole(id, req.user.id)) return reply.code(403).send({ error: 'üye değilsin' });
@@ -343,4 +455,20 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     for (const m of communityMembers(id)) keys[m.id] = m.public_key;
     return { public_keys: keys };
   });
+
+  // Minimal handle so a user can apply by knowing the community's name.
+  // Names are not listed anywhere; knowing the name is the entry signal.
+  app.get(
+    '/communities/by-name/:name',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const { name } = req.params as { name: string };
+      if (!validName(name)) return reply.code(400).send({ error: 'geçersiz ad' });
+      const row = db
+        .prepare('SELECT id, name FROM communities WHERE name = ? COLLATE NOCASE')
+        .get(name.trim()) as { id: string; name: string } | undefined;
+      if (!row) return reply.code(404).send({ error: 'topluluk bulunamadı' });
+      return row;
+    },
+  );
 }

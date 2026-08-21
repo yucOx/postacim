@@ -5,8 +5,8 @@ import { communityChannels, communityMembers, type Role } from '../lib/access.js
 interface BootstrapCommunity {
   id: string;
   name: string;
-  role: Role;
-  members: { id: string; nick: string; role: Role }[];
+  role: import('../lib/access.js').Role;
+  members: { id: string; nick: string; role: import('../lib/access.js').Role }[];
   channels: {
     id: string;
     name: string;
@@ -14,6 +14,7 @@ interface BootstrapCommunity {
     key_version: number;
     my_wrapped_key: string | null;
   }[];
+  pending_join_requests: number;
 }
 
 // One call hydrates the whole app: communities, members, channels and the
@@ -39,20 +40,32 @@ export async function bootstrapRoutes(app: FastifyInstance): Promise<void> {
     const keyByChannel = new Map(myKeys.map((k) => [k.channel_id, k.wrapped_key]));
 
     const publicKeys: Record<string, string> = {};
-    const result: BootstrapCommunity[] = communities.map((c) => ({
-      ...c,
-      members: communityMembers(c.id).map((m) => {
-        publicKeys[m.id] = m.public_key;
-        return { id: m.id, nick: m.nick, role: m.role };
-      }),
-      channels: communityChannels(c.id).map((ch) => ({
-        id: ch.id,
-        name: ch.name,
-        type: ch.type,
-        key_version: ch.key_version,
-        my_wrapped_key: keyByChannel.get(ch.id) ?? null,
-      })),
-    }));
+    const result: BootstrapCommunity[] = communities.map((c) => {
+      const members = communityMembers(c.id);
+      const staff = c.role === 'owner' || c.role === 'admin';
+      const pending = staff
+        ? (
+            db
+              .prepare("SELECT COUNT(*) AS n FROM join_requests WHERE community_id = ? AND status = 'pending'")
+              .get(c.id) as { n: number }
+          ).n
+        : 0;
+      return {
+        ...c,
+        members: members.map((m) => {
+          publicKeys[m.id] = m.public_key;
+          return { id: m.id, nick: m.nick, role: m.role };
+        }),
+        channels: communityChannels(c.id).map((ch) => ({
+          id: ch.id,
+          name: ch.name,
+          type: ch.type,
+          key_version: ch.key_version,
+          my_wrapped_key: keyByChannel.get(ch.id) ?? null,
+        })),
+        pending_join_requests: pending,
+      };
+    });
 
     return { communities: result, public_keys: publicKeys };
   });

@@ -61,10 +61,15 @@ export default function ChannelSidebar() {
         {isStaff && (
           <button
             onClick={() => setSettings(true)}
-            className="ml-2 text-neutral-500 hover:text-neutral-200"
+            className="relative ml-2 text-neutral-500 hover:text-neutral-200"
             title="topluluk ayarları"
           >
             ⚙️
+            {(community.pending_join_requests ?? 0) > 0 && (
+              <span className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                {community.pending_join_requests}
+              </span>
+            )}
           </button>
         )}
       </div>

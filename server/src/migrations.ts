@@ -102,4 +102,14 @@ CREATE TABLE invite_keys(
 ALTER TABLE communities ADD COLUMN join_kdf_salt TEXT;
 ALTER TABLE communities ADD COLUMN join_verifier TEXT;
 `,
+  // v4 — join requests
+  `
+CREATE TABLE join_requests(
+  community_id TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK(status IN('pending','denied')),
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(community_id, user_id)
+);
+`,
 ];

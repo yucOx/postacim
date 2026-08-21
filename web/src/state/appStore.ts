@@ -26,6 +26,7 @@ export interface Community {
   role: Role;
   members: Member[];
   channels: Channel[];
+  pending_join_requests?: number;
 }
 
 // channelId -> key_version -> raw channel key; epochs kept so rotated history stays readable
@@ -335,7 +336,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         } else {
           void get().loadBootstrap();
         }
-      } else if (e.type === 'channel:created' || e.type === 'channel:rotated' || e.type === 'community:roles_updated') {
+      } else if (
+        e.type === 'channel:created' ||
+        e.type === 'channel:rotated' ||
+        e.type === 'community:roles_updated' ||
+        e.type === 'join_request:new'
+      ) {
         void get().loadBootstrap();
       }
     });

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { api } from '../api/client';
 import { useAppStore } from '../state/appStore';
 import Modal from './Modal';
 import { parseInviteLink } from '../crypto/invite';
@@ -14,6 +15,8 @@ export default function ServerRail() {
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
+  const [applyName, setApplyName] = useState('');
+  const [applyMsg, setApplyMsg] = useState<string | null>(null);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -61,16 +64,15 @@ export default function ServerRail() {
       </button>
 
       {joining && (
-        <Modal title="Davetle katıl" onClose={() => setJoining(false)}>
+        <Modal title="Katıl" onClose={() => setJoining(false)}>
           <div className="flex flex-col gap-3">
             <input
               autoFocus
               value={inviteLink}
               onChange={(e) => setInviteLink(e.target.value)}
-              placeholder="https://…/#/davet/COD…"
+              placeholder="davet linki: https://…/#/davet/COD…"
               className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
             />
-            {error && <p className="text-sm text-red-400">{error}</p>}
             <button
               onClick={() => {
                 if (!parseInviteLink(inviteLink)) {
@@ -86,8 +88,36 @@ export default function ServerRail() {
               disabled={!inviteLink.trim()}
               className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
             >
-              devam
+              davetle katıl
             </button>
+            <div className="h-px bg-neutral-800" />
+            <input
+              value={applyName}
+              onChange={(e) => setApplyName(e.target.value)}
+              placeholder="veya topluluk adı ile başvur"
+              maxLength={64}
+              className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+            />
+            {applyMsg && <p className="text-sm text-emerald-400">{applyMsg}</p>}
+            <button
+              onClick={async () => {
+                setError(null);
+                setApplyMsg(null);
+                try {
+                  const com = await api<{ id: string }>(`/communities/by-name/${encodeURIComponent(applyName.trim())}`);
+                  await api(`/communities/${com.id}/join-requests`, { method: 'POST' });
+                  setApplyMsg('başvurun gönderildi — onay bekleniyor');
+                  setApplyName('');
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'hata');
+                }
+              }}
+              disabled={!applyName.trim()}
+              className="rounded-md bg-neutral-700 py-2 text-sm font-medium hover:bg-neutral-600 disabled:opacity-50"
+            >
+              başvur
+            </button>
+            {error && <p className="text-sm text-red-400">{error}</p>}
           </div>
         </Modal>
       )}
