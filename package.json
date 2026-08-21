@@ -7,6 +7,11 @@
   ],
   "scripts": {
     "dev:server": "npm -w server run dev",
-    "dev:web": "npm -w web run dev"
+    "dev:web": "npm -w web run dev",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
   }
 }

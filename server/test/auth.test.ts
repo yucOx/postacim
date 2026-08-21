@@ -1,0 +1,276 @@
+// Auth surface: register/login, per-IP rate buckets, httpOnly cookie session,
+// password change session-drops, BIP-39 recovery, weak-secret boot refusal.
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { startServer, makeUser, type TestServer, type TestUser } from './helpers';
+import { b64 } from '../../web/src/crypto/bytes';
+import { deriveKeys, newKdfSaltHex } from '../../web/src/crypto/argon2';
+import { generateIdentity, openIdentityBlob, sealIdentityBlob } from '../../web/src/crypto/identity';
+import { deriveRecoveryKeys } from '../../web/src/crypto/recovery';
+import { generateMnemonic } from '../../web/src/crypto/bip39';
+import { sodiumReady } from '../../web/src/crypto/sodium';
+
+let srv: TestServer;
+let alice: TestUser;
+
+beforeAll(async () => {
+  srv = await startServer();
+  alice = await makeUser(srv.baseUrl, 'au');
+  await sodiumReady;
+});
+afterAll(() => srv.stop());
+
+describe('register + login', () => {
+  it('duplicate nick → 409', async () => {
+    const salt = newKdfSaltHex();
+    const { authMaterial, kek } = await deriveKeys('x', salt);
+    const id = generateIdentity();
+    const r = await fetch(`${srv.baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.0.1' },
+      body: JSON.stringify({
+        nick: alice.nick,
+        kdf_salt: salt,
+        auth_material: b64(authMaterial),
+        public_key: b64(id.publicKey),
+        key_blob: sealIdentityBlob(id.privateKey, kek),
+      }),
+    });
+    expect(r.status).toBe(409);
+  });
+
+  it('wrong password → 401', async () => {
+    const { authMaterial } = await deriveKeys('yanlis', alice.salt);
+    const r = await fetch(`${srv.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.0.2' },
+      body: JSON.stringify({ nick: alice.nick, auth_material: b64(authMaterial) }),
+    });
+    expect(r.status).toBe(401);
+  });
+
+  it('login rate limit is per-IP (X-Forwarded-For honored)', async () => {
+    const ip = '10.30.9.9';
+    const codes: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const r = await fetch(`${srv.baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': ip },
+        body: JSON.stringify({ nick: 'yokboyle', auth_material: 'A'.repeat(44) }),
+      });
+      codes.push(r.status);
+    }
+    expect(codes.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
+    expect(codes[5]).toBe(429);
+    const otherIp = await fetch(`${srv.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.8.8' },
+      body: JSON.stringify({ nick: 'yokboyle', auth_material: 'A'.repeat(44) }),
+    });
+    expect(otherIp.status).toBe(401); // own bucket, not the global one
+  });
+});
+
+describe('httpOnly cookie session', () => {
+  it('login sets HttpOnly+SameSite=Strict cookie that authorizes requests', async () => {
+    const { authMaterial } = await deriveKeys(alice.password, alice.salt);
+    const r = await fetch(`${srv.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.1.1' },
+      body: JSON.stringify({ nick: alice.nick, auth_material: b64(authMaterial) }),
+    });
+    expect(r.status).toBe(200);
+    const setCookie = r.headers.get('set-cookie') ?? '';
+    expect(setCookie).toMatch(/pgv_session=/);
+    expect(setCookie).toMatch(/HttpOnly/i);
+    expect(setCookie).toMatch(/SameSite=Strict/i);
+    const cookie = /pgv_session=[^;]+/.exec(setCookie)![0];
+    const me = await fetch(`${srv.baseUrl}/auth/me`, {
+      headers: { cookie, 'x-forwarded-for': '10.30.1.1' },
+    });
+    expect(me.status).toBe(200);
+    const out = await fetch(`${srv.baseUrl}/auth/logout`, {
+      method: 'POST',
+      headers: { cookie, 'x-forwarded-for': '10.30.1.1' },
+    });
+    expect(out.status).toBe(204);
+    const dead = await fetch(`${srv.baseUrl}/auth/me`, {
+      headers: { cookie, 'x-forwarded-for': '10.30.1.1' },
+    });
+    expect(dead.status).toBe(401);
+  });
+
+  it('WS authenticates from the upgrade cookie without a token frame', async () => {
+    const { WebSocket } = await import('ws');
+    const { authMaterial } = await deriveKeys(alice.password, alice.salt);
+    const r = await fetch(`${srv.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.1.2' },
+      body: JSON.stringify({ nick: alice.nick, auth_material: b64(authMaterial) }),
+    });
+    const cookie = /pgv_session=[^;]+/.exec(r.headers.get('set-cookie') ?? '')![0];
+    const wsUrl = srv.baseUrl.replace('/api', '').replace(/^http/, 'ws') + '/ws';
+    const ws = new WebSocket(wsUrl, { headers: { cookie } });
+    const first = await new Promise<string>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('ws auth timeout')), 5000);
+      ws.on('open', () => ws.send(JSON.stringify({ type: 'auth' })));
+      ws.on('message', (d: { toString(): string }) => {
+        clearTimeout(t);
+        resolve(d.toString());
+      });
+      ws.on('error', reject);
+    });
+    expect(JSON.parse(first).type).toBe('ready');
+    ws.close();
+  });
+});
+
+describe('password change', () => {
+  it('drops every session; new password works with the same identity', async () => {
+    const bob = await makeUser(srv.baseUrl, 'ab');
+    const newSalt = newKdfSaltHex();
+    const next = await deriveKeys('yeni-sifre-9', newSalt);
+    const chg = await bob.call('POST', '/auth/password', {
+      old_auth_material: b64((await deriveKeys(bob.password, bob.salt)).authMaterial),
+      new_kdf_salt: newSalt,
+      new_auth_material: b64(next.authMaterial),
+      new_key_blob: sealIdentityBlob(bob.id.privateKey, next.kek),
+    });
+    expect(chg.status).toBe(204);
+    const me = await bob.call('GET', '/auth/me');
+    expect(me.status).toBe(401);
+    const login = await fetch(`${srv.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.2.1' },
+      body: JSON.stringify({
+        nick: bob.nick,
+        auth_material: b64(next.authMaterial),
+      }),
+    });
+    expect(login.status).toBe(200);
+    const oldPw = await fetch(`${srv.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.2.2' },
+      body: JSON.stringify({
+        nick: bob.nick,
+        auth_material: b64((await deriveKeys(bob.password, bob.salt)).authMaterial),
+      }),
+    });
+    expect(oldPw.status).toBe(401);
+  });
+});
+
+describe('BIP-39 recovery', () => {
+  it('full forgot-password cycle keeps the identity', async () => {
+    // register WITH a recovery phrase
+    const words = await generateMnemonic();
+    const salt = newKdfSaltHex();
+    const { authMaterial, kek } = await deriveKeys('pw-asli-1', salt);
+    const id = generateIdentity();
+    const recSalt = newKdfSaltHex();
+    const rec = await deriveRecoveryKeys(words, recSalt);
+    const reg = await fetch(`${srv.baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.3.1' },
+      body: JSON.stringify({
+        nick: 'arc' + Math.floor(Math.random() * 1e9).toString(36),
+        kdf_salt: salt,
+        auth_material: b64(authMaterial),
+        public_key: b64(id.publicKey),
+        key_blob: sealIdentityBlob(id.privateKey, kek),
+        recovery: {
+          kdf_salt: recSalt,
+          auth_material: b64(rec.authMaterial),
+          blob: sealIdentityBlob(id.privateKey, rec.kek),
+        },
+      }),
+    });
+    expect(reg.status).toBe(201);
+    const regJson = (await reg.json()) as { token: string; user: { nick: string } };
+    const oldToken = regJson.token;
+    const nickFinal = regJson.user.nick;
+
+    // params visible only when set
+    const p = await fetch(`${srv.baseUrl}/auth/recovery-params?nick=${nickFinal}`, {
+      headers: { 'x-forwarded-for': '10.30.3.2' },
+    });
+    expect(p.status).toBe(200);
+
+    // wrong phrase → 401
+    const wrong = await deriveRecoveryKeys(await generateMnemonic(), recSalt);
+    const bad = await fetch(`${srv.baseUrl}/auth/recover/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.3.3' },
+      body: JSON.stringify({ nick: nickFinal, recovery_auth_material: b64(wrong.authMaterial) }),
+    });
+    expect(bad.status).toBe(401);
+
+    // unlock with the true phrase → blob decrypts to the same private key
+    const unlock = await fetch(`${srv.baseUrl}/auth/recover/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.3.4' },
+      body: JSON.stringify({ nick: nickFinal, recovery_auth_material: b64(rec.authMaterial) }),
+    });
+    expect(unlock.status).toBe(200);
+    const { recovery_blob: blob, public_key: pub } = (await unlock.json()) as {
+      recovery_blob: string;
+      public_key: string;
+    };
+    expect(pub).toBe(b64(id.publicKey));
+    const priv = openIdentityBlob(blob, rec.kek);
+    expect(b64(priv)).toBe(b64(id.privateKey));
+
+    // finish with a new password → session issued, old ones dead
+    const newSalt = newKdfSaltHex();
+    const next = await deriveKeys('sifirlanmis-2', newSalt);
+    const fin = await fetch(`${srv.baseUrl}/auth/recover/finish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.3.5' },
+      body: JSON.stringify({
+        nick: nickFinal,
+        recovery_auth_material: b64(rec.authMaterial),
+        new_kdf_salt: newSalt,
+        new_auth_material: b64(next.authMaterial),
+        new_key_blob: sealIdentityBlob(priv, next.kek),
+      }),
+    });
+    expect(fin.status).toBe(200);
+    expect((fin.headers.get('set-cookie') ?? '')).toMatch(/pgv_session=/);
+
+    const old = await fetch(`${srv.baseUrl}/auth/me`, {
+      headers: { Authorization: `Bearer ${oldToken}`, 'x-forwarded-for': '10.30.3.6' },
+    });
+    expect(old.status).toBe(401);
+
+    const relog = await fetch(`${srv.baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.30.3.7' },
+      body: JSON.stringify({ nick: nickFinal, auth_material: b64(next.authMaterial) }),
+    });
+    expect(relog.status).toBe(200);
+    const relogJson = (await relog.json()) as { user: { public_key: string } };
+    expect(relogJson.user.public_key).toBe(b64(id.publicKey));
+  });
+
+  it('params 404 for accounts without a phrase', async () => {
+    const r = await fetch(`${srv.baseUrl}/auth/recovery-params?nick=${alice.nick}`, {
+      headers: { 'x-forwarded-for': '10.30.4.1' },
+    });
+    expect(r.status).toBe(404);
+  });
+
+  it('late setup attaches a phrase to a logged-in account', async () => {
+    const words = await generateMnemonic();
+    const recSalt = newKdfSaltHex();
+    const rec = await deriveRecoveryKeys(words, recSalt);
+    const setup = await alice.call('POST', '/auth/recovery', {
+      kdf_salt: recSalt,
+      auth_material: b64(rec.authMaterial),
+      blob: sealIdentityBlob(alice.id.privateKey, rec.kek),
+    });
+    expect(setup.status).toBe(204);
+    const p = await fetch(`${srv.baseUrl}/auth/recovery-params?nick=${alice.nick}`, {
+      headers: { 'x-forwarded-for': '10.30.5.1' },
+    });
+    expect(p.status).toBe(200);
+  });
+});

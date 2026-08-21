@@ -9,7 +9,10 @@ export async function mintVoiceToken(
   const at = new AccessToken(config.livekitApiKey, config.livekitSecret, {
     identity: user.id,
     name: user.nick,
-    ttl: '2h',
+    // short-lived: tokens are stateless, so a kicked member could otherwise
+    // reconnect to the room with a stale one for the full TTL. 15m bounds that
+    // window; legit clients mint a fresh token on every join.
+    ttl: '15m',
   });
   at.addGrant({ room: `ch_${channelId}`, roomJoin: true, canPublish: true, canSubscribe: true });
   return at.toJwt();

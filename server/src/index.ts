@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { config } from './config.js';
 import './db.js'; // open + migrate on boot
 import './types.js';
-import { verifySession, SESSION_COOKIE } from './auth/sessions.js';
+import { verifySession, SESSION_COOKIE, pruneSessions } from './auth/sessions.js';
 import { authRoutes } from './routes/auth.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { communityRoutes } from './routes/communities.js';
@@ -83,7 +83,15 @@ await app.register(gdmRoutes, { prefix: '/api' });
 attachWs(app);
 
 const start = async (): Promise<void> => {
+  pruneSessions();
+  setInterval(pruneSessions, 3_600_000).unref();
   await app.listen({ port: config.port, host: '0.0.0.0' });
+  // docker stop / systemd restart — close sockets and the DB handle cleanly
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(sig, () => {
+      app.close().finally(() => process.exit(0));
+    });
+  }
 };
 
 start().catch((err) => {

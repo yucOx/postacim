@@ -48,3 +48,9 @@ export function revokeSession(token: string): void {
 export function revokeAllSessions(userId: string): void {
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
 }
+
+/** janitor: expired rows are only deleted on use otherwise — without this the
+ *  table grows forever for abandoned tokens */
+export function pruneSessions(): void {
+  db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
+}
