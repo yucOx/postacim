@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '../state/appStore';
+import { useVoiceStore } from '../state/voiceStore';
 import Modal from './Modal';
 
 export default function ChannelSidebar() {
@@ -7,6 +8,8 @@ export default function ChannelSidebar() {
   const activeChannelId = useAppStore((s) => s.activeChannelId);
   const selectChannel = useAppStore((s) => s.selectChannel);
   const createChannel = useAppStore((s) => s.createChannel);
+  const voicePresence = useVoiceStore((s) => s.presence);
+  const joinedVoice = useVoiceStore((s) => s.joinedChannelId);
   const [modalType, setModalType] = useState<'text' | 'voice' | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -70,7 +73,43 @@ export default function ChannelSidebar() {
             </button>
           )}
         </div>
-        <div className="flex flex-col gap-0.5">{voiceChannels.map((c) => row('🔊', c.id, c.name))}</div>
+        <div className="flex flex-col gap-0.5">
+          {voiceChannels.map((c) => (
+            <div key={c.id}>
+              <button
+                onClick={() => {
+                  selectChannel(c.id);
+                  if (joinedVoice !== c.id) void useVoiceStore.getState().join(c.id).catch(() => {});
+                }}
+                className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm ${
+                  c.id === activeChannelId
+                    ? 'bg-neutral-700/60 text-white'
+                    : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
+                }`}
+              >
+                <span className="text-neutral-500">🔊</span>
+                <span className="truncate">{c.name}</span>
+                {(voicePresence[c.id]?.length ?? 0) > 0 && (
+                  <span className="ml-auto text-[10px] text-emerald-500">
+                    {voicePresence[c.id]!.length}
+                  </span>
+                )}
+              </button>
+              {(voicePresence[c.id]?.length ?? 0) > 0 && (
+                <div className="ml-6 flex flex-col py-0.5">
+                  {voicePresence[c.id]!.map((p) => (
+                    <span
+                      key={p.user_id}
+                      className={`py-0.5 text-xs ${joinedVoice === c.id ? 'text-emerald-400' : 'text-neutral-500'}`}
+                    >
+                      {p.nick}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {modalType && (

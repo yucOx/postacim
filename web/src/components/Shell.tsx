@@ -6,7 +6,9 @@ import ServerRail from './ServerRail';
 import ChannelSidebar from './ChannelSidebar';
 import MemberList from './MemberList';
 import ChatView from './ChatView';
+import VoiceRoom from './VoiceRoom';
 import { useChatStore } from '../state/chatStore';
+import { useVoiceStore } from '../state/voiceStore';
 
 export default function Shell() {
   const user = useAuthStore((s) => s.user);
@@ -19,6 +21,7 @@ export default function Shell() {
   useEffect(() => {
     wireEvents();
     useChatStore.getState().wire();
+    useVoiceStore.getState().wire();
     const token = localStorage.getItem('pgv_token');
     if (token) wsConnect(token);
     void loadBootstrap();
@@ -49,14 +52,7 @@ export default function Shell() {
             channel.type === 'text' ? (
               <ChatView channelId={channel.id} channelName={channel.name} />
             ) : (
-              <div className="flex flex-1 flex-col">
-                <div className="border-b border-neutral-800/60 px-4 py-2 text-sm font-semibold text-neutral-300">
-                  🔊 {channel.name}
-                </div>
-                <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">
-                  sesli/görüntülü oda yakında (faz 4)…
-                </div>
-              </div>
+              <VoiceRoom channelId={channel.id} channelName={channel.name} />
             )
           ) : (
             <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">

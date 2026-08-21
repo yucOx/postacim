@@ -9,6 +9,7 @@ import { bootstrapRoutes } from './routes/bootstrap.js';
 import { communityRoutes } from './routes/communities.js';
 import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
+import { voiceRoutes } from './routes/voice.js';
 import { attachWs } from './ws/index.js';
 
 export const app = Fastify({
@@ -47,6 +48,7 @@ await app.register(bootstrapRoutes, { prefix: '/api' });
 await app.register(communityRoutes, { prefix: '/api' });
 await app.register(channelRoutes, { prefix: '/api' });
 await app.register(messageRoutes, { prefix: '/api' });
+await app.register(voiceRoutes, { prefix: '/api' });
 
 attachWs(app);
 
