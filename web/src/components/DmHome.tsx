@@ -3,12 +3,78 @@ import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import { formatTime } from '../lib/format';
+import Modal from './Modal';
+
+function NewGroupModal({ onClose }: { onClose: () => void }) {
+  const friends = useAppStore((s) => s.friends);
+  const createGroupDm = useAppStore((s) => s.createGroupDm);
+  const [name, setName] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggle = (id: string): void => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const submit = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await createGroupDm(name.trim(), [...picked]);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'hata');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Grup kur" onClose={onClose}>
+      <div className="flex w-80 flex-col gap-3">
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="grup adı"
+          maxLength={64}
+          className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+        />
+        <div className="max-h-56 overflow-y-auto">
+          {friends.length === 0 && <p className="text-sm text-neutral-500">arkadaşın yok</p>}
+          {friends.map((f) => (
+            <label key={f.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-neutral-800/60">
+              <input type="checkbox" checked={picked.has(f.id)} onChange={() => toggle(f.id)} className="accent-indigo-500" />
+              <span className="text-sm text-neutral-300">{f.nick}</span>
+            </label>
+          ))}
+        </div>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <button
+          onClick={() => void submit()}
+          disabled={busy || !name.trim() || picked.size === 0}
+          className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
+        >
+          {busy ? 'kuruluyor…' : `grubu kur (${picked.size})`}
+        </button>
+        <p className="text-[11px] text-neutral-600">üye eklenen/ayrılan gruplarda anahtar yenilenir</p>
+      </div>
+    </Modal>
+  );
+}
 
 export default function DmHome() {
   const friends = useAppStore((s) => s.friends);
   const incoming = useAppStore((s) => s.friendIncoming);
   const outgoing = useAppStore((s) => s.friendOutgoing);
   const dms = useAppStore((s) => s.dms);
+  const gdms = useAppStore((s) => s.gdms);
   const activeDmId = useAppStore((s) => s.activeDmId);
   const openDm = useAppStore((s) => s.openDm);
   const openDmChat = useAppStore((s) => s.openDmChat);
@@ -22,6 +88,7 @@ export default function DmHome() {
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [newGroup, setNewGroup] = useState(false);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -96,10 +163,47 @@ export default function DmHome() {
         </div>
       )}
 
-      {dms.length > 0 && (
-        <div className="mt-6 max-w-md">
-          <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-neutral-500">KONUŞMALAR</h2>
-          {dms.map((d) => {
+      <div className="mt-6 max-w-md">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-[11px] font-semibold tracking-wide text-neutral-500">KONUŞMALAR</h2>
+          <button
+            onClick={() => setNewGroup(true)}
+            className="text-xs text-neutral-400 hover:text-neutral-200"
+            title="grup DM kur"
+          >
+            + grup
+          </button>
+        </div>
+        {dms.length === 0 && gdms.length === 0 && <p className="text-sm text-neutral-500">henüz konuşma yok</p>}
+        {gdms.map((g) => {
+          const unread = unreadCount(g.id, dmMessages[g.id]);
+          return (
+            <button
+              key={g.id}
+              onClick={() => openDmChat(g.id)}
+              className={`flex w-full items-center gap-2 rounded px-1 py-1.5 text-left hover:bg-neutral-800/60 ${
+                g.id === activeDmId ? 'bg-neutral-800/80' : ''
+              }`}
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-900/60 text-sm font-bold text-emerald-300">
+                {g.name[0]?.toUpperCase()}
+              </div>
+              <span className={`flex-1 truncate text-sm ${unread > 0 ? 'font-semibold text-neutral-200' : 'text-neutral-300'}`}>
+                {g.name}
+                <span className="ml-1 text-[10px] text-neutral-600">{g.members.length} kişi</span>
+              </span>
+              {g.last_message_at && (
+                <span className="text-[10px] text-neutral-600">{formatTime(g.last_message_at)}</span>
+              )}
+              {unread > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        {dms.map((d) => {
             const unread = unreadCount(d.id, dmMessages[d.id]);
             return (
               <button
@@ -126,12 +230,12 @@ export default function DmHome() {
               </button>
             );
           })}
-        </div>
-      )}
+      </div>
 
       <div className="mt-6 max-w-md">
         <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-neutral-500">ARKADAŞLAR</h2>
-        {friends.length === 0 && <p className="text-sm text-neutral-500">henüz arkadaş yok</p>}        {friends.map((f) => (
+        {friends.length === 0 && <p className="text-sm text-neutral-500">henüz arkadaş yok</p>}
+        {friends.map((f) => (
           <div key={f.id} className="group flex items-center gap-2 rounded px-1 py-1.5 hover:bg-neutral-800/60">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-900/60 text-sm font-bold text-indigo-300">
               {f.nick[0]?.toUpperCase()}
@@ -153,6 +257,7 @@ export default function DmHome() {
           </div>
         ))}
       </div>
+      {newGroup && <NewGroupModal onClose={() => setNewGroup(false)} />}
     </div>
   );
 }

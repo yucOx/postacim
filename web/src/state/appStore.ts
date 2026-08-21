@@ -48,6 +48,14 @@ export interface DmInfo {
   my_wrapped_key: string | null;
   last_message_at: number | null;
 }
+export interface GdmInfo {
+  id: string;
+  name: string;
+  key_version: number;
+  members: { id: string; nick: string; public_key: string }[];
+  my_wrapped_key: string | null;
+  last_message_at: number | null;
+}
 
 // channelId -> key_version -> raw channel key; epochs kept so rotated history stays readable
 type KeyEpochs = Record<string, Record<number, Uint8Array>>;
@@ -61,6 +69,7 @@ interface AppState {
   friendIncoming: FriendBrief[];
   friendOutgoing: FriendBrief[];
   dms: DmInfo[];
+  gdms: GdmInfo[];
   dmChannelKeys: KeyEpochs;
   activeDmId: string | null;
   activeCommunityId: string | null;
@@ -94,6 +103,9 @@ interface AppState {
   declineFriend: (userId: string) => Promise<void>;
   unfriend: (userId: string) => Promise<void>;
   openDm: (userId: string) => Promise<void>;
+  createGroupDm: (name: string, memberIds: string[]) => Promise<void>;
+  addGdmMember: (gdmId: string, userId: string) => Promise<void>;
+  leaveGdm: (gdmId: string) => Promise<void>;
   wireEvents: () => void;
 }
 
@@ -134,6 +146,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   friendIncoming: [],
   friendOutgoing: [],
   dms: [],
+  gdms: [],
   dmChannelKeys: {},
   activeDmId: null,
   activeCommunityId: null,
@@ -146,9 +159,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       public_keys: Record<string, string>;
       friends: { friends: FriendInfo[]; incoming: FriendBrief[]; outgoing: FriendBrief[] };
       dms?: DmInfo[];
+      gdms?: GdmInfo[];
     }>('/bootstrap');
     const { communities, keys } = unwrapBootstrap(data.communities, get().channelKeys);
-    // DM keys: unwrap into a separate epoch map (dm channel ids never collide with community ids)
+    // DM/GDM keys: unwrap into a separate epoch map (ids never collide: dm_/gdm_ prefixes)
     const { publicKey, privateKey } = useAuthStore.getState();
     if (!publicKey || !privateKey) throw new Error('kimlik yok');
     const dmKeys: KeyEpochs = { ...get().dmChannelKeys };
@@ -161,15 +175,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return { ...d, my_wrapped_key: null };
     });
+    const pubKeys = { ...data.public_keys };
+    const gdms: GdmInfo[] = (data.gdms ?? []).map((g) => {
+      if (g.my_wrapped_key) {
+        dmKeys[g.id] = {
+          ...(dmKeys[g.id] ?? {}),
+          [g.key_version]: unwrapMyKey(g.my_wrapped_key, publicKey, privateKey),
+        };
+      }
+      for (const m of g.members) pubKeys[m.id] ??= m.public_key;
+      return { ...g, my_wrapped_key: null };
+    });
     const prevActiveChannel = get().activeChannelId;
     set({
       loaded: true,
       communities,
-      publicKeys: data.public_keys,
+      publicKeys: pubKeys,
       friends: data.friends.friends,
       friendIncoming: data.friends.incoming,
       friendOutgoing: data.friends.outgoing,
       dms,
+      gdms,
       dmChannelKeys: dmKeys,
       channelKeys: keys,
     });
@@ -474,6 +500,60 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ view: 'dm', activeDmId: res.channel.id });
   },
 
+  // Group DM: creator seals one v1 key to every picked friend + self.
+  createGroupDm: async (name, memberIds) => {
+    const { publicKey } = useAuthStore.getState();
+    const me = useAuthStore.getState().user?.id;
+    const friends = get().friends.filter((f) => memberIds.includes(f.id));
+    if (!publicKey || !me || friends.length !== memberIds.length) throw new Error('arkadaşlar bulunamadı');
+    const key = randomBytes(32);
+    const wrappedKeys = friends.map((f) => ({ user_id: f.id, wrapped_key: wrapKeyFor(key, f.public_key) }));
+    wrappedKeys.push({ user_id: me, wrapped_key: wrapKeyFor(key, b64(publicKey)) });
+    const res = await api<{ channel: { id: string } }>('/gdms', {
+      method: 'POST',
+      body: { name, member_ids: memberIds, wrapped_keys: wrappedKeys },
+    });
+    set({ dmChannelKeys: setKeyEpoch(get().dmChannelKeys, res.channel.id, 1, key) });
+    await get().loadBootstrap();
+    set({ view: 'dm', activeDmId: res.channel.id });
+  },
+
+  // Member add = rekey: new key for everyone (new member can't read history).
+  addGdmMember: async (gdmId, userId) => {
+    const gdm = get().gdms.find((g) => g.id === gdmId);
+    const friend = get().friends.find((f) => f.id === userId);
+    if (!gdm || !friend) throw new Error('grup/arkadaş bulunamadı');
+    const oldKey = get().dmChannelKeys[gdmId]?.[gdm.key_version];
+    if (!oldKey) throw new Error('grup anahtarı yok');
+    const newKey = randomBytes(32);
+    const nextVersion = gdm.key_version + 1;
+    const all = [...gdm.members.map((m) => ({ id: m.id, pub: m.public_key })), { id: friend.id, pub: friend.public_key }];
+    const wrappedKeys = all.map((m) => ({ user_id: m.id, wrapped_key: wrapKeyFor(newKey, m.pub) }));
+    await api(`/gdms/${gdmId}/members`, {
+      method: 'POST',
+      body: { user_id: userId, key_version: nextVersion, wrapped_keys: wrappedKeys },
+    });
+    set({ dmChannelKeys: setKeyEpoch(get().dmChannelKeys, gdmId, nextVersion, newKey) });
+    await get().loadBootstrap();
+  },
+
+  // Leaving rekeys for those staying, so the leaver can't read the future.
+  leaveGdm: async (gdmId) => {
+    const gdm = get().gdms.find((g) => g.id === gdmId);
+    if (!gdm) return;
+    const oldKey = get().dmChannelKeys[gdmId]?.[gdm.key_version];
+    const remaining = gdm.members.filter((m) => m.id !== useAuthStore.getState().user?.id);
+    const body: { key_version?: number; wrapped_keys?: { user_id: string; wrapped_key: string }[] } = {};
+    if (oldKey && remaining.length > 0) {
+      const newKey = randomBytes(32);
+      body.key_version = gdm.key_version + 1;
+      body.wrapped_keys = remaining.map((m) => ({ user_id: m.id, wrapped_key: wrapKeyFor(newKey, m.public_key) }));
+    }
+    await api(`/gdms/${gdmId}/leave`, { method: 'POST', body });
+    if (get().activeDmId === gdmId) set({ activeDmId: null });
+    await get().loadBootstrap();
+  },
+
   wireEvents: () => {
     onServerEvent((e) => {
       const me = useAuthStore.getState().user?.id;
@@ -505,7 +585,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         e.type === 'friend_request:new' ||
         e.type === 'friend:new' ||
         e.type === 'friend:removed' ||
-        e.type === 'dm:new'
+        e.type === 'dm:new' ||
+        e.type === 'gdm:new' ||
+        e.type === 'gdm:updated'
       ) {
         void get().loadBootstrap();
       }

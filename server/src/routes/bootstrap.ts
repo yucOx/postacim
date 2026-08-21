@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { communityChannels, communityMembers, type Role } from '../lib/access.js';
 import { friendsPayload } from './friends.js';
 import { dmsPayload } from './dms.js';
+import { gdmPayload } from './gdms.js';
 
 interface BootstrapCommunity {
   id: string;
@@ -81,6 +82,7 @@ export async function bootstrapRoutes(app: FastifyInstance): Promise<void> {
       public_keys: publicKeys,
       friends: friendsPayload(req.user.id),
       dms: dmsPayload(req.user.id),
+      gdms: gdmPayload(req.user.id),
     };
   });
 }

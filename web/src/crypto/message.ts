@@ -9,8 +9,8 @@ export interface PlainMessage {
 
 // AAD binds ciphertext to scope + channel + key epoch: the server cannot
 // relocate a captured ciphertext into another context or replay it under
-// another epoch. Scope: 'ch' = community channel, 'dm' = direct message.
-export type MsgScope = 'ch' | 'dm';
+// another epoch. Scope: 'ch' = community channel, 'dm' = direct, 'gdm' = group DM.
+export type MsgScope = 'ch' | 'dm' | 'gdm';
 const aad = (scope: MsgScope, channelId: string, version: number): string =>
   `${scope}:${channelId}:v${version}`;
 

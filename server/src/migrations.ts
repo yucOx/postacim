@@ -160,4 +160,38 @@ CREATE TABLE dm_messages(
 );
 CREATE INDEX idx_dm_messages ON dm_messages(channel_id, id DESC);
 `,
+  // v7 — group DMs (member add/leave forces a rekey: new members can't read
+  // history, leavers can't read the future)
+  `
+CREATE TABLE gdm_channels(
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  creator_id TEXT NOT NULL REFERENCES users(id),
+  key_version INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE gdm_members(
+  channel_id TEXT NOT NULL REFERENCES gdm_channels(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  added_at INTEGER NOT NULL,
+  PRIMARY KEY(channel_id, user_id)
+);
+CREATE TABLE gdm_keys(
+  channel_id TEXT NOT NULL REFERENCES gdm_channels(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  key_version INTEGER NOT NULL,
+  wrapped_key TEXT NOT NULL,
+  PRIMARY KEY(channel_id, user_id, key_version)
+);
+CREATE TABLE gdm_messages(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id TEXT NOT NULL REFERENCES gdm_channels(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL,
+  key_version INTEGER NOT NULL,
+  nonce TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  sent_at INTEGER NOT NULL
+);
+CREATE INDEX idx_gdm_messages ON gdm_messages(channel_id, id DESC);
+`,
 ];
