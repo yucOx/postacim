@@ -30,7 +30,7 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Durum
 
 - [x] Faz 0 — iskelet
-- [ ] Faz 1 — auth + kimlik blob (kayıt/giriş, zero-knowledge)
+- [x] Faz 1 — auth + kimlik blob (kayıt/giriş, zero-knowledge)
 - [ ] Faz 2 — topluluk/kanal/üye + sarılı anahtar dağıtımı
 - [ ] Faz 3 — E2EE yazı sohbeti
 - [ ] Faz 4 — LiveKit sesli/görüntülü odalar (E2EE)

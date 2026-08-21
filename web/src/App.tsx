@@ -1,10 +1,20 @@
+import { useEffect } from 'react';
+import { useAuthStore } from './state/authStore';
+import Login from './components/Login';
+import Shell from './components/Shell';
+
 export default function App() {
-  return (
-    <div className="flex h-screen items-center justify-center bg-neutral-950 text-neutral-200">
-      <div className="text-center">
-        <div className="text-3xl font-bold">posta-guvercini 🕊️</div>
-        <p className="mt-2 text-sm text-neutral-500">gizlilik odaklı, uçtan uca şifreli sohbet</p>
-      </div>
-    </div>
-  );
+  const status = useAuthStore((s) => s.status);
+  const restore = useAuthStore((s) => s.restore);
+
+  useEffect(() => {
+    void restore();
+  }, [restore]);
+
+  if (status === 'loading') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-neutral-950 text-4xl">🕊️</div>
+    );
+  }
+  return status === 'authed' ? <Shell /> : <Login />;
 }
