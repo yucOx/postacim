@@ -137,10 +137,10 @@ npm test    # 64 test: kripto/istemci birim + kara kutu entegrasyon (geçici sun
 
 ## Güvenlik notları
 
-- Rate limit: kayıt 3/sa, giriş 5/dk, lookup/kdf-params 20/dk, mesaj 60/dk
-- Oturum token'ları DB'de sha256; 30 gün TTL; Authorization header'ı loglardan redakte
+- Rate limit: kayıt 3/sa, giriş 5/dk, lookup/kdf-params 20/dk, mesaj 60/dk (kullanıcı+IP kovaları ayrı)
+- Oturum token'ları DB'de sha256; 30 gün TTL; süresi geçenler saatlik janitor ile temizlenir
 - WS: ilk kare auth zorunlu (aksi halde 4001 ile kapanır), maxPayload 1 MiB, ping reaper
-- Dev: localhost secure context; prod için Caddy (HTTPS) + LiveKit TLS + coturn TLS önerilir — MVP dışı
+- Dev: localhost secure context; ağ erişimi için [TLS overlay](#httpswss-tls-overlay) — repo'da hazır
 - LiveKit anahtarları `.env` üzerinden livekit (`--keys`) ve server'a aynı anda dağıtılır — tek kaynak
 
 ## Durum
@@ -151,3 +151,11 @@ npm test    # 64 test: kripto/istemci birim + kara kutu entegrasyon (geçici sun
 - [x] Faz 3 — E2EE yazı sohbeti
 - [x] Faz 4 — LiveKit sesli/görüntülü odalar (E2EE)
 - [x] Faz 5 — cilalama (rekey, şifre değiştirme, ekran paylaşımı)
+- [x] Paket A-D — roller/ban, davet linkleri, başvurular, katılım şifresi
+- [x] Paket E-G — arkadaşlık, DM, grup DM (rekey'li), 1:1 arama, okunmadı
+- [x] Sprint 1 — bütünlük: per-user limitler, pending rekey, LiveKit eviction, oturum düşürme
+- [x] Sprint 2 — TLS/HSTS + CSP + httpOnly çerez + WS dayanıklılık
+- [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
+- [x] Test turu — 64 otomatik test + CI
+
+**Sıradaki (kurul kararı):** MLS/forward-secrecy araştırması · Onion/Tor rehberi · çoklu cihaz (MLS sonrası)
