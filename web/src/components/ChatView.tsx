@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../state/appStore';
-import { useChatStore } from '../state/chatStore';
+import { useChatStore, type DisplayMessage } from '../state/chatStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { formatDay, sameDay } from '../lib/format';
 import MessageRow from './MessageRow';
 import Composer from './Composer';
 
+// stable ref: `?? []` in a zustand selector recreates it each call and loops React 19 (#185)
+const NO_MESSAGES: DisplayMessage[] = [];
+
 export default function ChatView({ channelId, channelName }: { channelId: string; channelName: string }) {
-  const messages = useChatStore((s) => s.messages[channelId] ?? []);
+  const messages = useChatStore((s) => s.messages[channelId] ?? NO_MESSAGES);
   const hasMore = useChatStore((s) => s.hasMore[channelId] ?? false);
   const loadHistory = useChatStore((s) => s.loadHistory);
   const loadOlder = useChatStore((s) => s.loadOlder);

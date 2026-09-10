@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../state/appStore';
-import { useDmChatStore } from '../state/dmChatStore';
+import { useDmChatStore, type DmDisplayMessage } from '../state/dmChatStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { formatDay, sameDay } from '../lib/format';
@@ -8,6 +8,9 @@ import ConfirmDialog from './ConfirmDialog';
 import MessageRow from './MessageRow';
 import Composer from './Composer';
 import Modal from './Modal';
+
+// stable ref: `?? []` in a zustand selector recreates it each call and loops React 19 (#185)
+const NO_MESSAGES: DmDisplayMessage[] = [];
 
 function AddMemberModal({ gdmId, onClose }: { gdmId: string; onClose: () => void }) {
   const friends = useAppStore((s) => s.friends);
@@ -57,7 +60,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
   const gdm = useAppStore((s) => s.gdms.find((g) => g.id === dmId));
   const showDmHome = useAppStore((s) => s.showDmHome);
   const leaveGdm = useAppStore((s) => s.leaveGdm);
-  const messages = useDmChatStore((s) => s.messages[dmId] ?? []);
+  const messages = useDmChatStore((s) => s.messages[dmId] ?? NO_MESSAGES);
   const hasMore = useDmChatStore((s) => s.hasMore[dmId] ?? false);
   const loadHistory = useDmChatStore((s) => s.loadHistory);
   const loadOlder = useDmChatStore((s) => s.loadOlder);
