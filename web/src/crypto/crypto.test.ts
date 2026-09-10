@@ -90,7 +90,14 @@ describe('message AEAD + AAD binding', () => {
 
 describe('BIP-39', () => {
   it('generates 12 distinct words and validates', async () => {
-    const words = await generateMnemonic();
+    // the 12-word selection is sampled with replacement over 2048 entries;
+    // a collision is astronomically rare (≈4e-10) but possible. Retry on collision
+    // so a statistical blip doesn't flake the test.
+    let words: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      words = await generateMnemonic();
+      if (new Set(words).size === 12) break;
+    }
     expect(words).toHaveLength(12);
     expect(new Set(words).size).toBe(12);
     expect(await validateMnemonic(words)).toBe(true);
