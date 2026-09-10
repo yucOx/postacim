@@ -1,0 +1,126 @@
+{
+  "title": "postacim — görsel dünya seçimi",
+  "question": "Zar gece posta vagonunu atadı. Atanan yönü tut, alternatif seç ya da yeniden dağıt.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Gece Posta Vagonu",
+      "kicker": "THE ROLL",
+      "lineage": "Railway Post Office ayırma vagonları, posta güvercini geleneği",
+      "thesis": "Sohbet, gece vagonunda ayrıştırılan kayıtlı postadır: Discord gibi akar, ama her parça mühürlü ve işlenir.",
+      "palette": ["#0B0E12", "#E8A33D", "#8C6A3F", "#EFE6D0", "#C24141"],
+      "materials": ["pirinç ayırma gözleri", "kanvas posta çuvalları", "iptal damgası", "rota plakaları"],
+      "viewport": "Sol ray ayırma gözleri (kanallar), orta sıralama tezgâhı (sohbet), sağ manifestoda (üyeler) herkesin posta etiketi; her kanal başlığında rota plakası, her mesaj damgalı zarf gibi durur.",
+      "risk": "Damga-zarf süsü abartılırsa retro kostüme döner; gece paleti okunabilirliği kurban ederse oyuncağa düşer.",
+      "raised": [
+        { "from": "challenger-alphabet-storm", "raise": "Mesaj varışı tek orkestra olayı: gönderimde bir damga basılır, sayfa geride sakin kalır." },
+        { "from": "challenger-hypercard", "raise": "Basılan kontrol rengi tersine çevirir; ikon dili tek mürekkep taahhüdüyle çizilir." },
+        { "from": "challenger-racing", "raise": "Aktif topluluğun etiket rengi kendi göz başlığını doldurur." },
+        { "from": "challenger-crouwel", "raise": "Ekran kırılımları ayırma-gözü modülüne hücre hücre hizalanır; yarım hücre düzeni yok." },
+        { "from": "challenger-streetwear", "raise": "Her bölge kendi gerçek adını taşıyan rota plakasıyla okunur; wayfinding okumaktır." }
+      ]
+    },
+    {
+      "id": "model-pick",
+      "label": "Mühürlü Yazışma",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "diplomatik kurye, balmumlu mühür, kayıtlı posta",
+      "thesis": "Her konuşma bozulmamış bir diplomatik kese: mühür teslimde kırılır, içerik yalnızca taraflarda açılır.",
+      "palette": ["#7A2E2E", "#17130F", "#9C7A3C", "#E9DFC8"],
+      "materials": ["balmumu mühür", "kurye derisi", "kayıtlı-posta bandı"],
+      "viewport": "Kanal başlıkları kayıtlı-posta bandı olarak mühürlenir; rozetler mühür durumu taşır, sohbet orta alanda akar.",
+      "risk": "Gizlilik öznesi tam da kağıt+serif kalıbının en çok düştüğü yerdir; sıcaklık kostüme dönmeden denge zor."
+    },
+    {
+      "id": "challenger-cutting-bench",
+      "label": "Kurgu Tezgâhı",
+      "verdict": "competitive",
+      "lineage": "film kurgu bench'i, work print ve işaret dili",
+      "thesis": "Sohbet bir kurgu şeridi: her durum kesik, bayrak, pin — renk değil işaret taşır.",
+      "palette": ["#0A0A0A", "#E8842C", "#F2EDE4"],
+      "materials": ["film greni", "perfore ray", "grese kalem"],
+      "viewport": "Perfore ray tüm ekranı sabit yükseklikte geçer; sohbet çerçeveleri pinler arasında durur, bırakılan her şey ray altındaki kancalarda asılı kalır.",
+      "risk": "Turuncu üçte bir ekran istilası yoğun sohbette yorucudur; montaj dünyası sohbet kitlesine yabancı.",
+      "case": "Durum dili kazanır: okunmadı/işaretli/kilitli ayrı işaretler olur, renk geçişi değil. Ama kimlik eksenini kaybeder.",
+      "hero": "https://impeccable.style/worlds/cards/operate-a-cutting-bench-select-rail-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/operate-a-cutting-bench-select-rail.webp"
+    },
+    {
+      "id": "challenger-streetwear",
+      "label": "Endüstriyel Sokak",
+      "verdict": "declined",
+      "lineage": "endüstriyel streetwear etiket grameri",
+      "thesis": "Her bölge düz tırnak içinde gerçek adını taşır; wayfinding okumaktır.",
+      "palette": ["#F2F0EB", "#111111", "#E85D1F"],
+      "materials": ["kargo pamuğu", "kelepçe etiketi", "tehlike şeridi"],
+      "viewport": "Beyaz kot üzerinde siyah tehlike şeritleri, tırnaklı büyük harf etiketler.",
+      "risk": "İronik alıntılama genel kitlede güveni aşındırır; gizlilik ürünü espri malzemesi olamaz.",
+      "kept": "Wayfinding okumaktır — bölge etiketleri gerçek adlarını taşır.",
+      "hero": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-industrial-quote-grammar-hero.webp"
+    },
+    {
+      "id": "challenger-alphabet-storm",
+      "label": "Alfabe Fırtınası",
+      "verdict": "declined",
+      "lineage": "sürreal harf-hava olayları",
+      "thesis": "Harfler hava olur: bulut toplanır, kelime yağmura dönüşür.",
+      "palette": ["#F5F2EC", "#141414", "#9FB4C0"],
+      "materials": ["monumental grotesk", "fırtına mürekkebi"],
+      "viewport": "Açık zeminde kelime cepheleri ve harf yağmuru.",
+      "risk": "Operate yüzeyinde sürreal dekor görevi karanlığa gömer; tarama kaybolur.",
+      "kept": "Varış tek orkestra olayıdır — sayfa başına bir hava olayı.",
+      "hero": "https://impeccable.style/worlds/cards/dream-surreal-impossible-worlds-alphabet-storm-hero.webp"
+    },
+    {
+      "id": "challenger-hypercard",
+      "label": "HyperCard Kutusu",
+      "verdict": "declined",
+      "lineage": "1-bit HyperCard yığınları",
+      "thesis": "Siyah-beyaz kartlar, basılan buton tersine çevrilir.",
+      "palette": ["#FFFFFF", "#000000"],
+      "materials": ["stipple dither", "piksel Chicago"],
+      "viewport": "Sabit oranlı kartlar, el çizimi kenarlar, boyalı butonlar.",
+      "risk": "Şifreleme durumlarının renk kodunu taşıyamaz; nostalji kitleyi daraltır.",
+      "kept": "Basılı durum ters çevirmedir; ikonlar tek mürekkep taahhüdüyle.",
+      "hero": "https://impeccable.style/worlds/cards/medium-native-hypercard-stack-shoebox-hero.webp"
+    },
+    {
+      "id": "challenger-racing",
+      "label": "Racing Ligi",
+      "verdict": "declined",
+      "lineage": "sürü tutarlılığı olmayan yarış ligi kimliği",
+      "thesis": "Seçilen aracın rengi tüm gösterge panelini doldurur.",
+      "palette": ["#2B2B2E", "#E8C515", "#F26B1D"],
+      "materials": ["mat grafit", "sticker decal"],
+      "viewport": "Açı decal kilitleri, dev kadro numaraları, soldan sağa hız ekseni.",
+      "risk": "Hız enerjisi sohbet ritmine ters; decal dili maskotlaşır.",
+      "kept": "Seçim kendi rengiyle yüzeyi doldurur.",
+      "hero": "https://impeccable.style/worlds/cards/digital-design-canon-antialiased-racing-league-hero.webp"
+    },
+    {
+      "id": "challenger-crouwel",
+      "label": "Crouwel Izgara",
+      "verdict": "declined",
+      "lineage": "Wim Crouwel ızgara tipografi nüshaları",
+      "thesis": "Harfler görünür inşaat ızgarasının hücrelerinden kurulur.",
+      "palette": ["#F4F4F0", "#111111", "#1D4ED8"],
+      "materials": ["ince ızgara çizgileri", "hücreli harf gövdeleri"],
+      "viewport": "Mavi yaprak zeminde hücre hücre kurulmuş dev harfler.",
+      "risk": "Izgara saçları yoğun sohbette gürültü olur; Hollanda modernizmi kitleye ait değil.",
+      "kept": "Kırılımlar hücre hücre yeniden hizalanır; yarım hücre yok.",
+      "hero": "https://impeccable.style/worlds/cards/crouwel-grid-specimen-hero.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": false },
+  "canon": true,
+  "canonCard": {
+    "label": "Kategori standardı",
+    "thesis": "Koyu Discord klonu, kusursuz işlenmiş — bugünkü uygulamanın birebir yolu.",
+    "palette": ["#101012", "#E5E7EB", "#6366F1"],
+    "materials": ["temiz ızgara", "nötr yüzeyler"],
+    "viewport": "Ray + kanal listesi + sohbet + üye listesi düzeni, tam craft seviyesinde.",
+    "risk": "Tasarımla rekabet ayırt edilemez; gizlilik kimliği taşımaz."
+  },
+  "steer": true
+}

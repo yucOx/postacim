@@ -1,80 +1,34 @@
 import { useEffect } from 'react';
-import {
-  RoomContext,
-  useTracks,
-  useLocalParticipant,
-  ParticipantTile,
-} from '@livekit/components-react';
+import { RoomContext, useTracks, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
+import { AlertTriangle, Volume2 } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
-
-function Controls() {
-  const micOn = useVoiceStore((s) => s.micOn);
-  const camOn = useVoiceStore((s) => s.camOn);
-  const screenOn = useVoiceStore((s) => s.screenOn);
-  const toggleMic = useVoiceStore((s) => s.toggleMic);
-  const toggleCam = useVoiceStore((s) => s.toggleCam);
-  const toggleScreen = useVoiceStore((s) => s.toggleScreen);
-  const leave = useVoiceStore((s) => s.leave);
-  const local = useLocalParticipant();
-
-  return (
-    <div className="flex items-center justify-center gap-3 border-t border-neutral-800/60 bg-neutral-900/60 px-4 py-3">
-      <button
-        onClick={() => void toggleMic()}
-        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg ${
-          micOn ? 'bg-neutral-700 hover:bg-neutral-600' : 'bg-red-600/80 hover:bg-red-500'
-        }`}
-        title={micOn ? 'mikrofonu kapat' : 'mikrofonu aç'}
-      >
-        {micOn ? '🎙️' : '🔇'}
-      </button>
-      <button
-        onClick={() => void toggleCam()}
-        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg ${
-          camOn ? 'bg-neutral-700 hover:bg-neutral-600' : 'bg-red-600/80 hover:bg-red-500'
-        }`}
-        title={camOn ? 'kamerayı kapat' : 'kamerayı aç'}
-      >
-        {camOn ? '📹' : '🚫'}
-      </button>
-      <button
-        onClick={() => void toggleScreen()}
-        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg ${
-          screenOn ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-neutral-700 hover:bg-neutral-600'
-        }`}
-        title={screenOn ? 'ekran paylaşımını durdur' : 'ekran paylaş'}
-      >
-        🖥️
-      </button>
-      <span className="ml-2 text-xs text-neutral-500">
-        {local.isMicrophoneEnabled ? 'E2EE aktif 🔒' : 'mikrofon kapalı — açmak için 🎙️'}
-      </span>
-      <button
-        onClick={() => void leave()}
-        className="ml-4 rounded-full bg-red-600 px-4 py-2 text-sm font-medium hover:bg-red-500"
-      >
-        ayrıl
-      </button>
-    </div>
-  );
-}
+import { nickFor } from '../lib/nick';
+import CallControls from './CallControls';
 
 function Grid() {
-  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
+  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone, Track.Source.ScreenShare], {
+    onlySubscribed: false,
+  });
   const seen = new Set<string>();
   const tiles = tracks.filter((t) => {
-    // one tile per participant (camera preferred, mic-only participants kept)
+    // one tile per participant; screen share and camera beat mic-only
     if (seen.has(t.participant.identity)) return false;
-    if (t.source === Track.Source.Microphone && t.participant.isCameraEnabled) return false;
+    if (t.source === Track.Source.Microphone) return false;
+    const hasBetter = tracks.some(
+      (o) =>
+        o.participant.identity === t.participant.identity &&
+        (o.source === Track.Source.ScreenShare || (o.source === Track.Source.Camera && t.source === Track.Source.Microphone)),
+    );
+    if (hasBetter) return false;
     seen.add(t.participant.identity);
     return true;
   });
   if (tiles.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">
-        odada yalnızca sensin — mikrofon/kamera aç, başkaları katılınca burada görünecekler
+      <div className="flex flex-1 items-center justify-center text-sm text-paper-500">
+        odada yalnızsın — mikrofon/kamera aç, başkaları katılınca burada görünür
       </div>
     );
   }
@@ -85,12 +39,18 @@ function Grid() {
     >
       {tiles.map((t) => (
         <div
-          key={t.participant.identity}
-          className="relative flex min-h-48 items-center justify-center overflow-hidden rounded-xl bg-neutral-800"
+          key={`${t.participant.identity}-${t.source}`}
+          className="relative flex min-h-48 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
         >
           <ParticipantTile trackRef={t} className="h-full w-full" />
-          <span className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/50 px-2 py-0.5 text-xs text-neutral-200">
-            {t.participant.name || t.participant.identity} {t.participant.isLocal && '(sen)'}
+          <span className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
+            <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
+              {nickFor(t.participant.identity)}
+              {t.participant.isLocal && ' (sen)'}
+            </span>
+            {t.source === Track.Source.ScreenShare && (
+              <span className="shrink-0 font-mono text-[9px] text-lamp-400">ekran</span>
+            )}
           </span>
         </div>
       ))}
@@ -103,6 +63,7 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
   const joined = useVoiceStore((s) => s.joinedChannelId);
   const error = useVoiceStore((s) => s.error);
   const join = useVoiceStore((s) => s.join);
+  const leave = useVoiceStore((s) => s.leave);
   const needsRekey = useAppStore(
     (s) =>
       !!s.communities
@@ -116,26 +77,26 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-neutral-800/60 px-4 py-2 text-sm font-semibold text-neutral-300">
-        🔊 {channelName}
-        <span className="ml-2 text-[11px] font-normal text-emerald-500/80">
-          uçtan uca şifreli (SFrame)
+      <div className="flex items-center gap-3 border-b border-night-700 bg-night-900/40 px-4 py-2.5">
+        <Volume2 size={17} className="text-brass-500" aria-hidden />
+        <span className="font-display text-lg font-semibold uppercase tracking-[0.08em] text-paper-50">
+          {channelName}
         </span>
+        <span className="sealed-band">uçtan uca · sframe</span>
       </div>
       {needsRekey && (
-        <div className="bg-amber-950/50 px-4 py-2 text-sm text-amber-300">
-          ⚠️ Bir üye çıkarıldı — sahip/admin kanal anahtarını yenileyene kadar oda kilitli.
+        <div className="flex items-center gap-2 border-b border-lamp-600/40 bg-lamp-100/70 px-4 py-2 text-sm text-lamp-300">
+          <AlertTriangle size={14} className="shrink-0 text-lamp-500" />
+          Bir üye çıkarıldı — sahip/admin kanal anahtarını yenileyene kadar oda kilitli.
         </div>
       )}
-      {error && <div className="bg-red-950/50 px-4 py-2 text-sm text-red-400">{error}</div>}
+      {error && <div className="border-b border-stamp-500/50 bg-stamp-100 px-4 py-2 text-sm text-stamp-400">{error}</div>}
       {!room ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">
-          odaya bağlanıyor…
-        </div>
+        <div className="flex flex-1 items-center justify-center text-sm text-paper-500">odaya bağlanıyor…</div>
       ) : (
         <RoomContext.Provider value={room}>
           <Grid />
-          <Controls />
+          <CallControls variant="room" onEnd={() => void leave()} endLabel="ayrıl" />
         </RoomContext.Provider>
       )}
     </div>

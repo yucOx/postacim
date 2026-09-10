@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Hash, Lock, Plus, Settings, Volume2 } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useChatStore } from '../state/chatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
@@ -6,7 +7,7 @@ import { useVoiceStore } from '../state/voiceStore';
 import Modal from './Modal';
 import CommunitySettings from './CommunitySettings';
 
-export default function ChannelSidebar() {
+export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
   const activeChannelId = useAppStore((s) => s.activeChannelId);
   const selectChannel = useAppStore((s) => s.selectChannel);
@@ -15,18 +16,18 @@ export default function ChannelSidebar() {
   const joinedVoice = useVoiceStore((s) => s.joinedChannelId);
   const chatMessages = useChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap); // re-render when markers change
+  const [settings, setSettings] = useState(false);
   const [modalType, setModalType] = useState<'text' | 'voice' | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!community) {
-    return <div className="w-60 shrink-0 border-r border-neutral-800/60 bg-neutral-900/40" />;
+    return <div className="w-60 shrink-0 border-r border-night-700 bg-night-900/50" />;
   }
 
   const isOwner = community.role === 'owner';
   const isStaff = isOwner || community.role === 'admin';
-  const [settings, setSettings] = useState(false);
   const textChannels = community.channels.filter((c) => c.type === 'text');
   const voiceChannels = community.channels.filter((c) => c.type === 'voice');
 
@@ -38,6 +39,7 @@ export default function ChannelSidebar() {
       await createChannel(community.id, name.trim(), modalType);
       setModalType(null);
       setName('');
+      onNavigate?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'hata');
     } finally {
@@ -45,25 +47,33 @@ export default function ChannelSidebar() {
     }
   };
 
-  const row = (prefix: string, id: string, chName: string): React.ReactNode => {
+  const pick = (id: string): void => {
+    selectChannel(id);
+    onNavigate?.();
+  };
+
+  const row = (id: string, chName: string): React.ReactNode => {
     const unread = unreadCount(id, chatMessages[id]);
+    const locked = community.channels.find((ch) => ch.id === id)?.needs_rekey;
+    const active = id === activeChannelId;
     return (
       <button
         key={id}
-        onClick={() => selectChannel(id)}
-        className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm ${
-          id === activeChannelId ? 'bg-neutral-700/60 text-white' : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
+        onClick={() => pick(id)}
+        className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition-colors ${
+          active ? 'bg-night-700 text-paper-50' : 'text-paper-500 hover:bg-night-800/70 hover:text-paper-100'
         }`}
       >
-        <span className="text-neutral-500">{prefix}</span>
-        <span className={`flex-1 truncate ${unread > 0 && id !== activeChannelId ? 'font-semibold text-neutral-200' : ''}`}>
+        <Hash size={13} className="shrink-0 text-brass-600" aria-hidden />
+        <span className={`flex-1 truncate ${unread > 0 && !active ? 'font-semibold text-paper-100' : ''}`}>
           {chName}
         </span>
-        {community?.channels.find((ch) => ch.id === id)?.needs_rekey && (
-          <span title="anahtar yenilenmeli" className="text-amber-500">⚠️</span>
-        )}
-        {unread > 0 && id !== activeChannelId && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+        {locked && <Lock size={12} className="shrink-0 text-lamp-500" aria-label="anahtar yenilenmeli" />}
+        {unread > 0 && !active && (
+          <span
+            className="flex h-4 min-w-4 items-center justify-center rounded-full bg-lamp-500 px-1 font-display text-[9px] font-bold text-night-950"
+            aria-label={`${unread} okunmadı`}
+          >
             {unread > 99 ? '99+' : unread}
           </span>
         )}
@@ -72,18 +82,20 @@ export default function ChannelSidebar() {
   };
 
   return (
-    <div className="flex w-60 shrink-0 flex-col border-r border-neutral-800/60 bg-neutral-900/40">
-      <div className="flex items-center justify-between border-b border-neutral-800/60 px-4 py-3 font-semibold">
-        <span className="truncate">{community.name}</span>
+    <div className="flex w-60 shrink-0 flex-col border-r border-night-700 bg-night-900/50">
+      <div className="flex items-center justify-between border-b border-night-700 px-3 py-3">
+        <span className="truncate font-display text-base font-semibold uppercase tracking-[0.12em] text-paper-100">
+          {community.name}
+        </span>
         {isStaff && (
           <button
             onClick={() => setSettings(true)}
-            className="relative ml-2 text-neutral-500 hover:text-neutral-200"
+            className="relative ml-2 rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
             title="topluluk ayarları"
           >
-            ⚙️
+            <Settings size={15} />
             {(community.pending_join_requests ?? 0) > 0 && (
-              <span className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-night-900 bg-lamp-500 px-0.5 font-display text-[9px] font-bold text-night-950">
                 {community.pending_join_requests}
               </span>
             )}
@@ -91,71 +103,81 @@ export default function ChannelSidebar() {
         )}
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
-        <div className="mb-1 flex items-center justify-between px-2 text-[11px] font-semibold tracking-wide text-neutral-500">
+        <div className="plate mb-1 flex items-center justify-between px-2">
           YAZI ODALARI
           {isOwner && (
-            <button onClick={() => setModalType('text')} className="hover:text-neutral-200" title="yazı odası ekle">
-              +
+            <button
+              onClick={() => setModalType('text')}
+              className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
+              title="yazı odası ekle"
+              aria-label="yazı odası ekle"
+            >
+              <Plus size={13} />
             </button>
           )}
         </div>
-        <div className="mb-4 flex flex-col gap-0.5">{textChannels.map((c) => row('#', c.id, c.name))}</div>
+        <div className="mb-4 flex flex-col gap-0.5">{textChannels.map((c) => row(c.id, c.name))}</div>
 
-        <div className="mb-1 flex items-center justify-between px-2 text-[11px] font-semibold tracking-wide text-neutral-500">
+        <div className="plate mb-1 flex items-center justify-between px-2">
           SES ODALARI
           {isOwner && (
-            <button onClick={() => setModalType('voice')} className="hover:text-neutral-200" title="ses odası ekle">
-              +
+            <button
+              onClick={() => setModalType('voice')}
+              className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
+              title="ses odası ekle"
+              aria-label="ses odası ekle"
+            >
+              <Plus size={13} />
             </button>
           )}
         </div>
         <div className="flex flex-col gap-0.5">
-          {voiceChannels.map((c) => (
-            <div key={c.id}>
-              <button
-                onClick={() => {
-                  selectChannel(c.id);
-                  if (joinedVoice !== c.id) void useVoiceStore.getState().join(c.id).catch(() => {});
-                }}
-                className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm ${
-                  c.id === activeChannelId
-                    ? 'bg-neutral-700/60 text-white'
-                    : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
-                }`}
-              >
-                <span className="text-neutral-500">🔊</span>
-                <span className="truncate">{c.name}</span>
-                {c.needs_rekey && <span title="anahtar yenilenmeli" className="text-amber-500">⚠️</span>}
-                {(voicePresence[c.id]?.length ?? 0) > 0 && (
-                  <span className="ml-auto text-[10px] text-emerald-500">
-                    {voicePresence[c.id]!.length}
-                  </span>
+          {voiceChannels.map((c) => {
+            const present = voicePresence[c.id] ?? [];
+            const active = c.id === activeChannelId;
+            return (
+              <div key={c.id}>
+                <button
+                  onClick={() => {
+                    pick(c.id);
+                    if (joinedVoice !== c.id) void useVoiceStore.getState().join(c.id).catch(() => {});
+                  }}
+                  className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm transition-colors ${
+                    active ? 'bg-night-700 text-paper-50' : 'text-paper-500 hover:bg-night-800/70 hover:text-paper-100'
+                  }`}
+                >
+                  <Volume2 size={13} className="shrink-0 text-brass-600" aria-hidden />
+                  <span className="flex-1 truncate">{c.name}</span>
+                  {c.needs_rekey && <Lock size={12} className="shrink-0 text-lamp-500" aria-label="anahtar yenilenmeli" />}
+                  {present.length > 0 && (
+                    <span className="font-display text-[10px] font-semibold text-lamp-400">{present.length}</span>
+                  )}
+                </button>
+                {present.length > 0 && (
+                  <div className="ml-7 flex flex-col py-0.5">
+                    {present.map((p) => (
+                      <span
+                        key={p.user_id}
+                        className={`flex items-center gap-1.5 py-0.5 text-xs ${
+                          joinedVoice === c.id ? 'text-lamp-400' : 'text-paper-500'
+                        }`}
+                      >
+                        <span className="inline-block h-1 w-1 rounded-full bg-current" aria-hidden />
+                        {p.nick}
+                      </span>
+                    ))}
+                  </div>
                 )}
-              </button>
-              {(voicePresence[c.id]?.length ?? 0) > 0 && (
-                <div className="ml-6 flex flex-col py-0.5">
-                  {voicePresence[c.id]!.map((p) => (
-                    <span
-                      key={p.user_id}
-                      className={`py-0.5 text-xs ${joinedVoice === c.id ? 'text-emerald-400' : 'text-neutral-500'}`}
-                    >
-                      {p.nick}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {settings && <CommunitySettings communityId={community.id} onClose={() => setSettings(false)} />}
 
       {modalType && (
-        <Modal
-          title={modalType === 'text' ? 'Yeni yazı odası' : 'Yeni ses odası'}
-          onClose={() => setModalType(null)}
-        >
+        <Modal title={modalType === 'text' ? 'Yeni yazı odası' : 'Yeni ses odası'} onClose={() => setModalType(null)}>
           <div className="flex flex-col gap-3">
             <input
               autoFocus
@@ -164,14 +186,10 @@ export default function ChannelSidebar() {
               onKeyDown={(e) => name.trim() && e.key === 'Enter' && void submit()}
               placeholder="oda adı"
               maxLength={64}
-              className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+              className="input"
             />
-            {error && <p className="text-sm text-red-400">{error}</p>}
-            <button
-              onClick={() => void submit()}
-              disabled={busy || !name.trim()}
-              className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
-            >
+            {error && <p className="text-sm text-stamp-400">{error}</p>}
+            <button onClick={() => void submit()} disabled={busy || !name.trim()} className="btn-lamp">
               {busy ? 'oluşturuluyor…' : 'oluştur'}
             </button>
           </div>

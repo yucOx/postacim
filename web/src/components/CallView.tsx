@@ -1,111 +1,102 @@
-import { RoomContext, useTracks, useLocalParticipant, ParticipantTile } from '@livekit/components-react';
+import { RoomContext, useTracks, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
+import { Minimize2 } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
+import { nickFor } from '../lib/nick';
+import { PigeonMark } from './Brand';
+import CallControls from './CallControls';
+
+/** One participant window — video with a proper name plate underneath.
+ *  LiveKit identity is the user id; nickFor resolves the visible name. */
+function Plate({ identity, isLocal, extra }: { identity: string; isLocal: boolean; extra?: string }) {
+  const nick = nickFor(identity);
+  return (
+    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
+      <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
+        {nick}
+        {isLocal && ' (sen)'}
+      </span>
+      {extra && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{extra}</span>}
+    </div>
+  );
+}
 
 function Grid(): React.ReactNode {
-  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
+  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone, Track.Source.ScreenShare], {
+    onlySubscribed: false,
+  });
   const seen = new Set<string>();
   const tiles = tracks.filter((t) => {
     if (seen.has(t.participant.identity)) return false;
-    if (t.source === Track.Source.Microphone && t.participant.isCameraEnabled) return false;
+    // one tile per person; camera wins over mic-only, screen share wins over both
+    if (t.source === Track.Source.Microphone) return false;
+    const hasBetter = tracks.some(
+      (o) =>
+        o.participant.identity === t.participant.identity &&
+        (o.source === Track.Source.ScreenShare || (o.source === Track.Source.Camera && t.source === Track.Source.Microphone)),
+    );
+    if (hasBetter) return false;
     seen.add(t.participant.identity);
     return true;
   });
   return (
-    <div className="flex flex-1 items-center justify-center gap-4 p-4">
+    <div className="grid flex-1 auto-rows-fr content-start gap-3 overflow-y-auto p-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
       {tiles.map((t) => (
         <div
-          key={t.participant.identity}
-          className="relative flex h-full max-h-[70vh] min-h-56 min-w-64 flex-1 items-center justify-center overflow-hidden rounded-xl bg-neutral-800"
+          key={`${t.participant.identity}-${t.source}`}
+          className="relative flex min-h-48 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
         >
           <ParticipantTile trackRef={t} className="h-full w-full" />
-          <span className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/50 px-2 py-0.5 text-xs text-neutral-200">
-            {t.participant.name || t.participant.identity} {t.participant.isLocal && '(sen)'}
-          </span>
+          <Plate identity={t.participant.identity} isLocal={t.participant.isLocal} extra={t.source === Track.Source.ScreenShare ? 'ekran' : undefined} />
         </div>
       ))}
     </div>
   );
 }
 
-function Controls(): React.ReactNode {
-  const micOn = useVoiceStore((s) => s.micOn);
-  const camOn = useVoiceStore((s) => s.camOn);
-  const screenOn = useVoiceStore((s) => s.screenOn);
-  const toggleMic = useVoiceStore((s) => s.toggleMic);
-  const toggleCam = useVoiceStore((s) => s.toggleCam);
-  const toggleScreen = useVoiceStore((s) => s.toggleScreen);
-  const cancelCall = useVoiceStore((s) => s.cancelCall);
-  const local = useLocalParticipant();
-
-  return (
-    <div className="flex items-center justify-center gap-3 border-t border-neutral-800/60 bg-neutral-900/60 px-4 py-3">
-      <button
-        onClick={() => void toggleMic()}
-        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg ${
-          micOn ? 'bg-neutral-700 hover:bg-neutral-600' : 'bg-red-600/80 hover:bg-red-500'
-        }`}
-        title={micOn ? 'mikrofonu kapat' : 'mikrofonu aç'}
-      >
-        {micOn ? '🎙️' : '🔇'}
-      </button>
-      <button
-        onClick={() => void toggleCam()}
-        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg ${
-          camOn ? 'bg-neutral-700 hover:bg-neutral-600' : 'bg-red-600/80 hover:bg-red-500'
-        }`}
-        title={camOn ? 'kamerayı kapat' : 'kamerayı aç'}
-      >
-        {camOn ? '📹' : '🚫'}
-      </button>
-      <button
-        onClick={() => void toggleScreen()}
-        className={`flex h-11 w-11 items-center justify-center rounded-full text-lg ${
-          screenOn ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-neutral-700 hover:bg-neutral-600'
-        }`}
-        title="ekran paylaş"
-      >
-        🖥️
-      </button>
-      <span className="ml-2 text-xs text-neutral-500">
-        {local.isMicrophoneEnabled ? 'E2EE 🔒' : 'mikrofon kapalı'}
-      </span>
-      <button
-        onClick={() => void cancelCall()}
-        className="ml-4 rounded-full bg-red-600 px-4 py-2 text-sm font-medium hover:bg-red-500"
-      >
-        bitir
-      </button>
-    </div>
-  );
-}
-
-/** 1:1 DM call surface — rendered as an overlay from Shell while isDmCall */
+/** 1:1 DM call surface — fullscreen overlay; minimize hands the room to the PiP corner
+ *  so the chat underneath stays fully usable during the call. */
 export default function CallView(): React.ReactNode {
   const room = useVoiceStore((s) => s.room);
   const callState = useVoiceStore((s) => s.callState);
-  const dms = useAppStore((s) => s.dms);
   const error = useVoiceStore((s) => s.error);
+  const setPip = useVoiceStore((s) => s.setPip);
+  const cancelCall = useVoiceStore((s) => s.cancelCall);
+  const dms = useAppStore((s) => s.dms);
   if (!callState) return null;
-  const dm = dms.find((d) => d.id === callState.channelId);
-  const peerNick = dm?.peer.nick ?? '?';
+  const peerNick = dms.find((d) => d.id === callState.channelId)?.peer.nick ?? '?';
+  const status =
+    callState.phase === 'ringing' ? 'çalıyor…' : callState.phase === 'ended' ? (callState.note ?? 'bitti') : 'görüşme açık';
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950/95">
-      <div className="border-b border-neutral-800/60 px-4 py-2 text-sm font-semibold text-neutral-300">
-        📞 {peerNick}
-        <span className="ml-2 text-[11px] font-normal text-emerald-500/80">
-          uçtan uca şifreli arama ({callState.phase === 'ringing' ? 'çalıyor…' : callState.phase === 'ended' ? (callState.note ?? 'bitti') : 'aktif'})
+    <div className="fixed inset-0 z-50 flex flex-col bg-night-950/97">
+      <div className="flex items-center gap-3 border-b border-night-700 bg-night-900/60 px-4 py-2.5">
+        <span className="plate">GÖRÜŞME</span>
+        <span className="font-display text-lg font-semibold uppercase tracking-[0.08em] text-paper-50">{peerNick}</span>
+        <span className="sealed-band">
+          {status}
         </span>
+        <button
+          onClick={() => setPip(true)}
+          className="btn-ghost ml-auto !px-2 !py-1"
+          title="küçült — sohbete dön"
+          aria-label="aramayı küçült"
+        >
+          <Minimize2 size={14} />
+          küçült
+        </button>
       </div>
-      {error && <div className="bg-red-950/50 px-4 py-2 text-sm text-red-400">{error}</div>}
+      {error && <div className="border-b border-stamp-500/50 bg-stamp-100 px-4 py-2 text-sm text-stamp-400">{error}</div>}
       {!room ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">bağlanıyor…</div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-paper-500">
+          <PigeonMark size={30} className="text-brass-600" />
+          <p className="text-sm">vagona bağlanıyor…</p>
+        </div>
       ) : (
         <RoomContext.Provider value={room}>
           <Grid />
-          <Controls />
+          <CallControls variant="call" onEnd={() => void cancelCall()} endLabel="bitir" onMinimize={() => setPip(true)} />
         </RoomContext.Provider>
       )}
     </div>

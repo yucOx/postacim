@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { KeyRound, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
 import { wsConnect, wsDisconnect, onWsStatus, type WsStatus } from '../ws/socket';
@@ -11,7 +12,9 @@ import DmHome from './DmHome';
 import DmChat from './DmChat';
 import IncomingCall from './IncomingCall';
 import CallView from './CallView';
+import PiPWidget from './PiPWidget';
 import Modal from './Modal';
+import { PigeonMark } from './Brand';
 import { generateMnemonic, quizPositions } from '../crypto/bip39';
 import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
@@ -49,23 +52,20 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
     <Modal title="Şifre değiştir" onClose={onClose}>
       {done ? (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-emerald-400">
+          <p className="text-sm text-lamp-300">
             şifre güncellendi — tüm oturumlar kapandı, yeni şifrenle tekrar giriş yap
           </p>
-          <button
-            onClick={() => void logout().finally(onClose)}
-            className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500"
-          >
+          <button onClick={() => void logout().finally(onClose)} className="btn-lamp">
             giriş ekranına dön
           </button>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          <input type="password" autoFocus value={oldPw} onChange={(e) => setOldPw(e.target.value)} placeholder="eski şifre" className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500" />
-          <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="yeni şifre" minLength={6} className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500" />
-          <input type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} placeholder="yeni şifre (tekrar)" minLength={6} className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500" />
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          <button onClick={() => void submit()} disabled={busy || !oldPw || newPw.length < 6} className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50">
+          <input type="password" autoFocus value={oldPw} onChange={(e) => setOldPw(e.target.value)} placeholder="eski şifre" className="input" />
+          <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="yeni şifre" minLength={6} className="input" />
+          <input type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} placeholder="yeni şifre (tekrar)" minLength={6} className="input" />
+          {error && <p className="text-sm text-stamp-400">{error}</p>}
+          <button onClick={() => void submit()} disabled={busy || !oldPw || newPw.length < 6} className="btn-lamp">
             {busy ? 'güncelleniyor…' : 'değiştir'}
           </button>
         </div>
@@ -79,6 +79,7 @@ export default function Shell() {
   const logout = useAuthStore((s) => s.logout);
   const [pwModal, setPwModal] = useState(false);
   const [recModal, setRecModal] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const loaded = useAppStore((s) => s.loaded);
   const loadBootstrap = useAppStore((s) => s.loadBootstrap);
   const wireEvents = useAppStore((s) => s.wireEvents);
@@ -86,6 +87,7 @@ export default function Shell() {
   const view = useAppStore((s) => s.view);
   const activeDm = useAppStore((s) => (s.activeDmId ? s.dms.find((d) => d.id === s.activeDmId) ?? null : null));
   const isDmCall = useVoiceStore((s) => s.isDmCall);
+  const pip = useVoiceStore((s) => s.pip);
   const dms = useAppStore((s) => s.dms);
   const dmMessages = useDmChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap);
@@ -110,72 +112,105 @@ export default function Shell() {
   const [wsStat, setWsStat] = useState<WsStatus>('offline');
   useEffect(() => onWsStatus(setWsStat), []);
 
+  const closeNav = (): void => setNavOpen(false);
+
   return (
-    <div className="flex h-screen flex-col bg-neutral-950 text-neutral-200">
-      <header className="flex h-10 items-center justify-between border-b border-neutral-800/60 px-4">
-        <span className="text-sm font-semibold">postacim 🕊️</span>
-        {wsStat !== 'open' && (
-          <span
-            className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-              wsStat === 'connecting' ? 'bg-amber-900/50 text-amber-300' : 'bg-red-900/50 text-red-300'
-            }`}
+    <div className="flex h-screen flex-col bg-night-950 text-paper-100">
+      {/* rota plakası — the wagon header */}
+      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-night-700 bg-night-900 px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <button
+            onClick={() => setNavOpen(true)}
+            aria-label="menü"
+            className="rounded p-1 text-paper-300 transition-colors hover:bg-night-800 hover:text-paper-100 lg:hidden"
           >
-            {wsStat === 'connecting' ? 'bağlanıyor…' : 'bağlantı yok — yeniden deneniyor'}
-          </span>
-        )}
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-neutral-400">{user?.nick}</span>
+            <Menu size={18} />
+          </button>
+          <PigeonMark size={19} className="shrink-0 text-lamp-500" />
+          <span className="plate !text-sm !tracking-[0.22em] text-paper-100">postacim</span>
+          {wsStat !== 'open' && (
+            <span
+              className={`ml-1 rounded-sm border px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                wsStat === 'connecting'
+                  ? 'border-lamp-600/70 bg-lamp-100 text-lamp-300'
+                  : 'border-stamp-500/70 bg-stamp-100 text-stamp-400'
+              }`}
+            >
+              {wsStat === 'connecting' ? 'hat kuruluyor' : 'hat yok — yeniden deneniyor'}
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 text-sm">
+          <span className="hidden text-paper-300 sm:inline">{user?.nick}</span>
           <button
             onClick={() => setRecModal(true)}
-            className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300 hover:bg-neutral-800"
+            className="btn-ghost !px-2 !py-1 !text-xs"
+            title="kurtarma ifadesi"
           >
-            🗝️ kurtarma
+            <ShieldCheck size={13} />
+            <span className="hidden md:inline">kurtarma</span>
           </button>
-          <button
-            onClick={() => setPwModal(true)}
-            className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300 hover:bg-neutral-800"
-          >
-            şifre
+          <button onClick={() => setPwModal(true)} className="btn-ghost !px-2 !py-1 !text-xs" title="şifre değiştir">
+            <KeyRound size={13} />
+            <span className="hidden md:inline">şifre</span>
           </button>
-          <button
-            onClick={() => void logout()}
-            className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300 hover:bg-neutral-800"
-          >
-            çıkış
+          <button onClick={() => void logout()} className="btn-ghost !px-2 !py-1 !text-xs" title="çıkış yap">
+            <LogOut size={13} />
+            <span className="hidden md:inline">çıkış</span>
           </button>
         </div>
       </header>
+
       <div className="flex min-h-0 flex-1">
-        <ServerRail />
+        {/* desktop rails */}
+        <div className="hidden lg:flex">
+          <ServerRail />
+          {view === 'community' && <ChannelSidebar />}
+        </div>
+
         {view === 'dm' ? (
           <main className="flex min-w-0 flex-1 flex-col">
             {activeDm ? <DmChat dmId={activeDm.id} /> : <DmHome />}
           </main>
         ) : (
-          <>
-            <ChannelSidebar />
-            <main className="flex min-w-0 flex-1 flex-col">
-          {!loaded ? (
-            <div className="flex flex-1 items-center justify-center text-neutral-600">yükleniyor…</div>
-          ) : channel ? (
-            channel.type === 'text' ? (
-              <ChatView channelId={channel.id} channelName={channel.name} />
+          <main className="flex min-w-0 flex-1 flex-col">
+            {!loaded ? (
+              <div className="flex flex-1 items-center justify-center text-paper-500">yükleniyor…</div>
+            ) : channel ? (
+              channel.type === 'text' ? (
+                <ChatView channelId={channel.id} channelName={channel.name} />
+              ) : (
+                <VoiceRoom channelId={channel.id} channelName={channel.name} />
+              )
             ) : (
-              <VoiceRoom channelId={channel.id} channelName={channel.name} />
-            )
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">
-              soldan bir topluluk ve oda seç
-            </div>
-          )}
-            </main>
+              <div className="flex flex-1 items-center justify-center text-sm text-paper-500">
+                soldan bir topluluk ve oda seç
+              </div>
+            )}
+          </main>
+        )}
+        {view === 'community' && (
+          <div className="hidden xl:flex">
             <MemberList />
-          </>
+          </div>
         )}
       </div>
+
+      {/* mobile drawer — rail + channels as one pull-out sorting tray */}
+      {navOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden" role="presentation">
+          <div className="absolute inset-0 bg-night-950/80" onClick={closeNav} />
+          <div className="absolute inset-y-0 left-0 flex animate-seal-in border-r border-brass-700/70 bg-night-900 shadow-[0_0_60px_rgba(0,0,0,0.7)]">
+            <ServerRail onNavigate={closeNav} />
+            {view === 'community' && <ChannelSidebar onNavigate={closeNav} />}
+          </div>
+        </div>
+      )}
+
       {pwModal && <PasswordModal onClose={() => setPwModal(false)} />}
       {recModal && <RecoveryModal onClose={() => setRecModal(false)} />}
-      {isDmCall && <CallView />}
+      {isDmCall && !pip && <CallView />}
+      {isDmCall && pip && <PiPWidget />}
       <IncomingCall />
     </div>
   );
@@ -225,29 +260,28 @@ function RecoveryModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Modal title="🗝️ Kurtarma ifadesi" onClose={onClose}>
+    <Modal title="Kurtarma ifadesi" onClose={onClose}>
       {phase === 'show' && (
         <div className="flex flex-col gap-3">
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-paper-500">
             hesabın bu ifadede yedeklenir — şifreni kaybedersen tek kurtarma yolu bu
           </p>
           <div className="grid grid-cols-3 gap-1.5">
             {(words ?? Array.from({ length: 12 }, () => '…')).map((w, i) => (
-              <div key={i} className="flex items-baseline gap-1 rounded border border-neutral-800 bg-neutral-950/60 px-1.5 py-1">
-                <span className="text-[9px] text-neutral-600">{i + 1}</span>
-                <span className="select-all font-mono text-xs">{w}</span>
+              <div
+                key={i}
+                className="flex items-baseline gap-1 rounded-sm border border-brass-700/40 bg-paper-50 px-1.5 py-1 text-night-950"
+              >
+                <span className="font-display text-[9px] font-semibold text-brass-700">{i + 1}</span>
+                <span className="select-all font-mono text-xs font-medium">{w}</span>
               </div>
             ))}
           </div>
           <div className="flex gap-2">
-            <button onClick={download} className="flex-1 rounded border border-neutral-700 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800">
-              ⬇ indir
+            <button onClick={download} className="btn-ghost flex-1">
+              indir
             </button>
-            <button
-              onClick={() => setPhase('quiz')}
-              disabled={!words}
-              className="flex-1 rounded bg-indigo-600 py-1.5 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
-            >
+            <button onClick={() => setPhase('quiz')} disabled={!words} className="btn-lamp flex-1">
               kaydettim, doğrula
             </button>
           </div>
@@ -255,41 +289,38 @@ function RecoveryModal({ onClose }: { onClose: () => void }) {
       )}
       {phase === 'quiz' && (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-neutral-300">
-            {quiz.map((i) => i + 1).join(', ')}. kelimeleri yaz:
-          </p>
+          <p className="text-sm text-paper-300">{quiz.map((i) => i + 1).join(', ')}. kelimeleri yaz:</p>
           {quiz.map((i) => (
             <label key={i} className="flex items-center gap-2 text-sm">
-              <span className="w-14 text-neutral-500">{i + 1}. kelime</span>
+              <span className="w-14 shrink-0 text-paper-500">{i + 1}. kelime</span>
               <input
                 value={answers[i] ?? ''}
                 onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))}
-                className="flex-1 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 font-mono text-sm outline-none focus:border-neutral-500"
+                className="input font-mono"
                 spellCheck={false}
               />
             </label>
           ))}
-          <button
-            onClick={() => void finish()}
-            disabled={!quizOk || busy}
-            className="rounded bg-indigo-600 py-1.5 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
-          >
+          <button onClick={() => void finish()} disabled={!quizOk || busy} className="btn-lamp">
             {busy ? 'kaydediliyor…' : 'kaydet'}
           </button>
-          <button onClick={() => setPhase('show')} className="text-xs text-neutral-500 hover:text-neutral-300">
+          <button
+            onClick={() => setPhase('show')}
+            className="text-xs text-paper-500 transition-colors hover:text-paper-300"
+          >
             ← kelimelere dön
           </button>
         </div>
       )}
       {phase === 'done' && (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-emerald-400">✔ kurtarma ifadesi hesabına bağlandı</p>
-          <button onClick={onClose} className="rounded bg-indigo-600 py-1.5 text-sm font-medium hover:bg-indigo-500">
+          <p className="text-sm text-lamp-300">kurtarma ifadesi hesabına bağlandı</p>
+          <button onClick={onClose} className="btn-lamp">
             tamam
           </button>
         </div>
       )}
-      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="mt-2 text-sm text-stamp-400">{error}</p>}
     </Modal>
   );
 }

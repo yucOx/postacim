@@ -4,6 +4,7 @@ import Login from './components/Login';
 import Shell from './components/Shell';
 import JoinScreen from './components/JoinScreen';
 import { ToastContainer } from './components/Toast';
+import { SealMark } from './components/Brand';
 import { parseInviteLink, type ParsedInvite } from './crypto/invite';
 
 export default function App() {
@@ -23,7 +24,13 @@ export default function App() {
 
   let screen: React.JSX.Element;
   if (status === 'loading') {
-    screen = <div className="flex h-screen items-center justify-center bg-neutral-950 text-4xl">🕊️</div>;
+    screen = (
+      <div className="flex h-screen items-center justify-center bg-night-950">
+        <div className="animate-pulse text-brass-600">
+          <SealMark size={96} text="POSTACIM · GECE POSTASI · " />
+        </div>
+      </div>
+    );
   } else if (status !== 'authed') {
     screen = <Login />;
   } else if (invite) {

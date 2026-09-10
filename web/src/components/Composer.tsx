@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { SendHorizontal } from 'lucide-react';
 
 export default function Composer({
   send,
@@ -14,6 +15,14 @@ export default function Composer({
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+
+  const resize = (): void => {
+    const el = areaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  };
 
   const submit = async (): Promise<void> => {
     const body = text.trim();
@@ -21,6 +30,7 @@ export default function Composer({
     setError(null);
     try {
       setText('');
+      requestAnimationFrame(resize);
       await send(body);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'gönderilemedi');
@@ -37,16 +47,32 @@ export default function Composer({
 
   return (
     <div className="px-4 pb-4">
-      {error && <p className="mb-1 text-xs text-red-400">{error}</p>}
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKey}
-        rows={1}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="max-h-40 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2.5 text-sm text-neutral-200 outline-none placeholder:text-neutral-500 focus:border-neutral-500 disabled:opacity-50"
-      />
+      {error && <p className="mb-1 text-xs text-stamp-400">{error}</p>}
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={areaRef}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            resize();
+          }}
+          onKeyDown={onKey}
+          rows={1}
+          placeholder={placeholder}
+          disabled={disabled}
+          aria-label="mesaj yaz"
+          className="input max-h-40 flex-1 resize-none py-2.5 leading-relaxed"
+        />
+        <button
+          onClick={() => void submit()}
+          disabled={disabled || sending || !text.trim()}
+          aria-label="gönder"
+          title="gönder"
+          className="btn-lamp !h-10 !w-10 shrink-0 !p-0"
+        >
+          <SendHorizontal size={17} />
+        </button>
+      </div>
     </div>
   );
 }

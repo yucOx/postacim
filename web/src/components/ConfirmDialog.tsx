@@ -30,9 +30,9 @@ export default function ConfirmDialog({
   const [busy, setBusy] = useState(false);
   return (
     <Modal title={title} onClose={onCancel}>
-      <p className="mb-4 text-sm text-neutral-300">{message}</p>
+      <p className="mb-4 text-sm text-paper-300">{message}</p>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="rounded-md px-3 py-1.5 text-sm text-neutral-400 hover:text-neutral-200">
+        <button onClick={onCancel} className="btn-ghost">
           vazgeç
         </button>
         <button
@@ -42,9 +42,7 @@ export default function ConfirmDialog({
             setBusy(true);
             onConfirm();
           }}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium text-white ${
-            danger ? 'bg-red-700 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-500'
-          }`}
+          className={danger ? 'btn-stamp' : 'btn-lamp'}
         >
           {busy ? '…' : confirmLabel}
         </button>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, LogOut, Phone, UserPlus, Users } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore, type DmDisplayMessage } from '../state/dmChatStore';
 import { useUnreadStore } from '../state/unreadStore';
@@ -8,6 +9,7 @@ import ConfirmDialog from './ConfirmDialog';
 import MessageRow from './MessageRow';
 import Composer from './Composer';
 import Modal from './Modal';
+import { ShieldCheck } from 'lucide-react';
 
 // stable ref: `?? []` in a zustand selector recreates it each call and loops React 19 (#185)
 const NO_MESSAGES: DmDisplayMessage[] = [];
@@ -23,9 +25,7 @@ function AddMemberModal({ gdmId, onClose }: { gdmId: string; onClose: () => void
   return (
     <Modal title="Üye ekle" onClose={onClose}>
       <div className="flex w-72 flex-col gap-2">
-        {candidates.length === 0 && (
-          <p className="text-sm text-neutral-500">ekleyebileceğin arkadaş kalmadı</p>
-        )}
+        {candidates.length === 0 && <p className="text-sm text-paper-500">ekleyebileceğin arkadaş kalmadı</p>}
         {candidates.map((f) => (
           <button
             key={f.id}
@@ -42,14 +42,14 @@ function AddMemberModal({ gdmId, onClose }: { gdmId: string; onClose: () => void
                 setBusy(false);
               }
             }}
-            className="flex items-center justify-between rounded px-2 py-1.5 text-left text-sm text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+            className="flex items-center justify-between rounded px-2 py-1.5 text-left text-sm text-paper-300 transition-colors hover:bg-night-800"
           >
             {f.nick}
-            <span className="text-xs text-indigo-400">ekle</span>
+            <span className="text-xs text-lamp-500">ekle</span>
           </button>
         ))}
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <p className="text-[11px] text-neutral-600">ekleme, grup anahtarını yeniler</p>
+        {error && <p className="text-sm text-stamp-400">{error}</p>}
+        <p className="text-[11px] text-paper-500">ekleme, grup anahtarını yeniler</p>
       </div>
     </Modal>
   );
@@ -96,31 +96,45 @@ export default function DmChat({ dmId }: { dmId: string }) {
   };
 
   if (!dm && !gdm) {
-    return <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">DM bulunamadı</div>;
+    return <div className="flex flex-1 items-center justify-center text-sm text-paper-500">DM bulunamadı</div>;
   }
-  const title = dm ? `@ ${dm.peer.nick}` : `👥 ${gdm!.name}`;
+  const title = dm ? dm.peer.nick : (gdm?.name ?? '');
   const sub = dm ? null : gdm!.members.map((m) => m.nick).join(', ');
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-neutral-800/60 px-4 py-2 text-sm font-semibold text-neutral-300">
-        <button onClick={showDmHome} className="text-neutral-500 hover:text-neutral-200" title="geri">
-          ‹
+      <div className="flex items-center gap-2 border-b border-night-700 bg-night-900/40 px-4 py-2.5">
+        <button
+          onClick={showDmHome}
+          className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
+          title="geri"
+          aria-label="geri"
+        >
+          <ChevronLeft size={17} />
         </button>
-        <span className="truncate" title={sub ?? undefined}>{title}</span>
-        <span className="text-[11px] font-normal text-emerald-500/80">uçtan uca şifreli</span>
+        <span className="truncate font-display text-lg font-semibold uppercase tracking-[0.06em] text-paper-50" title={sub ?? undefined}>
+          {dm ? `@ ${title}` : <span className="inline-flex items-center gap-1.5"><Users size={15} className="text-brass-500" />{title}</span>}
+        </span>
+        <span className="sealed-band">
+          <ShieldCheck size={11} />
+          uçtan uca mühürlü
+        </span>
         {gdm && (
           <>
             <button
               onClick={() => setAdding(true)}
-              className="ml-auto rounded-full border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300 hover:bg-neutral-800"
+              className="btn-ghost ml-auto !px-2 !py-1 !text-xs"
+              title="üye ekle"
             >
-              + üye
+              <UserPlus size={13} />
+              üye
             </button>
             <button
               onClick={() => setShowLeave(true)}
-              className="rounded-full border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-red-400"
+              className="btn-ghost !px-2 !py-1 !text-xs hover:!border-stamp-500/70 hover:!text-stamp-400"
+              title="gruptan ayrıl"
             >
+              <LogOut size={13} />
               ayrıl
             </button>
           </>
@@ -129,28 +143,26 @@ export default function DmChat({ dmId }: { dmId: string }) {
           <button
             onClick={() => void startDmCall(dmId).catch(() => {})}
             disabled={callChannelId !== null}
-            className="ml-auto rounded-full border border-neutral-700 px-3 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+            className="btn-ghost ml-auto !px-2.5 !py-1 !text-xs"
             title="şifreli sesli/görüntülü ara"
           >
-            📞 ara
+            <Phone size={13} />
+            ara
           </button>
         )}
       </div>
-      {sub && <div className="truncate border-b border-neutral-800/40 px-4 py-1 text-[11px] text-neutral-500">{sub}</div>}
+      {sub && <div className="truncate border-b border-night-700/60 px-4 py-1 text-[11px] text-paper-500">{sub}</div>}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto py-2">
         {hasMore && (
           <div className="flex justify-center py-2">
-            <button
-              onClick={() => void loadOlder(dmId)}
-              className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-400 hover:bg-neutral-800"
-            >
+            <button onClick={() => void loadOlder(dmId)} className="btn-ghost !py-1 !text-xs">
               daha eski mesajlar
             </button>
           </div>
         )}
         {messages.length === 0 && (
-          <div className="flex h-full items-center justify-center text-sm text-neutral-600">
-            {dm ? `${dm.peer.nick} ile ilk şifreli mesajı sen yaz` : 'grupta ilk şifreli mesajı sen yaz'}
+          <div className="flex h-full items-center justify-center text-sm text-paper-500">
+            {dm ? `${dm.peer.nick} ile ilk mühürlü zarfı sen bırak` : 'grupta ilk mühürlü zarfı sen bırak'}
           </div>
         )}
         {messages.map((m, i) => {
@@ -159,10 +171,12 @@ export default function DmChat({ dmId }: { dmId: string }) {
           return (
             <div key={m.id}>
               {newDay && (
-                <div className="my-2 flex items-center gap-3 px-4">
-                  <div className="h-px flex-1 bg-neutral-800" />
-                  <span className="text-[11px] text-neutral-500">{formatDay(m.sentAt)}</span>
-                  <div className="h-px flex-1 bg-neutral-800" />
+                <div className="my-3 flex items-center gap-3 px-4">
+                  <div className="perf flex-1" aria-hidden />
+                  <span className="font-display text-[11px] font-semibold uppercase tracking-[0.18em] text-paper-500">
+                    {formatDay(m.sentAt)}
+                  </span>
+                  <div className="perf flex-1" aria-hidden />
                 </div>
               )}
               <MessageRow m={m} prev={prev} />
@@ -174,7 +188,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
       <Composer
         send={(body) => send(dmId, body)}
         sending={sending}
-        placeholder={dm ? `@${dm.peer.nick} — şifreli mesaj… (Enter: gönder)` : `${gdm!.name} — şifreli mesaj… (Enter: gönder)`}
+        placeholder={dm ? `@${dm.peer.nick} — şifreli mesaj…  (Enter: gönder)` : `${gdm!.name} — şifreli mesaj…  (Enter: gönder)`}
       />
       {adding && gdm && <AddMemberModal gdmId={gdm.id} onClose={() => setAdding(false)} />}
       {showLeave && gdm && (

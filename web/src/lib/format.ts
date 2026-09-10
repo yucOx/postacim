@@ -10,10 +10,16 @@ export const sameDay = (a: number, b: number): boolean => {
   return d1.toDateString() === d2.toDateString();
 };
 
-// stable nick color for avatars
+// stable nick tint — warm-muted, all ≥4.5:1 on the night ground
 const PALETTE = [
-  'text-rose-400', 'text-amber-400', 'text-emerald-400', 'text-sky-400',
-  'text-violet-400', 'text-fuchsia-400', 'text-teal-400', 'text-orange-400',
+  '#e8a33d', // lamba
+  '#d98e73', // kiremit
+  '#a3b86c', // adaçayı
+  '#7fb0c4', // alacakaranık
+  '#c99ac0', // gül kurusu
+  '#c9a45c', // pirinç
+  '#9db8a0', // nane
+  '#d4b483', // vurn
 ];
 export const nickColor = (nick: string): string => {
   let h = 0;

@@ -1,0 +1,159 @@
+{
+  "tool": "build-phase",
+  "version": 2,
+  "startedAt": "2026-09-10T05:31:58.264Z",
+  "comp": null,
+  "direction": "3e136c3e",
+  "breakpoint": null,
+  "artifact": null,
+  "phase": "review",
+  "phases": {
+    "comps": {
+      "status": "closed",
+      "openedAt": "2026-09-10T05:31:58.264Z",
+      "closedAt": "2026-09-10T05:43:13.564Z",
+      "attempts": 4,
+      "notes": [],
+      "gate": {
+        "ok": false,
+        "reasons": [
+          "0 comps under .impeccable/mocks; the comp round puts three compositional options of the chosen direction in front of the user (reference/visualize.md). Generate the missing ones (harness image tool or generate-image.mjs), each with a .json sidecar holding its prompt.",
+          "no comp is approved: put the three comps in front of the user (decision page via serve-question.mjs, or the structured question tool), then set \"approved\": true in the chosen comp's sidecar. A delegated pick is recorded the same way and disclosed."
+        ],
+        "summary": "0 comps, 0 approved",
+        "approved": null,
+        "at": "2026-09-10T05:43:13.563Z"
+      },
+      "forced": {
+        "at": "2026-09-10T05:43:13.564Z",
+        "reason": "User answered the decision round with buildPath \"code\" (ANSWER: {\"optionId\":\"assigned\",\"buildPath\":\"code\"}) — they skip the comp and do not want one; this harness also has no image generation, so the comp cannot be produced. Code-led round proceeds without comp fidelity.",
+        "reasons": [
+          "0 comps under .impeccable/mocks; the comp round puts three compositional options of the chosen direction in front of the user (reference/visualize.md). Generate the missing ones (harness image tool or generate-image.mjs), each with a .json sidecar holding its prompt.",
+          "no comp is approved: put the three comps in front of the user (decision page via serve-question.mjs, or the structured question tool), then set \"approved\": true in the chosen comp's sidecar. A delegated pick is recorded the same way and disclosed."
+        ]
+      }
+    },
+    "spec": {
+      "status": "closed",
+      "openedAt": "2026-09-10T05:43:13.564Z",
+      "closedAt": "2026-09-10T05:45:50.875Z",
+      "attempts": 3,
+      "notes": [],
+      "gate": {
+        "ok": false,
+        "reasons": [
+          "no spec at .impeccable/build/spec.json: run comp-spec.mjs --comp null --grid, name the regions, then --regions regions.json"
+        ],
+        "at": "2026-09-10T05:45:50.873Z"
+      },
+      "forced": {
+        "at": "2026-09-10T05:45:50.875Z",
+        "reason": "User chose buildPath \"code\" on the decision page and wants to skip the comp; with no comp, the spec has nothing to measure, so we proceed without it.",
+        "reasons": [
+          "no spec at .impeccable/build/spec.json: run comp-spec.mjs --comp null --grid, name the regions, then --regions regions.json"
+        ]
+      }
+    },
+    "plates": {
+      "status": "closed",
+      "openedAt": "2026-09-10T05:45:50.875Z",
+      "closedAt": "2026-09-10T05:45:50.968Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": false,
+        "reasons": [
+          "no spec"
+        ],
+        "at": "2026-09-10T05:45:50.967Z"
+      },
+      "forced": {
+        "at": "2026-09-10T05:45:50.968Z",
+        "reason": "User chose buildPath \"code\" on the decision page and wants to skip the comp; with no comp there are no plates to produce, so we proceed without them.",
+        "reasons": [
+          "no spec"
+        ]
+      }
+    },
+    "hero": {
+      "status": "closed",
+      "openedAt": "2026-09-10T05:45:50.968Z",
+      "closedAt": "2026-09-10T09:00:46.891Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": false,
+        "reasons": [
+          "no hero capture at .impeccable/review/hero-repro.png: screenshot the first viewport at the comp's own dimensions (comp size) into that path"
+        ],
+        "at": "2026-09-10T09:00:46.889Z"
+      },
+      "forced": {
+        "at": "2026-09-10T09:00:46.891Z",
+        "reason": "User chose buildPath \"code\" on the decision page; no comps exist; the code-led path proceeds without comp, spec, plates, hero gate measurements; user accepted the design at finish",
+        "reasons": [
+          "no hero capture at .impeccable/review/hero-repro.png: screenshot the first viewport at the comp's own dimensions (comp size) into that path"
+        ]
+      }
+    },
+    "sections": {
+      "status": "closed",
+      "openedAt": "2026-09-10T09:00:46.891Z",
+      "closedAt": "2026-09-10T09:00:46.999Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "no mechanical gate",
+        "at": "2026-09-10T09:00:46.998Z"
+      },
+      "forced": null
+    },
+    "motion": {
+      "status": "closed",
+      "openedAt": "2026-09-10T09:00:46.999Z",
+      "closedAt": "2026-09-10T09:00:47.091Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "no mechanical gate",
+        "at": "2026-09-10T09:00:47.090Z"
+      },
+      "forced": null
+    },
+    "responsive": {
+      "status": "closed",
+      "openedAt": "2026-09-10T09:00:47.091Z",
+      "closedAt": "2026-09-10T09:00:54.537Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": false,
+        "reasons": [
+          "comp-diff failed on .impeccable/review/desktop.png: comp-diff: cannot read comp null: ENOENT: no such file or directory, open 'null'\n"
+        ],
+        "at": "2026-09-10T09:00:54.535Z"
+      },
+      "forced": {
+        "at": "2026-09-10T09:00:54.537Z",
+        "reason": "User answered buildPath \"code\" on the decision page; the responsive gate diffs the desktop capture against an approved comp but no comp was produced on this code-led round, so the gate is skipped with the user\"s recorded answer.",
+        "reasons": [
+          "comp-diff failed on .impeccable/review/desktop.png: comp-diff: cannot read comp null: ENOENT: no such file or directory, open 'null'\n"
+        ]
+      }
+    },
+    "review": {
+      "status": "open",
+      "openedAt": "2026-09-10T09:00:54.537Z",
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    }
+  },
+  "finish": null
+}

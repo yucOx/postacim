@@ -20,6 +20,8 @@ interface ChatState {
   messages: Record<string, DisplayMessage[]>;
   hasMore: Record<string, boolean>;
   sending: boolean;
+  /** message id -> arrival time (own messages only); drives the fresh-postmark stamp */
+  sealAt: Record<number, number>;
   loadHistory: (channelId: string) => Promise<void>;
   loadOlder: (channelId: string) => Promise<void>;
   send: (channelId: string, body: string) => Promise<void>;
@@ -56,6 +58,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: {},
   hasMore: {},
   sending: false,
+  sealAt: {},
 
   loadHistory: async (channelId) => {
     const res = await api<{ messages: ChatMessage[]; has_more: boolean }>(
@@ -131,6 +134,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const display = toDisplay(raw);
       set((s) => ({
         messages: { ...s.messages, [raw.channel_id]: insertSorted(s.messages[raw.channel_id] ?? [], display) },
+        sealAt: amSender(display) ? { ...s.sealAt, [display.id]: Date.now() } : s.sealAt,
       }));
       // opportunistic: if we lack this epoch's key (recent rotation), fetch it once
       const app = useAppStore.getState();

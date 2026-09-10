@@ -35,6 +35,9 @@ interface VoiceState {
   /** 1:1 DM call state; shares `room` (one call at a time) */
   callState: CallState | null;
   isDmCall: boolean;
+  /** call window minimized to the corner — chat stays fully usable underneath */
+  pip: boolean;
+  setPip: (v: boolean) => void;
   join: (channelId: string) => Promise<void>;
   leave: () => Promise<void>;
   toggleMic: () => Promise<void>;
@@ -87,6 +90,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   presence: {},
   callState: null,
   isDmCall: false,
+  pip: false,
+
+  setPip: (v) => set({ pip: v }),
 
   join: async (channelId) => {
     if (get().joinedChannelId === channelId && !get().isDmCall) return;
@@ -98,7 +104,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         wsSend({ type: 'voice_state', channel_id: prevChannel, state: 'left' });
       }
       cleanup(prev);
-      set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null });
+      set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
     }
 
     set({ error: null });
@@ -118,7 +124,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           if (st.joinedChannelId && !st.isDmCall) {
             wsSend({ type: 'voice_state', channel_id: st.joinedChannelId, state: 'left' });
           }
-          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null });
+          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
         }
       };
       const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
@@ -139,7 +145,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       wsSend({ type: 'call:cancel', channel_id: callState.channelId });
     }
     cleanup(room);
-    set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null });
+    set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
   },
 
   toggleMic: async () => {
@@ -196,7 +202,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const onDisconnected = (): void => {
         const st = useVoiceStore.getState();
         if (st.room === room) {
-          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null });
+          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
         }
       };
       const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
@@ -229,7 +235,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const onDisconnected = (): void => {
         const st = useVoiceStore.getState();
         if (st.room === room) {
-          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null });
+          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
         }
       };
       const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
@@ -253,7 +259,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       wsSend({ type: 'call:cancel', channel_id: callState.channelId });
     }
     cleanup(room);
-    set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null });
+    set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
   },
 
   wire: () => {
@@ -299,7 +305,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         const call = get().callState;
         if (call && call.channelId === e.channel_id) {
           cleanup(get().room);
-          set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: { phase: 'ended', channelId: call.channelId, note: 'reddedildi' } });
+          set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, pip: false, callState: { phase: 'ended', channelId: call.channelId, note: 'reddedildi' } });
           setTimeout(() => {
             const st = get().callState;
             if (st?.phase === 'ended') set({ callState: null });

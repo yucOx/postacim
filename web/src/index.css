@@ -1,1 +1,261 @@
 @import "tailwindcss";
+
+/* self-hosted faces — no CDN, CSP-friendly */
+@import "@fontsource/barlow-condensed/500.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource-variable/public-sans/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
+@theme {
+  /* gece — the wagon's ground, deepest to raised */
+  --color-night-950: #0b0e13;
+  --color-night-900: #10151c;
+  --color-night-850: #131922;
+  --color-night-800: #161d27;
+  --color-night-700: #202935;
+  --color-night-600: #2b3644;
+
+  /* lamba — the single accent; amber of the sorting lamp */
+  --color-lamp-700: #8f5f16;
+  --color-lamp-600: #c9862b;
+  --color-lamp-500: #e8a33d;
+  --color-lamp-400: #f0ba62;
+  --color-lamp-300: #f4cf8e;
+  --color-lamp-100: #3a2c14;
+
+  /* pirinç — brass hardware: hairlines, borders, focus */
+  --color-brass-700: #6e5430;
+  --color-brass-600: #8c6a3f;
+  --color-brass-500: #a88454;
+  --color-brass-400: #c9a45c;
+
+  /* kağıt — text ink, warm not gray */
+  --color-paper-700: #6e6757;
+  --color-paper-500: #9c927d;
+  --color-paper-300: #cdc3ac;
+  --color-paper-100: #e4dbc6;
+  --color-paper-50: #efe6d0;
+
+  /* damga — reserved for official marks and danger */
+  --color-stamp-600: #a33327;
+  --color-stamp-500: #c24141;
+  --color-stamp-400: #d66a5a;
+  --color-stamp-100: #3a1512;
+
+  --font-sans: "Public Sans Variable", system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --animate-stamp: stamp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-seal-in: seal-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  @keyframes stamp {
+    0% {
+      opacity: 0;
+      transform: scale(1.9) rotate(-14deg);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(0.94) rotate(2deg);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+  }
+  @keyframes seal-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
+/* the browser's own surfaces belong to the design too */
+::selection {
+  background: var(--color-lamp-500);
+  color: var(--color-night-950);
+}
+* {
+  caret-color: var(--color-lamp-500);
+}
+html {
+  color-scheme: dark;
+  background: var(--color-night-950);
+}
+body {
+  font-family: var(--font-sans);
+}
+:focus-visible {
+  outline: 2px solid var(--color-brass-400);
+  outline-offset: 1px;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-night-700);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brass-700);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@layer components {
+  /* rota plakası — engraved zone label */
+  .plate {
+    font-family: var(--font-display);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    color: var(--color-paper-500);
+  }
+
+  /* standard input — a mail slip */
+  .input {
+    width: 100%;
+    border-radius: 0.375rem;
+    border: 1px solid color-mix(in srgb, var(--color-brass-600) 55%, transparent);
+    background: var(--color-night-800);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    color: var(--color-paper-50);
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+  .input::placeholder {
+    color: color-mix(in srgb, var(--color-paper-500) 75%, transparent);
+  }
+  .input:hover {
+    border-color: var(--color-brass-600);
+  }
+  .input:focus {
+    border-color: var(--color-brass-400);
+  }
+  .input:disabled {
+    opacity: 0.5;
+  }
+
+  /* primary action — lamp amber; pressed it inverts to paper-on-ink */
+  .btn-lamp {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--color-lamp-500);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-night-950);
+    transition:
+      background 120ms ease,
+      color 120ms ease,
+      transform 80ms ease;
+  }
+  .btn-lamp:hover {
+    background: var(--color-lamp-400);
+  }
+  .btn-lamp:active {
+    background: var(--color-paper-50);
+  }
+  .btn-lamp:disabled {
+    opacity: 0.45;
+  }
+
+  /* quiet action */
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 0.375rem;
+    border: 1px solid color-mix(in srgb, var(--color-brass-600) 55%, transparent);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--color-paper-300);
+    transition:
+      background 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .btn-ghost:hover {
+    background: var(--color-night-800);
+    border-color: var(--color-brass-500);
+    color: var(--color-paper-100);
+  }
+  .btn-ghost:active {
+    background: var(--color-paper-50);
+    color: var(--color-night-950);
+  }
+  .btn-ghost:disabled {
+    opacity: 0.45;
+  }
+
+  /* danger action — stamp red */
+  .btn-stamp {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--color-stamp-500);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #fff;
+    transition: background 120ms ease;
+  }
+  .btn-stamp:hover {
+    background: var(--color-stamp-400);
+  }
+  .btn-stamp:disabled {
+    opacity: 0.45;
+  }
+
+  /* delgili ayraç — perforated rule, like a stamp edge */
+  .perf {
+    height: 2px;
+    background-image: radial-gradient(
+      circle,
+      var(--color-brass-700) 1.1px,
+      transparent 1.3px
+    );
+    background-size: 8px 2px;
+    background-repeat: repeat-x;
+    background-position: center;
+  }
+
+  /* official E2EE band — the registered-mail tell */
+  .sealed-band {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    border: 1px solid color-mix(in srgb, var(--color-brass-600) 65%, transparent);
+    border-radius: 2px;
+    padding: 0.0625rem 0.4375rem;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.625rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-brass-400);
+    background: color-mix(in srgb, var(--color-lamp-100) 40%, transparent);
+  }
+}

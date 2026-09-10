@@ -3,6 +3,7 @@ import { useAppStore } from '../state/appStore';
 import { useChatStore, type DisplayMessage } from '../state/chatStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { formatDay, sameDay } from '../lib/format';
+import { AlertTriangle, Lock, ShieldCheck } from 'lucide-react';
 import MessageRow from './MessageRow';
 import Composer from './Composer';
 
@@ -55,13 +56,20 @@ export default function ChatView({ channelId, channelName }: { channelId: string
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className=" border-b border-neutral-800/60 px-4 py-2 text-sm font-semibold text-neutral-300">
-        # {channelName}
-        <span className="ml-2 text-[11px] font-normal text-emerald-500/80">uçtan uca şifreli</span>
+      {/* rota plakası — channel header */}
+      <div className="flex items-center gap-3 border-b border-night-700 bg-night-900/40 px-4 py-2.5">
+        <span className="font-display text-lg font-semibold uppercase tracking-[0.08em] text-paper-50">
+          {channelName}
+        </span>
+        <span className="sealed-band">
+          <ShieldCheck size={11} />
+          uçtan uca mühürlü
+        </span>
       </div>
       {needsRekey && (
-        <div className="flex items-center gap-2 border-b border-amber-900/40 bg-amber-950/40 px-4 py-2 text-xs text-amber-300">
-          <span>⚠️ Bir üye çıkarıldı — eski anahtar risk altında, yazışma kilitli.</span>
+        <div className="flex flex-wrap items-center gap-2 border-b border-lamp-600/40 bg-lamp-100/70 px-4 py-2 text-xs text-lamp-300">
+          <AlertTriangle size={14} className="shrink-0 text-lamp-500" />
+          <span>Bir üye çıkarıldı — eski anahtar risk altında, yazışma kilitli.</span>
           {isStaff && communityId && (
             <button
               onClick={() => {
@@ -71,8 +79,9 @@ export default function ChatView({ channelId, channelName }: { channelId: string
                   .finally(() => setRekeying(false));
               }}
               disabled={rekeying}
-              className="rounded-full bg-amber-600/80 px-3 py-0.5 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+              className="btn-ghost !border-lamp-600/70 !py-0.5 !text-xs !text-lamp-300"
             >
+              <Lock size={11} />
               {rekeying ? 'yenileniyor…' : 'anahtarı yenile'}
             </button>
           )}
@@ -81,17 +90,14 @@ export default function ChatView({ channelId, channelName }: { channelId: string
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto py-2">
         {hasMore && (
           <div className="flex justify-center py-2">
-            <button
-              onClick={() => void loadOlder(channelId)}
-              className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-400 hover:bg-neutral-800"
-            >
+            <button onClick={() => void loadOlder(channelId)} className="btn-ghost !py-1 !text-xs">
               daha eski mesajlar
             </button>
           </div>
         )}
         {messages.length === 0 && (
-          <div className="flex h-full items-center justify-center text-sm text-neutral-600">
-            henüz mesaj yok — ilk şifreli mesajı sen yaz
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-paper-500">
+            <p className="text-sm">henüz yük yok — ilk mühürlü zarfı sen bırak</p>
           </div>
         )}
         {messages.map((m, i) => {
@@ -100,10 +106,12 @@ export default function ChatView({ channelId, channelName }: { channelId: string
           return (
             <div key={m.id}>
               {newDay && (
-                <div className="my-2 flex items-center gap-3 px-4">
-                  <div className="h-px flex-1 bg-neutral-800" />
-                  <span className="text-[11px] text-neutral-500">{formatDay(m.sentAt)}</span>
-                  <div className="h-px flex-1 bg-neutral-800" />
+                <div className="my-3 flex items-center gap-3 px-4">
+                  <div className="perf flex-1" aria-hidden />
+                  <span className="font-display text-[11px] font-semibold uppercase tracking-[0.18em] text-paper-500">
+                    {formatDay(m.sentAt)}
+                  </span>
+                  <div className="perf flex-1" aria-hidden />
                 </div>
               )}
               <MessageRow m={m} prev={prev} />
@@ -116,7 +124,11 @@ export default function ChatView({ channelId, channelName }: { channelId: string
         send={(body) => send(channelId, body)}
         sending={sending}
         disabled={needsRekey}
-        placeholder={needsRekey ? 'kanal yeniden anahtarlanana kadar kilitli…' : 'Şifreli mesaj yaz… (Enter: gönder, Shift+Enter: satır)'}
+        placeholder={
+          needsRekey
+            ? 'kanal yeniden anahtarlanana kadar kilitli…'
+            : 'şifreli mesaj yaz…  (Enter: gönder, Shift+Enter: satır)'
+        }
       />
     </div>
   );

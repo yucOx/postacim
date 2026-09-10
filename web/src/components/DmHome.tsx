@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { Check, Plus, X } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
-import { formatTime } from '../lib/format';
+import { formatTime, nickColor } from '../lib/format';
 import ConfirmDialog from './ConfirmDialog';
 import Modal from './Modal';
 
@@ -45,26 +46,26 @@ function NewGroupModal({ onClose }: { onClose: () => void }) {
           onChange={(e) => setName(e.target.value)}
           placeholder="grup adı"
           maxLength={64}
-          className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+          className="input"
         />
         <div className="max-h-56 overflow-y-auto">
-          {friends.length === 0 && <p className="text-sm text-neutral-500">arkadaşın yok</p>}
+          {friends.length === 0 && <p className="text-sm text-paper-500">arkadaşın yok</p>}
           {friends.map((f) => (
-            <label key={f.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-neutral-800/60">
-              <input type="checkbox" checked={picked.has(f.id)} onChange={() => toggle(f.id)} className="accent-indigo-500" />
-              <span className="text-sm text-neutral-300">{f.nick}</span>
+            <label key={f.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-night-800">
+              <input type="checkbox" checked={picked.has(f.id)} onChange={() => toggle(f.id)} className="accent-lamp-500" />
+              <span className="text-sm text-paper-300">{f.nick}</span>
             </label>
           ))}
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-stamp-400">{error}</p>}
         <button
           onClick={() => void submit()}
           disabled={busy || !name.trim() || picked.size === 0}
-          className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
+          className="btn-lamp"
         >
           {busy ? 'kuruluyor…' : `grubu kur (${picked.size})`}
         </button>
-        <p className="text-[11px] text-neutral-600">üye eklenen/ayrılan gruplarda anahtar yenilenir</p>
+        <p className="text-[11px] text-paper-500">üye eklenen/ayrılan gruplarda anahtar yenilenir</p>
       </div>
     </Modal>
   );
@@ -107,158 +108,176 @@ export default function DmHome() {
     }
   };
 
+  const avatar = (label: string, id: string): React.ReactNode => (
+    <div
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-brass-700/40 bg-night-800 font-display text-sm font-bold"
+      style={{ color: nickColor(label) }}
+      aria-hidden
+    >
+      {label[0]?.toLocaleUpperCase('tr-TR')}
+    </div>
+  );
+
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-6">
-      <h1 className="text-lg font-semibold">Özel Mesajlar</h1>
-      <p className="mt-1 text-xs text-neutral-500">
-        DM'ler yalnız arkadaşlarınla — uçtan uca şifreli, sunucu göremez
-      </p>
-
-      <div className="mt-6 max-w-md">
-        <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-neutral-500">ARKADAŞ EKLE</h2>
-        <div className="flex gap-2">
-          <input
-            value={nick}
-            onChange={(e) => setNick(e.target.value)}
-            onKeyDown={(e) => nick.trim() && e.key === 'Enter' && void submit()}
-            placeholder="nick"
-            maxLength={24}
-            className="flex-1 rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
-          />
-          <button
-            onClick={() => void submit()}
-            disabled={busy || !nick.trim()}
-            className="rounded-md bg-indigo-600 px-4 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
-          >
-            istek gönder
-          </button>
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto flex max-w-lg flex-col gap-7 p-6">
+        <div className="border-b border-night-700 pb-4">
+          <h1 className="font-display text-2xl font-bold uppercase tracking-[0.1em] text-paper-50">
+            Özel Yükler
+          </h1>
+          <p className="mt-1 text-xs text-paper-500">
+            DM'ler yalnız arkadaşlarınla — uçtan uca mühürlü, sunucu göremez
+          </p>
         </div>
-        {msg && <p className="mt-1 text-sm text-emerald-400">{msg}</p>}
-        {error && <p className="mt-1 text-sm text-red-400">{error}</p>}
-      </div>
 
-      {incoming.length > 0 && (
-        <div className="mt-6 max-w-md">
-          <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-neutral-500">GELEN İSTEKLER</h2>
-          {incoming.map((f) => (
-            <div key={f.id} className="flex items-center gap-2 py-1">
-              <span className="flex-1 truncate text-sm text-neutral-300">{f.nick}</span>
-              <button onClick={() => void acceptFriend(f.id)} className="rounded bg-emerald-700 px-2 py-0.5 text-xs hover:bg-emerald-600">
-                kabul
-              </button>
-              <button onClick={() => void declineFriend(f.id)} className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800">
-                red
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {outgoing.length > 0 && (
-        <div className="mt-6 max-w-md">
-          <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-neutral-500">GÖNDERİLEN İSTEKLER</h2>
-          {outgoing.map((f) => (
-            <div key={f.id} className="py-1 text-sm text-neutral-500">
-              {f.nick} <span className="text-xs">— bekliyor</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-6 max-w-md">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[11px] font-semibold tracking-wide text-neutral-500">KONUŞMALAR</h2>
-          <button
-            onClick={() => setNewGroup(true)}
-            className="text-xs text-neutral-400 hover:text-neutral-200"
-            title="grup DM kur"
-          >
-            + grup
-          </button>
-        </div>
-        {dms.length === 0 && gdms.length === 0 && <p className="text-sm text-neutral-500">henüz konuşma yok</p>}
-        {gdms.map((g) => {
-          const unread = unreadCount(g.id, dmMessages[g.id]);
-          return (
-            <button
-              key={g.id}
-              onClick={() => openDmChat(g.id)}
-              className={`flex w-full items-center gap-2 rounded px-1 py-1.5 text-left hover:bg-neutral-800/60 ${
-                g.id === activeDmId ? 'bg-neutral-800/80' : ''
-              }`}
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-900/60 text-sm font-bold text-emerald-300">
-                {g.name[0]?.toUpperCase()}
-              </div>
-              <span className={`flex-1 truncate text-sm ${unread > 0 ? 'font-semibold text-neutral-200' : 'text-neutral-300'}`}>
-                {g.name}
-                <span className="ml-1 text-[10px] text-neutral-600">{g.members.length} kişi</span>
-              </span>
-              {g.last_message_at && (
-                <span className="text-[10px] text-neutral-600">{formatTime(g.last_message_at)}</span>
-              )}
-              {unread > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
-                  {unread > 99 ? '99+' : unread}
-                </span>
-              )}
+        <section>
+          <h2 className="plate mb-2">ARKADAŞ EKLE</h2>
+          <div className="flex gap-2">
+            <input
+              value={nick}
+              onChange={(e) => setNick(e.target.value)}
+              onKeyDown={(e) => nick.trim() && e.key === 'Enter' && void submit()}
+              placeholder="nick"
+              maxLength={24}
+              className="input flex-1"
+            />
+            <button onClick={() => void submit()} disabled={busy || !nick.trim()} className="btn-lamp shrink-0">
+              istek gönder
             </button>
-          );
-        })}
-        {dms.map((d) => {
-            const unread = unreadCount(d.id, dmMessages[d.id]);
+          </div>
+          {msg && <p className="mt-1.5 text-sm text-lamp-300">{msg}</p>}
+          {error && <p className="mt-1.5 text-sm text-stamp-400">{error}</p>}
+        </section>
+
+        {incoming.length > 0 && (
+          <section>
+            <h2 className="plate mb-2">GELEN İSTEKLER</h2>
+            {incoming.map((f) => (
+              <div key={f.id} className="flex items-center gap-2 py-1">
+                {avatar(f.nick, f.id)}
+                <span className="flex-1 truncate text-sm text-paper-100">{f.nick}</span>
+                <button onClick={() => void acceptFriend(f.id)} className="btn-ghost !text-xs" title="kabul et">
+                  <Check size={13} />
+                  kabul
+                </button>
+                <button
+                  onClick={() => void declineFriend(f.id)}
+                  className="btn-ghost !text-xs hover:!border-stamp-500/70 hover:!text-stamp-400"
+                  title="reddet"
+                >
+                  <X size={13} />
+                  red
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {outgoing.length > 0 && (
+          <section>
+            <h2 className="plate mb-2">GÖNDERİLEN İSTEKLER</h2>
+            {outgoing.map((f) => (
+              <div key={f.id} className="py-1 text-sm text-paper-500">
+                {f.nick} <span className="text-xs">— bekliyor</span>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="plate">KONUŞMALAR</h2>
+            <button
+              onClick={() => setNewGroup(true)}
+              className="btn-ghost !py-0.5 !text-xs"
+              title="grup DM kur"
+            >
+              <Plus size={12} />
+              grup
+            </button>
+          </div>
+          {dms.length === 0 && gdms.length === 0 && (
+            <p className="text-sm text-paper-500">henüz konuşma yok</p>
+          )}
+          {gdms.map((g) => {
+            const unread = unreadCount(g.id, dmMessages[g.id]);
             return (
               <button
-                key={d.id}
-                onClick={() => openDmChat(d.id)}
-                className={`flex w-full items-center gap-2 rounded px-1 py-1.5 text-left hover:bg-neutral-800/60 ${
-                  d.id === activeDmId ? 'bg-neutral-800/80' : ''
+                key={g.id}
+                onClick={() => openDmChat(g.id)}
+                className={`flex w-full items-center gap-2 rounded px-1 py-1.5 text-left transition-colors hover:bg-night-800 ${
+                  g.id === activeDmId ? 'bg-night-800' : ''
                 }`}
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-900/60 text-sm font-bold text-indigo-300">
-                  {d.peer.nick[0]?.toUpperCase()}
-                </div>
-                <span className={`flex-1 truncate text-sm ${unread > 0 ? 'font-semibold text-neutral-200' : 'text-neutral-300'}`}>
-                  {d.peer.nick}
+                {avatar(g.name, g.id)}
+                <span className={`flex-1 truncate text-sm ${unread > 0 ? 'font-semibold text-paper-50' : 'text-paper-300'}`}>
+                  {g.name}
+                  <span className="ml-1 text-[10px] text-paper-500">{g.members.length} kişi</span>
                 </span>
-                {d.last_message_at && (
-                  <span className="text-[10px] text-neutral-600">{formatTime(d.last_message_at)}</span>
+                {g.last_message_at && (
+                  <span className="font-mono text-[10px] text-paper-500">{formatTime(g.last_message_at)}</span>
                 )}
                 {unread > 0 && (
-                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-lamp-500 px-1 font-display text-[9px] font-bold text-night-950">
                     {unread > 99 ? '99+' : unread}
                   </span>
                 )}
               </button>
             );
           })}
+          {dms.map((d) => {
+            const unread = unreadCount(d.id, dmMessages[d.id]);
+            return (
+              <button
+                key={d.id}
+                onClick={() => openDmChat(d.id)}
+                className={`flex w-full items-center gap-2 rounded px-1 py-1.5 text-left transition-colors hover:bg-night-800 ${
+                  d.id === activeDmId ? 'bg-night-800' : ''
+                }`}
+              >
+                {avatar(d.peer.nick, d.id)}
+                <span className={`flex-1 truncate text-sm ${unread > 0 ? 'font-semibold text-paper-50' : 'text-paper-300'}`}>
+                  {d.peer.nick}
+                </span>
+                {d.last_message_at && (
+                  <span className="font-mono text-[10px] text-paper-500">{formatTime(d.last_message_at)}</span>
+                )}
+                {unread > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-lamp-500 px-1 font-display text-[9px] font-bold text-night-950">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </section>
+
+        <section>
+          <h2 className="plate mb-2">ARKADAŞLAR</h2>
+          {friends.length === 0 && <p className="text-sm text-paper-500">henüz arkadaş yok</p>}
+          {friends.map((f) => (
+            <div key={f.id} className="group flex items-center gap-2 rounded px-1 py-1.5 hover:bg-night-800">
+              {avatar(f.nick, f.id)}
+              <span className="flex-1 truncate text-sm text-paper-300">{f.nick}</span>
+              <button
+                onClick={() => void openDm(f.id)}
+                className="btn-ghost !py-0.5 !text-xs opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                mesaj
+              </button>
+              <button
+                onClick={() => setUnfriendNick(f.nick)}
+                className="rounded p-1 text-paper-700 opacity-0 transition-opacity hover:text-stamp-400 group-hover:opacity-100"
+                title="arkadaşlıktan çıkar"
+                aria-label={`${f.nick} arkadaşlıktan çıkar`}
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+        </section>
       </div>
 
-      <div className="mt-6 max-w-md">
-        <h2 className="mb-2 text-[11px] font-semibold tracking-wide text-neutral-500">ARKADAŞLAR</h2>
-        {friends.length === 0 && <p className="text-sm text-neutral-500">henüz arkadaş yok</p>}
-        {friends.map((f) => (
-          <div key={f.id} className="group flex items-center gap-2 rounded px-1 py-1.5 hover:bg-neutral-800/60">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-900/60 text-sm font-bold text-indigo-300">
-              {f.nick[0]?.toUpperCase()}
-            </div>
-            <span className="flex-1 truncate text-sm text-neutral-300">{f.nick}</span>
-            <button
-              onClick={() => void openDm(f.id)}
-              className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-700 group-hover:inline"
-            >
-              mesaj
-            </button>
-            <button
-              onClick={() => setUnfriendNick(f.nick)}
-              className="text-xs text-neutral-600 hover:text-red-400 group-hover:inline"
-              title="arkadaşlıktan çıkar"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
       {newGroup && <NewGroupModal onClose={() => setNewGroup(false)} />}
       {unfriendNick && (
         <ConfirmDialog

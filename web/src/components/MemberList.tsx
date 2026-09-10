@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { Ban, Crown, Star, UserPlus, X } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
+import { nickColor } from '../lib/format';
 import ConfirmDialog from './ConfirmDialog';
 import Modal from './Modal';
 import { toast } from './Toast';
@@ -16,8 +18,10 @@ export default function MemberList() {
   const [nick, setNick] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // hooks stay above the early return — community can disappear mid-session
+  const [pendingAct, setPendingAct] = useState<{ fn: () => Promise<void>; text: string } | null>(null);
 
-  if (!community) return <div className="w-56 shrink-0 border-l border-neutral-800/60 bg-neutral-900/40" />;
+  if (!community) return <div className="w-56 shrink-0 border-l border-night-700 bg-night-900/50" />;
 
   const myRole = community.role;
   const isOwner = myRole === 'owner';
@@ -37,7 +41,6 @@ export default function MemberList() {
     }
   };
 
-  const [pendingAct, setPendingAct] = useState<{ fn: () => Promise<void>; text: string } | null>(null);
   const runAct = async (fn: () => Promise<void>): Promise<void> => {
     try {
       await fn();
@@ -56,12 +59,17 @@ export default function MemberList() {
   };
 
   return (
-    <div className="flex w-56 shrink-0 flex-col border-l border-neutral-800/60 bg-neutral-900/40">
-      <div className="flex items-center justify-between border-b border-neutral-800/60 px-4 py-3 text-[11px] font-semibold tracking-wide text-neutral-500">
-        ÜYELER — {community.members.length}
+    <div className="flex w-56 shrink-0 flex-col border-l border-night-700 bg-night-900/50">
+      <div className="plate flex items-center justify-between border-b border-night-700 px-4 py-3">
+        MANİFO — {community.members.length}
         {isStaff && (
-          <button onClick={() => setAdding(true)} className="text-neutral-400 hover:text-neutral-200" title="üye ekle">
-            +
+          <button
+            onClick={() => setAdding(true)}
+            className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
+            title="üye ekle"
+            aria-label="üye ekle"
+          >
+            <UserPlus size={13} />
           </button>
         )}
       </div>
@@ -70,39 +78,43 @@ export default function MemberList() {
           const canActOn =
             isStaff && m.id !== me?.id && m.role !== 'owner' && !(myRole === 'admin' && m.role === 'admin');
           return (
-            <div key={m.id} className="group flex items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-800/60">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-900/60 text-xs font-bold text-indigo-300">
-                {m.nick[0]?.toUpperCase()}
+            <div key={m.id} className="group flex items-center gap-2 rounded px-2 py-1.5 hover:bg-night-800">
+              <div
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-brass-700/40 bg-night-800 font-display text-xs font-bold"
+                style={{ color: nickColor(m.nick) }}
+                aria-hidden
+              >
+                {m.nick[0]?.toLocaleUpperCase('tr-TR')}
               </div>
-              <span className={`flex-1 truncate text-sm ${m.id === me?.id ? 'text-neutral-200' : 'text-neutral-400'}`}>
+              <span className={`flex-1 truncate text-sm ${m.id === me?.id ? 'text-paper-100' : 'text-paper-300'}`}>
                 {m.nick}
               </span>
-              {m.role === 'owner' && <span className="text-[10px] text-amber-500">sahip</span>}
-              {m.role === 'admin' && <span className="text-[10px] text-sky-400">admin</span>}
+              {m.role === 'owner' && <Crown size={12} className="shrink-0 text-lamp-500" aria-label="sahip" />}
+              {m.role === 'admin' && <Star size={11} className="shrink-0 text-brass-400" aria-label="admin" />}
               {canActOn && (
-                <div className="hidden items-center gap-1 group-hover:flex">
+                <div className="hidden items-center gap-0.5 group-hover:flex">
                   {isOwner && (
                     <button
                       onClick={() => void act(() => setRole(community.id, m.id, m.role === 'member'))}
-                      className="text-[10px] text-neutral-500 hover:text-sky-400"
-                      title={m.role === 'member' ? 'admin yap' : 'admin kaldır'}
+                      className="rounded p-0.5 text-paper-500 transition-colors hover:text-brass-400"
+                      title={m.role === 'member' ? 'admin yap' : 'adminliği kaldır'}
                     >
-                      {m.role === 'member' ? '⭐' : '☆'}
+                      <Star size={11} />
                     </button>
                   )}
                   <button
                     onClick={() => void act(() => banMember(community.id, m.id), `${m.nick} atılıp BANLANSIN mı? Odalar yeni anahtara döner.`)}
-                    className="text-[10px] text-neutral-500 hover:text-red-400"
+                    className="rounded p-0.5 text-paper-500 transition-colors hover:text-stamp-400"
                     title="çıkar + banla"
                   >
-                    🚫
+                    <Ban size={11} />
                   </button>
                   <button
                     onClick={() => void act(() => removeMember(community.id, m.id), `${m.nick} çıkarılsın mı? Odalar yeni anahtara döner.`)}
-                    className="text-xs text-neutral-500 hover:text-red-400"
+                    className="rounded p-0.5 text-paper-500 transition-colors hover:text-stamp-400"
                     title="çıkar"
                   >
-                    ✕
+                    <X size={12} />
                   </button>
                 </div>
               )}
@@ -121,17 +133,13 @@ export default function MemberList() {
               onKeyDown={(e) => nick.trim() && e.key === 'Enter' && void submit()}
               placeholder="nick"
               maxLength={24}
-              className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-neutral-500"
+              className="input"
             />
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-paper-500">
               Kanal anahtarları onun anahtarına sarılır; sunucu yalnızca sarılı kutuları görür.
             </p>
-            {error && <p className="text-sm text-red-400">{error}</p>}
-            <button
-              onClick={() => void submit()}
-              disabled={busy || !nick.trim()}
-              className="rounded-md bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
-            >
+            {error && <p className="text-sm text-stamp-400">{error}</p>}
+            <button onClick={() => void submit()} disabled={busy || !nick.trim()} className="btn-lamp">
               {busy ? 'ekleniyor…' : 'ekle'}
             </button>
           </div>
