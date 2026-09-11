@@ -3,9 +3,10 @@ import { Check, Plus, X } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
-import { formatTime, nickColor } from '../lib/format';
+import { formatTime } from '../lib/format';
 import ConfirmDialog from './ConfirmDialog';
 import Modal from './Modal';
+import Avatar from './Avatar';
 
 function NewGroupModal({ onClose }: { onClose: () => void }) {
   const friends = useAppStore((s) => s.friends);
@@ -108,15 +109,7 @@ export default function DmHome() {
     }
   };
 
-  const avatar = (label: string, id: string): React.ReactNode => (
-    <div
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-brass-700/40 bg-night-800 font-display text-sm font-bold"
-      style={{ color: nickColor(label) }}
-      aria-hidden
-    >
-      {label[0]?.toLocaleUpperCase('tr-TR')}
-    </div>
-  );
+  const avatar = (label: string, id: string): React.ReactNode => <Avatar userId={id} label={label} size={32} />;
 
   return (
     <div className="h-full overflow-y-auto">

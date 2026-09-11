@@ -20,7 +20,7 @@ const clearKek = (): void => sessionStorage.removeItem(KEK_STORAGE_KEY);
 
 interface AuthState {
   status: 'loading' | 'anonymous' | 'authed';
-  user: { id: string; nick: string } | null;
+  user: { id: string; nick: string; avatar_updated_at: number | null } | null;
   publicKey: Uint8Array | null;
   privateKey: Uint8Array | null;
   kek: Uint8Array | null;
@@ -31,6 +31,9 @@ interface AuthState {
   recoverLogin: (nick: string, recoveryWords: string[], newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   restore: () => Promise<void>;
+  /** upload a processed avatar data URL; bumps the local timestamp. */
+  setAvatar: (dataUrl: string) => Promise<void>;
+  clearAvatar: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -74,7 +77,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     saveKek(kek);
     set({
       status: 'authed',
-      user: res.user,
+      user: { id: res.user.id, nick: res.user.nick, avatar_updated_at: null },
       publicKey: identity.publicKey,
       privateKey: identity.privateKey,
       kek,
@@ -101,7 +104,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     saveKek(kek);
     set({
       status: 'authed',
-      user: { id: res.user.id, nick: res.user.nick },
+      user: {
+        id: res.user.id,
+        nick: res.user.nick,
+        avatar_updated_at: res.user.avatar_updated_at ?? null,
+      },
       publicKey,
       privateKey,
       kek,
@@ -183,7 +190,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     saveKek(next.kek);
     set({
       status: 'authed',
-      user: { id: res.user.id, nick: res.user.nick },
+      user: {
+        id: res.user.id,
+        nick: res.user.nick,
+        avatar_updated_at: res.user.avatar_updated_at ?? null,
+      },
       publicKey: unb64(res.user.public_key),
       privateKey,
       kek: next.kek,
@@ -208,7 +219,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const privateKey = openIdentityBlob(res.user.key_blob, kek);
       set({
         status: 'authed',
-        user: { id: res.user.id, nick: res.user.nick },
+        user: {
+          id: res.user.id,
+          nick: res.user.nick,
+          avatar_updated_at: res.user.avatar_updated_at ?? null,
+        },
         publicKey: unb64(res.user.public_key),
         privateKey,
         kek,
@@ -217,5 +232,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       clearKek();
       set({ status: 'anonymous' });
     }
+  },
+
+  setAvatar: async (dataUrl) => {
+    await api('/users/me/avatar', { method: 'PATCH', body: { data_url: dataUrl } });
+    set((s) => (s.user ? { user: { ...s.user, avatar_updated_at: Date.now() } } : s));
+  },
+
+  clearAvatar: async () => {
+    await api('/users/me/avatar', { method: 'PATCH', body: { clear: true } });
+    set((s) => (s.user ? { user: { ...s.user, avatar_updated_at: null } } : s));
   },
 }));

@@ -3,6 +3,8 @@ export interface AuthedUser {
   nick: string;
   public_key: string;
   key_blob: string;
+  /** unix ms of the last avatar upload; null when none. drives cache busting */
+  avatar_updated_at?: number | null;
 }
 
 export interface BootstrapCommunity {

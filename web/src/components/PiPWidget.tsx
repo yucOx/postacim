@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RoomContext, useTracks, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
-import { Maximize2, PhoneOff, PictureInPicture } from 'lucide-react';
+import { Maximize2, PhoneOff, PictureInPicture, Pin } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { nickFor } from '../lib/nick';
@@ -135,6 +135,54 @@ export default function PiPWidget(): React.ReactNode {
     });
   }, []);
 
+  // Keep the doc PiP window on top while it's open. Browsers don't expose an
+  // alwaysOnTop flag for documentPictureInPicture, so we re-focus it on a short
+  // interval and whenever the main window itself takes focus. The user can
+  // close it from its own chrome to opt out.
+  const keepOnTopRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!docPipSupported) return;
+    const tick = (): void => {
+      const win = docPipRef.current;
+      if (!win) return;
+      try {
+        win.focus?.();
+      } catch {
+        // window already gone
+      }
+    };
+    keepOnTopRef.current = window.setInterval(tick, 1500);
+    const onMainFocus = (): void => tick();
+    window.addEventListener('focus', onMainFocus);
+    return () => {
+      if (keepOnTopRef.current !== null) window.clearInterval(keepOnTopRef.current);
+      window.removeEventListener('focus', onMainFocus);
+    };
+  }, [docPipSupported]);
+
+  const [videoPipOn, setVideoPipOn] = useState<boolean>(false);
+  const toggleVideoPip = useCallback(async (): Promise<void> => {
+    // pick the best remote <video> from LiveKit's ParticipantTile
+    const v = document.querySelector('video');
+    if (!v) return;
+    try {
+      if (document.pictureInPictureElement === v) {
+        await document.exitPictureInPicture();
+        setVideoPipOn(false);
+      } else if ((v as HTMLVideoElement & { requestPictureInPicture?: () => Promise<PictureInPictureWindow> }).requestPictureInPicture) {
+        await (v as HTMLVideoElement & { requestPictureInPicture: () => Promise<PictureInPictureWindow> }).requestPictureInPicture();
+        setVideoPipOn(true);
+      }
+    } catch {
+      // user dismissed or browser refused
+    }
+  }, []);
+  useEffect(() => {
+    const onLeave = (): void => setVideoPipOn(false);
+    document.addEventListener('leavepictureinpicture', onLeave);
+    return () => document.removeEventListener('leavepictureinpicture', onLeave);
+  }, []);
+
   if (!callState) return null;
   const peerNick = dms.find((d) => d.id === callState.channelId)?.peer.nick ?? '?';
 
@@ -164,6 +212,16 @@ export default function PiPWidget(): React.ReactNode {
             <PictureInPicture size={14} />
           </button>
         )}
+        <button
+          onClick={() => void toggleVideoPip()}
+          className={`rounded p-1 transition-colors hover:bg-night-800 ${
+            videoPipOn ? 'text-lamp-400' : 'text-paper-500 hover:text-paper-100'
+          }`}
+          title="tarayıcı PiP — üstte tutar"
+          aria-label="tarayıcı PiP"
+        >
+          <Pin size={14} />
+        </button>
         <button
           onClick={() => setPip(false)}
           className="rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"

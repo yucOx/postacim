@@ -38,6 +38,18 @@ interface LoginBody {
 
 const publicUser = (id: string, nick: string) => ({ id, nick });
 
+// Magic-byte sniff — the client picks the format, but the server is the gate.
+function detectImageMime(buf: Buffer): string {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (
+    buf.length >= 12 &&
+    buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+    buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
+  ) return 'image/webp';
+  return 'application/octet-stream';
+}
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // Salt for client-side KDF. 404 on unknown nick: existence is rate-limited but not secret.
   app.get(
@@ -129,9 +141,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // Session restore: lets a reloaded tab re-fetch the blob without a password prompt.
   app.get('/auth/me', async (req) => {
     const row = db
-      .prepare('SELECT id, nick, public_key, key_blob FROM users WHERE id = ?')
-      .get(req.user.id) as { id: string; nick: string; public_key: string; key_blob: string };
-    return { user: { ...publicUser(row.id, row.nick), public_key: row.public_key, key_blob: row.key_blob } };
+      .prepare('SELECT id, nick, public_key, key_blob, avatar_updated_at FROM users WHERE id = ?')
+      .get(req.user.id) as { id: string; nick: string; public_key: string; key_blob: string; avatar_updated_at: number | null };
+    return {
+      user: {
+        ...publicUser(row.id, row.nick),
+        public_key: row.public_key,
+        key_blob: row.key_blob,
+        avatar_updated_at: row.avatar_updated_at ?? null,
+      },
+    };
   });
 
   app.post('/auth/logout', async (req, reply) => {
@@ -187,6 +206,70 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       });
       tx();
       reply.clearCookie(SESSION_COOKIE, { path: '/' });
+      return reply.code(204).send();
+    },
+  );
+
+  // --- avatar: small JPEG/PNG/WebP blob, capped at 16KB on the wire ---
+
+  // Public avatar fetch. `?v=<updatedAt>` is the cache key — clients pin the
+  // URL on the timestamp so a re-upload invalidates with no server-side cache
+  // coordination. Returns 204 when the user has no avatar set.
+  app.get('/users/:id/avatar', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const row = db
+      .prepare('SELECT avatar_data, avatar_updated_at FROM users WHERE id = ?')
+      .get(id) as { avatar_data: Buffer | null; avatar_updated_at: number | null } | undefined;
+    if (!row || !row.avatar_data || !row.avatar_updated_at) {
+      return reply.code(204).send();
+    }
+    reply.header('content-type', detectImageMime(row.avatar_data));
+    reply.header('cache-control', 'public, max-age=3600');
+    return reply.send(row.avatar_data);
+  });
+
+  // Upload / replace. Body is a raw data URL (`data:image/jpeg;base64,...`)
+  // with a hard size cap. We re-validate the magic bytes server-side too —
+  // never trust the client-declared type.
+  app.patch(
+    '/users/me/avatar',
+    {
+      config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            data_url: { type: 'string', minLength: 64, maxLength: 24_000 },
+            clear: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const body = req.body as { data_url?: string; clear?: boolean };
+      if (body.clear) {
+        db.prepare('UPDATE users SET avatar_data = NULL, avatar_updated_at = NULL WHERE id = ?').run(
+          req.user.id,
+        );
+        return reply.code(204).send();
+      }
+      if (!body.data_url) return reply.code(400).send({ error: 'data_url gerekli' });
+      const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(body.data_url);
+      if (!m) return reply.code(400).send({ error: 'geçersiz resim' });
+      const buf = Buffer.from(m[2]!, 'base64');
+      // hard cap: rejects fat uploads even if the client-side resize was bypassed
+      if (buf.length === 0 || buf.length > 16_000) {
+        return reply.code(413).send({ error: 'avatar çok büyük (max 16KB)' });
+      }
+      if (!detectImageMime(buf).startsWith('image/')) {
+        return reply.code(400).send({ error: 'geçersiz resim baytları' });
+      }
+      db.prepare('UPDATE users SET avatar_data = ?, avatar_updated_at = ? WHERE id = ?').run(
+        buf,
+        Date.now(),
+        req.user.id,
+      );
       return reply.code(204).send();
     },
   );

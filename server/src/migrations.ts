@@ -207,4 +207,11 @@ ALTER TABLE users ADD COLUMN recovery_salt TEXT;
 ALTER TABLE users ADD COLUMN recovery_blob TEXT;
 ALTER TABLE users ADD COLUMN recovery_verifier TEXT;
 `,
+  // v10 — low-res avatar: client downsizes to 64x64 JPEG q=0.5 (~3-8KB) before
+  // upload. Server stores the raw blob and serves via /users/:id/avatar with a
+  // cache-busting ?v=updatedAt. Keeping it in-row keeps the deploy self-contained.
+  `
+ALTER TABLE users ADD COLUMN avatar_data BLOB;
+ALTER TABLE users ADD COLUMN avatar_updated_at INTEGER;
+`,
 ];

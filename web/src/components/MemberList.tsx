@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Ban, Crown, Star, UserPlus, X } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
-import { nickColor } from '../lib/format';
 import ConfirmDialog from './ConfirmDialog';
 import Modal from './Modal';
 import { toast } from './Toast';
+import Avatar from './Avatar';
 
 export default function MemberList() {
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
@@ -79,13 +79,7 @@ export default function MemberList() {
             isStaff && m.id !== me?.id && m.role !== 'owner' && !(myRole === 'admin' && m.role === 'admin');
           return (
             <div key={m.id} className="group flex items-center gap-2 rounded px-2 py-1.5 hover:bg-night-800">
-              <div
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-brass-700/40 bg-night-800 font-display text-xs font-bold"
-                style={{ color: nickColor(m.nick) }}
-                aria-hidden
-              >
-                {m.nick[0]?.toLocaleUpperCase('tr-TR')}
-              </div>
+              <Avatar userId={m.id} label={m.nick} size={28} />
               <span className={`flex-1 truncate text-sm ${m.id === me?.id ? 'text-paper-100' : 'text-paper-300'}`}>
                 {m.nick}
               </span>

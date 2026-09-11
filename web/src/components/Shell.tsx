@@ -15,6 +15,8 @@ import CallView from './CallView';
 import PiPWidget from './PiPWidget';
 import Modal from './Modal';
 import { PigeonMark } from './Brand';
+import Avatar from './Avatar';
+import ProfileModal from './ProfileModal';
 import { generateMnemonic, quizPositions } from '../crypto/bip39';
 import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
@@ -79,6 +81,7 @@ export default function Shell() {
   const logout = useAuthStore((s) => s.logout);
   const [pwModal, setPwModal] = useState(false);
   const [recModal, setRecModal] = useState(false);
+  const [profileModal, setProfileModal] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const loaded = useAppStore((s) => s.loaded);
   const loadBootstrap = useAppStore((s) => s.loadBootstrap);
@@ -141,7 +144,15 @@ export default function Shell() {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5 text-sm">
-          <span className="hidden text-paper-300 sm:inline">{user?.nick}</span>
+          <button
+            onClick={() => setProfileModal(true)}
+            className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-paper-300 transition-colors hover:bg-night-800 hover:text-paper-100"
+            title="profil"
+            aria-label="profil"
+          >
+            {user && <Avatar userId={user.id} label={user.nick} size={22} srcOverride={user.avatar_updated_at ? undefined : null} />}
+            <span className="hidden sm:inline">{user?.nick}</span>
+          </button>
           <button
             onClick={() => setRecModal(true)}
             className="btn-ghost !px-2 !py-1 !text-xs"
@@ -209,6 +220,7 @@ export default function Shell() {
 
       {pwModal && <PasswordModal onClose={() => setPwModal(false)} />}
       {recModal && <RecoveryModal onClose={() => setRecModal(false)} />}
+      {profileModal && <ProfileModal onClose={() => setProfileModal(false)} />}
       {isDmCall && !pip && <CallView />}
       {isDmCall && pip && <PiPWidget />}
       <IncomingCall />
