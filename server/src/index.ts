@@ -19,8 +19,10 @@ import { gdmRoutes } from './routes/gdms.js';
 import { attachWs } from './ws/index.js';
 
 export const app = Fastify({
-  // we sit behind nginx, which sets X-Forwarded-For — without this every
-  // caller shares one IP and per-IP rate limits collapse into a global bucket
+  // we sit behind nginx, which OVERWRITES X-Forwarded-For with $remote_addr
+  // (web/nginx.conf) — never append; a preserved client XFF + leftmost-wins
+  // would let a forged header mint fresh rate-limit buckets. Without trusting
+  // the proxy every caller shares one IP and per-IP limits collapse.
   trustProxy: true,
   logger: {
     level: 'info',
