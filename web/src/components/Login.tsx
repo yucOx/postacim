@@ -29,15 +29,18 @@ export default function Login() {
   const login = useAuthStore((s) => s.login);
   const register = useAuthStore((s) => s.register);
 
-  // reload with a live session: password-only card, the nick is already known
-  if (status === 'needs_password') return <ReauthStep nick={sessionNick} />;
-
   useEffect(() => {
     if (!ack) return;
     setAckReady(false);
     const t = setTimeout(() => setAckReady(true), 3000);
     return () => clearTimeout(t);
   }, [ack]);
+
+  // reload with a live session: password-only card, the nick is already known.
+  // MUST sit below the hooks — an early return before useEffect makes the
+  // hook count change across renders (needs_password → anonymous) and React
+  // throws into a blank screen.
+  if (status === 'needs_password') return <ReauthStep nick={sessionNick} />;
 
   const pwScore = passwordScore(password);
   const canRegister =
