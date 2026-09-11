@@ -251,11 +251,52 @@ describe('BIP-39 recovery', () => {
     expect(relogJson.user.public_key).toBe(b64(id.publicKey));
   });
 
-  it('params 404 for accounts without a phrase', async () => {
+  it('recovery-params returns a pseudo-salt for accounts without a phrase; verify fails uniformly', async () => {
     const r = await fetch(`${srv.baseUrl}/auth/recovery-params?nick=${alice.nick}`, {
       headers: { 'x-forwarded-for': '10.30.4.1' },
     });
-    expect(r.status).toBe(404);
+    expect(r.status).toBe(200);
+    const { recovery_salt } = (await r.json()) as { recovery_salt: string };
+    expect(recovery_salt).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('nick enumeration: unknown nick ≡ wrong password ≡ no-phrase, byte for byte', async () => {
+    const ip = '10.31.9.';
+    const login = async (nick: string): Promise<{ status: number; body: string }> => {
+      const r = await fetch(`${srv.baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': `${ip}1` },
+        body: JSON.stringify({ nick, auth_material: b64(new Uint8Array(32)) }),
+      });
+      return { status: r.status, body: JSON.stringify(await r.json()) };
+    };
+    const kdfSalt = async (nick: string): Promise<number> => {
+      const r = await fetch(`${srv.baseUrl}/auth/kdf-params?nick=${encodeURIComponent(nick)}`, {
+        headers: { 'x-forwarded-for': `${ip}2` },
+      });
+      return r.status;
+    };
+    // wrong password on a real account and unknown nick: identical status + body
+    const real = await login(alice.nick);
+    const ghost = await login('yokboylebirnick' + Math.floor(Math.random() * 1e6));
+    expect(ghost.status).toBe(real.status);
+    expect(ghost.body).toBe(real.body);
+    // kdf-params never 404s on shape-valid nicks, real or not
+    expect(await kdfSalt(alice.nick)).toBe(200);
+    expect(await kdfSalt('yokboylebirnick' + Math.floor(Math.random() * 1e6))).toBe(200);
+    // recovery: unknown nick and no-phrase account fail with the same body
+    const rec = async (nick: string): Promise<{ status: number; body: string }> => {
+      const r = await fetch(`${srv.baseUrl}/auth/recover/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': `${ip}3` },
+        body: JSON.stringify({ nick, recovery_auth_material: b64(new Uint8Array(32)) }),
+      });
+      return { status: r.status, body: JSON.stringify(await r.json()) };
+    };
+    const noPhrase = await rec(alice.nick);
+    const unknown = await rec('yokboylebirnick' + Math.floor(Math.random() * 1e6));
+    expect(unknown.status).toBe(noPhrase.status);
+    expect(unknown.body).toBe(noPhrase.body);
   });
 
   it('late setup attaches a phrase to a logged-in account', async () => {

@@ -163,11 +163,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   recoverLogin: async (nick, recoveryWords, newPassword) => {
     await sodiumReady;
     if (recoveryWords.length !== 12) throw new Error('ifade 12 kelime olmalı');
+    // no local 404 branch: the server hands a pseudo-salt to unknown nicks and
+    // fails at verify, so wrong nick / no phrase / wrong phrase are identical
     const params = await api<{ recovery_salt: string }>(
       `/auth/recovery-params?nick=${encodeURIComponent(nick)}`,
-    ).catch(() => {
-      throw new ApiError(404, 'bu hesapta kurtarma ifadesi yok');
-    });
+    );
     const rec = await deriveRecoveryKeys(recoveryWords, params.recovery_salt);
     const proof = b64(rec.authMaterial);
     const unlock = await api<{ recovery_blob: string; public_key: string }>(
