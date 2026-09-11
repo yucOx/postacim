@@ -6,6 +6,10 @@
 <title>postacim — Güvenlik Mimarisi Şeması</title>
 <meta name="description" content="postacim teknik güvenlik mimarisi: anahtar yaşam döngüsü, ratchet, anahtar defteri, sunucunun gördükleri ve göremedikleri.">
 <style>
+  @font-face{font-family:"Barlow Condensed";src:url("fonts/barlow-condensed-600.woff2") format("woff2");font-weight:600;font-display:swap}
+  @font-face{font-family:"Barlow Condensed";src:url("fonts/barlow-condensed-700.woff2") format("woff2");font-weight:700;font-display:swap}
+  @font-face{font-family:"Public Sans Variable";src:url("fonts/public-sans-var.woff2") format("woff2");font-weight:100 900;font-display:swap}
+  @font-face{font-family:"JetBrains Mono Variable";src:url("fonts/jetbrains-mono-var.woff2") format("woff2");font-weight:100 800;font-display:swap}
   :root{
     --night-950:#0b0e13; --night-900:#10151c; --night-850:#131922;
     --night-800:#161d27; --night-700:#202935;
@@ -14,112 +18,210 @@
     --paper-700:#6e6757; --paper-500:#9c927d; --paper-300:#cdc3ac; --paper-100:#e4dbc6;
     --stamp-500:#c24141; --stamp-100:#3a1512;
   }
-  *{box-sizing:border-box}
+  *{box-sizing:border-box;overflow-wrap:anywhere}
   body{margin:0;background:var(--night-950);color:var(--paper-100);
-    font:15px/1.55 "Public Sans Variable",system-ui,"Segoe UI",Roboto,sans-serif}
-  .wrap{max-width:1120px;margin:0 auto;padding:40px 20px 72px}
-  h1{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-size:clamp(24px,5.5vw,30px);
-    letter-spacing:.12em;text-transform:uppercase;margin:0 0 6px}
-  h1 span{color:var(--lamp-500)}
-  .sub{color:var(--paper-500);font-size:13px;margin:0 0 30px}
-  h2{font-size:14px;letter-spacing:.16em;text-transform:uppercase;color:var(--lamp-500);
-    border-bottom:1px solid var(--night-700);padding-bottom:8px;margin:38px 0 16px}
-  h2 small{display:block;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--paper-500);font-weight:400;margin-top:4px}
-  h3{font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;margin:0 0 12px}
+    font:15px/1.6 "Public Sans Variable",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  ::selection{background:var(--lamp-600);color:var(--night-950)}
+  :focus-visible{outline:2px solid var(--lamp-500);outline-offset:2px}
+  @media (min-width:900px){ html{scrollbar-width:thin;scrollbar-color:var(--night-700) var(--night-950)} }
+  .wrap{max-width:1060px;margin:0 auto;padding:48px 22px 64px}
+  h1{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:clamp(24px,5.5vw,32px);
+    letter-spacing:.1em;text-transform:uppercase;margin:14px 0 6px}
+  h1 em{font-style:normal;color:var(--lamp-500)}
+  .sub{color:var(--paper-500);font-size:13px;margin:0 0 34px}
+  h2{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:19px;
+    text-transform:uppercase;letter-spacing:.1em;color:var(--lamp-500);margin:44px 0 4px}
+  .subhead{color:var(--paper-500);font-size:13.5px;margin:0 0 18px}
+  .ic{width:22px;height:22px;flex:none}
+  .ic.stroke,.ic.stroke *{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  code{background:var(--night-800);border:1px solid var(--night-700);border-radius:5px;padding:1px 6px;font-size:12.5px;color:var(--lamp-300);
+    font-family:"JetBrains Mono Variable",ui-monospace,monospace}
+  .perf{border:0;border-top:1px dashed var(--brass-700);margin:36px 0}
   .lanes{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  .lane{border:1px solid var(--night-700);border-radius:14px;background:var(--night-900);padding:16px}
+  @media (max-width:720px){ .lanes{grid-template-columns:1fr} }
+  .lane{border:1px solid;border-radius:14px;background:var(--night-900);padding:16px 18px}
   .lane.client{border-color:var(--lamp-600)}
   .lane.server{border-color:var(--stamp-500)}
-  .lane.client h3{color:var(--lamp-500)} .lane.server h3{color:var(--stamp-500)}
-  .card{border:1px solid var(--night-700);border-radius:10px;background:var(--night-850);
-    padding:10px 12px;margin-bottom:9px;font-size:13px}
-  .card b{color:var(--paper-100)}
-  .card small{display:block;color:var(--paper-500);font-size:12px;margin-top:2px}
-  .card.key{border-color:var(--lamp-600);background:var(--lamp-100)}
-  .card.key small{color:var(--paper-300)}
-  .card.srv{border-color:var(--stamp-500);background:var(--stamp-100)}
-  .card.srv small{color:var(--paper-300)}
-  .card.opt{border-style:dashed;border-color:var(--brass-500)}
+  .lane header{display:flex;align-items:center;gap:10px;margin-bottom:14px;
+    font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:13px;
+    letter-spacing:.16em;text-transform:uppercase}
+  .lane.client header,.lane.client .ic{color:var(--lamp-500)}
+  .lane.server header,.lane.server .ic{color:var(--stamp-500)}
+  .mrow{display:grid;grid-template-columns:118px 1fr;gap:10px;padding:8px 0;font-size:13px;
+    border-top:1px dashed var(--brass-700);align-items:baseline}
+  .mrow:first-of-type{border-top:0}
+  .mrow b{font-family:"JetBrains Mono Variable",ui-monospace,monospace;font-weight:500;
+    font-size:12px;color:var(--lamp-500)}
+  .mrow span{color:var(--paper-500)}
+  .mrow span b{font:inherit;color:var(--paper-300)}
   .legend{color:var(--paper-500);font-size:12px;margin:10px 0 0}
-  .duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
-  .duo .col{border-radius:12px;padding:16px 18px;font-size:13.5px}
-  .duo .see{background:var(--stamp-100);border:1px solid var(--stamp-500)}
-  .duo .blind{background:var(--lamp-100);border:1px solid var(--lamp-600)}
-  .duo .see h3{color:var(--stamp-500)} .duo .blind h3{color:var(--lamp-500)}
-  .duo ul{margin:0;padding-left:18px} .duo li{margin-bottom:5px}
-  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
-  .step{background:var(--night-850);border:1px solid var(--night-700);border-radius:10px;
-    padding:12px 11px;font-size:12.5px}
-  .step b{display:block;color:var(--lamp-500);font-size:11px;letter-spacing:.1em;
-    text-transform:uppercase;margin-bottom:4px}
-  .trio{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-  .trio .card{margin:0}
-  code{background:var(--night-800);border:1px solid var(--night-700);border-radius:5px;
-    padding:1px 6px;font-size:12.5px;color:var(--lamp-300);
-    font-family:"JetBrains Mono Variable",ui-monospace,monospace}
-  footer{margin-top:44px;border-top:1px solid var(--night-700);padding-top:14px;color:var(--paper-500);
+  .flow{border:1px solid var(--brass-600);border-radius:14px;background:var(--night-900);
+    padding:18px 16px 10px;margin:20px 0 12px}
+  .flow svg{display:block;width:100%;height:auto}
+  /* mobilde şema okunur ölçekte kalır — yana kaydırılır */
+  .flow .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .flow .scroll svg{min-width:700px}
+  .flow .hint{display:none;color:var(--paper-700);font-size:11.5px;margin:8px 4px 0}
+  @media (max-width:760px){ .flow .hint{display:block} }
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}
+  .step{background:var(--night-850);border:1px solid var(--night-700);border-radius:10px;padding:11px 12px;font-size:12.5px;color:var(--paper-500)}
+  .step b{display:block;font-family:"JetBrains Mono Variable",ui-monospace,monospace;color:var(--lamp-500);font-size:11px;letter-spacing:.08em;margin-bottom:4px}
+  .step span{color:var(--paper-300)}
+  .duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:20px 0}
+  .duo .col{border-radius:12px;padding:16px 18px;font-size:13.5px;border:1px solid}
+  .duo .col header{display:flex;align-items:center;gap:10px;margin-bottom:10px;
+    font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;font-size:12.5px;
+    letter-spacing:.16em;text-transform:uppercase}
+  .duo ul{margin:0;padding:0;list-style:none}
+  .duo li{padding:6px 0;border-top:1px dashed var(--brass-700);color:var(--paper-300)}
+  .duo li:first-child{border-top:0}
+  .duo li strong{color:inherit;font-weight:600}
+  .duo .see{background:var(--stamp-100);border-color:var(--stamp-500)}
+  .duo .see header,.duo .see .ic{color:var(--stamp-500)}
+  .duo .blind{background:var(--lamp-100);border-color:var(--lamp-600)}
+  .duo .blind header,.duo .blind .ic{color:var(--lamp-500)}
+  .rows{border:1px solid var(--brass-600);border-radius:12px;background:var(--night-900);overflow:hidden;margin:20px 0}
+  .rows .li{display:grid;grid-template-columns:34px 100px 1fr;gap:12px;padding:13px 16px;align-items:start;font-size:13.5px}
+  .rows .li + .li{border-top:1px dashed var(--brass-700)}
+  .rows b{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;text-transform:uppercase;
+    letter-spacing:.1em;font-size:12.5px;color:var(--lamp-500);padding-top:1px}
+  .rows p{margin:0;color:var(--paper-500);font-size:13px}
+  .rows p strong{color:var(--paper-300);font-weight:600}
+  .rows .ic{margin-top:1px;color:var(--brass-400)}
+  @media (max-width:560px){ .rows .li{grid-template-columns:34px 1fr} .rows b{grid-column:2} .rows p{grid-column:2} }
+  footer{margin-top:44px;padding-top:14px;border-top:1px dashed var(--brass-700);color:var(--paper-500);
     font-size:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-  a{color:var(--lamp-500);text-decoration:none} a:hover{text-decoration:underline}
-  @media (max-width:720px){ .lanes{grid-template-columns:1fr} }
-  @media print{ body{background:#fff;color:#111} .card,.duo .col,.lane{background:#fff} h1,h2,h3,.step b,code{color:#111} }
+  a{color:var(--lamp-500);text-decoration:underline;text-decoration-color:var(--brass-700);text-underline-offset:3px}
+  a:hover{text-decoration-color:var(--lamp-500)}
+  .hero{text-align:center}
+  .pigeon{width:76px;height:52px;margin:0 auto;color:var(--lamp-500)}
+  @media print{ body{background:#fff;color:#111} .lane,.duo .col,.flow,.step,.rows{background:#fff} h1,h2,.lane header,.duo header{color:#111} a{color:#333} }
 </style>
 </head>
 <body>
 <main class="wrap">
 
-  <h1>POSTACIM <span>·</span> GÜVENLİK MİMARİSİ</h1>
-  <p class="sub">uçtan uca şifreli mesajlaşma · sunucu kör relay · her iddia kodla doğrulanabilir · 12 Eylül 2026</p>
+  <header class="hero">
+    <svg class="pigeon" viewBox="0 0 76 52" aria-hidden="true">
+      <path fill="currentColor" d="M8 40 C14 22 30 10 46 9 c8 -.6 14 3 17 8 l6 3.5 -6 3.5 c.5 8 -3 14 -8 16 l-6 12 -8 -13 c-14 3 -29 4 -43 1Z"/>
+      <circle cx="53" cy="17" r="2.6" fill="#0b0e13"/>
+    </svg>
+    <h1>Güvenlik <em>mimari</em> şeması</h1>
+    <p class="sub">uçtan uca şifreli mesajlaşma · sunucu kör relay, her iddia kodla doğrulanabilir · 12 Eylül 2026</p>
+  </header>
 
-  <h2>1 · Anahtar yaşam döngüsü <small>sol sütun cihazın, sağ sütun sunucun — aradaki tek şey sarmalar</small></h2>
+  <h2>Anahtar yaşam döngüsü</h2>
+  <p class="subhead">sol lane cihazın, sağ lane sunucun — aradaki tek şey sarmalar</p>
   <div class="lanes">
     <div class="lane client">
-      <h3>🖥️ İstemci — tüm kripto burada</h3>
-      <div class="card key"><b>Şifre</b><small>asla tarayıcıyı terk etmez</small></div>
-      <div class="card"><b>Argon2id · 64 MiB · t=3</b><small>64B çıktı ikiye bölünür (aşağıda)</small></div>
-      <div class="card"><b>authMaterial (32B)</b><small>giriş kanıtı — sunucuya giden tek türev</small></div>
-      <div class="card key"><b>KEK (32B)</b><small>yalnız bellek — hiçbir depoya yazılmaz, F5'te ölür</small></div>
-      <div class="card key"><b>X25519 kimlik çifti</b><small>KEK, sunucudaki key_blob'u açar</small></div>
-      <div class="card key"><b>Kanal/DM/GDM anahtarı + ratchet zinciri</b><small>cihazda üretilir · crypto_box_seal ile her üyeye sarılır · her mesaj msg_key_i = H(root_i) ile kapanır</small></div>
-      <div class="card opt"><b>Opsiyonel yollar</b><small>BIP-39 kurtarma ifadesi (2. sarma) · passkey/WebAuthn PRF cihaz kilidi (F5 şifresiz)</small></div>
+      <header>
+        <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="15" height="10" rx="1.5"/><path d="M6.5 9.5h5"/><path d="M18 9h3v8h-3"/><path d="M5 18h11"/></svg>
+        İstemci: tüm kripto burada
+      </header>
+      <div class="mrow"><b>şifre</b><span>asla tarayıcıyı terk etmez</span></div>
+      <div class="mrow"><b>argon2id</b><span>64 MiB · t=3 · 64B çıktı ikiye bölünür</span></div>
+      <div class="mrow"><b>authMaterial</b><span>32B giriş kanıtı — sunucuya giden tek türev</span></div>
+      <div class="mrow"><b>KEK</b><span>32B · yalnız bellek · hiçbir depoya yazılmaz, F5'te ölür</span></div>
+      <div class="mrow"><b>X25519 çifti</b><span>KEK, sunucudaki <b>key_blob</b>'u açar</span></div>
+      <div class="mrow"><b>kanal anahtarı</b><span>cihazda üretilir · <b>crypto_box_seal</b> ile her üyeye sarılır</span></div>
+      <div class="mrow"><b>ratchet</b><span>her mesaj <b>msg_key_i = H(root_i)</b> ile kapanır · zincir epoch anahtarından türetilir</span></div>
+      <div class="mrow"><b>opsiyonel</b><span>BIP-39 kurtarma ifadesi (2. sarma) · passkey/WebAuthn PRF cihaz kilidi (F5 şifresiz)</span></div>
     </div>
     <div class="lane server">
-      <h3>☁️ Sunucu — kör relay</h3>
-      <div class="card srv"><b>Argon2id verifier</b><small>authMaterial'in hash'i — düz malzeme asla gelmez</small></div>
-      <div class="card srv"><b>Session: SHA-256(token)</b><small>7 gün rolling · httpOnly+Strict çerez · kademeli login bloğu (1→15 dk)</small></div>
-      <div class="card srv"><b>Mesaj tabloları</b><small>yalnız nonce + ciphertext + key_version + client_id — okunabilir içerik yok</small></div>
-      <div class="card srv"><b>Anahtar defteri — key_log</b><small>public key'ler append-only hash zincirinde · tek yazı yolu INSERT · istemci boot'ta zinciri doğrular, kendi kaydını kontrol eder</small></div>
-      <div class="card srv"><b>LiveKit SFU (self-hosted)</b><small>SFrame E2EE relay — medya içerik kapalı</small></div>
-      <div class="card srv"><b>Çevre savunma</b><small>CSP + Trusted Types · log'ta query/IP yok · WS auth timeout (4004) · rate limit kovaları</small></div>
+      <header>
+        <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/><path d="M8 7.5h.01M8 16.5h.01"/></svg>
+        Sunucu: kör relay
+      </header>
+      <div class="mrow"><b>verifier</b><span>authMaterial'in argon2id hash'i — düz malzeme asla gelmez</span></div>
+      <div class="mrow"><b>session</b><span>SHA-256(token) · 7 gün rolling · httpOnly+Strict çerez · kademeli login bloğu (1→15 dk)</span></div>
+      <div class="mrow"><b>mesajlar</b><span>yalnız nonce + ciphertext + key_version + client_id — okunabilir içerik yok</span></div>
+      <div class="mrow"><b>key_log</b><span>anahtar defteri · append-only hash zinciri · tek yazı yolu INSERT</span></div>
+      <div class="mrow"><b>livekit</b><span>self-hosted SFU · SFrame E2EE relay — medya içerik kapalı</span></div>
+      <div class="mrow"><b>çevre</b><span>CSP + Trusted Types · log'ta query/IP yok · WS auth timeout (4004) · rate limit kovaları</span></div>
     </div>
   </div>
-  <p class="legend">Amber = anahtar/istemci kaynağı · damga kırmızısı = sunucu tarafı · kesikli = opsiyonel</p>
+  <p class="legend">Amber = anahtar/istemci kaynağı · damga kırmızısı = sunucu tarafı</p>
 
-  <h2>2 · Bir mesajın yolculuğu <small>mühürden ekrana altı adım</small></h2>
+  <hr class="perf">
+
+  <h2>Bir mesajın yolculuğu</h2>
+  <p class="subhead">mühürden ekrana — şema ve adımlar</p>
+  <figure class="flow" style="margin-inline:0">
+    <div class="scroll">
+    <svg viewBox="0 0 980 300" role="img" aria-label="Mesaj yolculuğu şeması: gönderici cihazı mesajı ratchet kalıbıyla mühürler ve boyut bucket'ına yuvarlar, sunucu saklayıp dağıtır, alıcı zinciri yeniden örerek açar">
+      <rect x="20" y="60" width="230" height="180" rx="14" fill="#131922" stroke="#c9862b" stroke-width="1.5"/>
+      <text x="135" y="88" text-anchor="middle" fill="#e8a33d" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="15" letter-spacing="2">GÖNDERİCİ CİHAZI</text>
+      <rect x="48" y="108" width="60" height="42" rx="4" fill="none" stroke="#a88454" stroke-width="1.4"/>
+      <path d="M48 112 l30 22 30-22" fill="none" stroke="#a88454" stroke-width="1.4"/>
+      <text x="128" y="126" fill="#cdc3ac" font-family="Public Sans, sans-serif" font-size="11.5">kalıp: msg_key_i</text>
+      <text x="128" y="142" fill="#9c927d" font-family="Public Sans, sans-serif" font-size="10.5">ratchet zinciri</text>
+      <path d="M48 176 h174" stroke="#6e5430" stroke-width="1" stroke-dasharray="4 4"/>
+      <text x="48" y="200" fill="#cdc3ac" font-family="Public Sans, sans-serif" font-size="11.5">XChaCha20-Poly1305</text>
+      <text x="48" y="218" fill="#9c927d" font-family="JetBrains Mono, monospace" font-size="10">AAD: scope:kanal:epoch:i:clientId</text>
+      <line x1="250" y1="150" x2="330" y2="150" stroke="#a88454" stroke-width="1.5"/>
+      <path d="M330 150 l-8 -4 v8Z" fill="#a88454"/>
+      <text x="290" y="138" text-anchor="middle" fill="#9c927d" font-family="Public Sans, sans-serif" font-size="10.5">mühürlü zarf</text>
+      <rect x="330" y="60" width="320" height="180" rx="14" fill="#3a1512" stroke="#c24141" stroke-width="1.5"/>
+      <text x="490" y="88" text-anchor="middle" fill="#c24141" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="15" letter-spacing="2">SUNUCU: KÖR RELAY</text>
+      <rect x="362" y="108" width="86" height="60" rx="8" fill="#0b0e13" stroke="#c24141" stroke-width="1.2"/>
+      <text x="405" y="132" text-anchor="middle" fill="#9c927d" font-family="JetBrains Mono, monospace" font-size="10">nonce</text>
+      <text x="405" y="148" text-anchor="middle" fill="#9c927d" font-family="JetBrains Mono, monospace" font-size="10">ciphertext</text>
+      <text x="362" y="196" fill="#cdc3ac" font-family="Public Sans, sans-serif" font-size="11">görebildiği: kim · ne zaman ·</text>
+      <text x="362" y="212" fill="#cdc3ac" font-family="Public Sans, sans-serif" font-size="11">boyut bucket'ı · üyelik</text>
+      <text x="470" y="132" fill="#9c927d" font-family="Public Sans, sans-serif" font-size="11">→ saklar</text>
+      <text x="470" y="150" fill="#9c927d" font-family="Public Sans, sans-serif" font-size="11">→ WS dağıtır</text>
+      <text x="470" y="168" fill="#9c927d" font-family="Public Sans, sans-serif" font-size="11">→ içeriği görmez</text>
+      <line x1="650" y1="150" x2="730" y2="150" stroke="#a88454" stroke-width="1.5"/>
+      <path d="M730 150 l-8 -4 v8Z" fill="#a88454"/>
+      <text x="690" y="138" text-anchor="middle" fill="#9c927d" font-family="Public Sans, sans-serif" font-size="10.5">aynı zarf</text>
+      <rect x="730" y="60" width="230" height="180" rx="14" fill="#131922" stroke="#c9862b" stroke-width="1.5"/>
+      <text x="845" y="88" text-anchor="middle" fill="#e8a33d" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="15" letter-spacing="2">ALICI CİHAZI</text>
+      <rect x="758" y="108" width="60" height="42" rx="4" fill="none" stroke="#a88454" stroke-width="1.4"/>
+      <path d="M758 142 l30 -22 30 22" fill="none" stroke="#a88454" stroke-width="1.4"/>
+      <text x="838" y="126" fill="#cdc3ac" font-family="Public Sans, sans-serif" font-size="11.5">zinciri yeniden örer</text>
+      <text x="838" y="142" fill="#9c927d" font-family="Public Sans, sans-serif" font-size="10.5">epoch anahtarından</text>
+      <path d="M758 176 h174" stroke="#6e5430" stroke-width="1" stroke-dasharray="4 4"/>
+      <text x="758" y="200" fill="#cdc3ac" font-family="Public Sans, sans-serif" font-size="11.5">kalıcı ratchet state yok</text>
+      <text x="758" y="218" fill="#9c927d" font-family="Public Sans, sans-serif" font-size="10.5">geçmiş/sıra dışı mesaj: açılır</text>
+      <text x="20" y="270" fill="#6e6757" font-family="JetBrains Mono, monospace" font-size="10">bucket: 256B / 1KiB / 4KiB / 4KiB-adım — sunucu gerçek uzunluğu görmez · yanlış epoch/index/kapsam → "zarf açılamadı"</text>
+    </svg>
+    </div>
+    <figcaption class="hint">şema okunur ölçekte — yana kaydırabilirsin</figcaption>
+  </figure>
   <div class="steps">
-    <div class="step"><b>1 · Türet</b>göndericinin ratchet zinciri: root_i → msg_key_i</div>
-    <div class="step"><b>2 · Doldur</b>gövde + magic + uzunluk → boyut bucket'ı (256 B / 1 KiB / 4 KiB / 4 KiB-adım)</div>
-    <div class="step"><b>3 · Mühürle</b>XChaCha20-Poly1305<code>AAD: scope:kanal:epoch:i:clientId</code></div>
-    <div class="step"><b>4 · Relay</b>sunucu saklar + WS broadcast — içerik görmez</div>
-    <div class="step"><b>5 · Çöz</b>alıcı zinciri sohbet anahtarından yeniden örer (kalıcı state yok)</div>
-    <div class="step"><b>6 · Reddet</b>yanlış epoch/index/kapsam → DecryptError ("zarf açılamadı")</div>
+    <div class="step"><b>01 türet</b><span>gönderenin zinciri: root_i → msg_key_i</span></div>
+    <div class="step"><b>02 doldur</b><span>magic + uzunluk + gövde → bucket</span></div>
+    <div class="step"><b>03 mühürle</b><span>XChaCha20-Poly1305 · AAD'e i bağlı</span></div>
+    <div class="step"><b>04 relay</b><span>saklar + WS broadcast — içerik görmez</span></div>
+    <div class="step"><b>05 çöz</b><span>alıcı zinciri sohbet anahtarından örer</span></div>
+    <div class="step"><b>06 reddet</b><span>yanlış zincir halkası → DecryptError</span></div>
   </div>
 
-  <h2>3 · Sunucu neyi görür, neyi göremez <small>hızlı referans</small></h2>
+  <hr class="perf">
+
+  <h2>Sunucu neyi görür, neyi göremez</h2>
+  <p class="subhead">hızlı referans</p>
   <div class="duo">
     <div class="col see">
-      <h3>👁️ Görebilir (metadata)</h3>
+      <header>
+        <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+        Görebilir: metadata
+      </header>
       <ul>
         <li>nick · hesap tarihi · son etkinlik</li>
         <li>sosyal graf: kim ↔ kim, arkadaşlık, DM, üyelik, rol</li>
-        <li>mesaj zamanı · <b>boyut bucket'ı</b> (padding sonrası) · epoch</li>
+        <li>mesaj zamanı · <strong>boyut bucket'ı</strong> (padding sonrası) · epoch</li>
         <li>topluluk/kanal/grup adları · avatar (bilerek açık)</li>
         <li>session hash'i · arama katılımı · presence</li>
       </ul>
     </div>
     <div class="col blind">
-      <h3>🔒 Göremez (kripto garantisi)</h3>
+      <header>
+        <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4 20 20 4"/></svg>
+        Göremez: kripto garantisi
+      </header>
       <ul>
-        <li>mesaj/DM/grup <b>içeriği</b> — XChaCha20-Poly1305</li>
+        <li>mesaj/DM/grup <strong>içeriği</strong> — XChaCha20-Poly1305</li>
         <li>şifre · KEK · özel anahtar · kurtarma ifadesi</li>
         <li>sohbet ve ratchet anahtarlarının açık hâlleri</li>
         <li>ses/görüntü içeriği (SFrame)</li>
@@ -128,18 +230,44 @@
     </div>
   </div>
 
-  <h2>4 · Anahtar değişimine karşı: üç katman <small>kör sunucu kartvizit taklit ederse</small></h2>
-  <div class="trio">
-    <div class="card"><b>TOFU pinleme</b><small>ilk görüşmede karşı tarafın public key'i cihazda sabitlenir (localStorage) — sunucu farklı key gösterirse kırmızı uyarı</small></div>
-    <div class="card"><b>Güvenlik numarası</b><small>iki tarafın key'lerinden sıra bağımsız parmak izi — bant dışı (sesli/yüz yüze) karşılaştırılır</small></div>
-    <div class="card"><b>Anahtar defteri</b><small>key_log append-only: entry_hash = sha256(prev_hash‖user_id‖public_key) · istemci zinciri sayar, kendi kaydını doğrular, head damgası iki cihaz arasında bant dışı karşılaştırılır</small></div>
+  <h2>Anahtar değişimine karşı üç katman</h2>
+  <p class="subhead">kör sunucu kartvizit taklit ederse</p>
+  <div class="rows">
+    <div class="li">
+      <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6.5" cy="12" r="3.5"/><path d="M10 12h9"/><path d="M16 12v4"/><path d="M18.5 12v2.5"/></svg>
+      <b>pinleme</b>
+      <p>İlk görüşmede karşı tarafın public key'i cihazda sabitlenir (<code>keypins</code>) — sunucu farklı key gösterirse <strong>kırmızı uyarı</strong>.</p>
+    </div>
+    <div class="li">
+      <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9.5h8M8 12.5h8M8 15.5h5"/><path d="M15 15.5h2.5"/></svg>
+      <b>numara</b>
+      <p>Güvenlik numarası: iki tarafın key'lerinden sıra bağımsız parmak izi — bant dışı (sesli/yüz yüze) karşılaştırılır.</p>
+    </div>
+    <div class="li">
+      <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8.5h8M8 12h5M8 15.5h8"/></svg>
+      <b>defter</b>
+      <p><code>key_log</code> append-only: <strong>entry_hash = sha256(prev_hash ‖ user_id ‖ public_key)</strong> · istemci boot'ta zinciri sayar, kendi kaydını doğrular; head damgası iki cihaz arasında bant dışı karşılaştırılır — view-splitting buradan yakalanır.</p>
+    </div>
   </div>
 
-  <h2>5 · Silme · talepler · sınırlar</h2>
-  <div class="trio">
-    <div class="card"><b>Silme</b><small>herkes için: tombstone, nonce+ciphertext NULL · benim için: yalnız istemcide gizleme · hesap: kimlik+mesaj+DM+grup+topluluk tek transaction, geri alınamaz (key_log kanıtı hariç — bilinçli)</small></div>
-    <div class="card"><b>Hukuki talep</b><small>verilebilir: nick, argon2 verifier, zaman damgaları, loglar · verilemez: içerik — çözme anahtarı hiçbir koşulda elimizde değil</small></div>
-    <div class="card"><b>Bilinen sınırlar</b><small>ratchet kalıp sızıntısına karşı geçmişi korur; kuşak (epoch) anahtarı sızarsa o kuşak açılır — rotasyon sınırlar · kod sunucudan dağıtılır (defter/pin/numara yakalar, ortadan kaldırmaz) · sansür tespit edilir, engellenmez · metadata açıktır</small></div>
+  <h2>Silme · talepler · sınırlar</h2>
+  <p class="subhead">operatör ve hukuk perspektifi</p>
+  <div class="rows">
+    <div class="li">
+      <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h13"/><path d="M17 15l2.5 2.5L24 13"/></svg>
+      <b>silme</b>
+      <p>Herkes için: tombstone, nonce+ciphertext NULL · benim için: yalnız istemcide gizleme · hesap: kimlik+mesaj+DM+grup+topluluk <strong>tek transaction</strong>, geri alınamaz — key_log kanıtı bilinçli olarak kalır.</p>
+    </div>
+    <div class="li">
+      <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 7h16"/><path d="M7 7l-3 6h6zM17 7l-3 6h6z"/><path d="M7 13l5 8 5-8"/></svg>
+      <b>talep</b>
+      <p>Verilebilir: nick, argon2 verifier, zaman damgaları, loglar · verilemez: <strong>içerik</strong> — çözme anahtarı hiçbir koşulda elimizde değil.</p>
+    </div>
+    <div class="li">
+      <svg class="ic stroke" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 20 6.5v6c0 4.4-3.4 7-8 8.5-4.6-1.5-8-4.1-8-8.5v-6z"/><path d="M12 9v4"/><path d="M12 16.5h.01"/></svg>
+      <b>sınırlar</b>
+      <p>Ratchet kalıp sızıntısına karşı geçmişi korur; epoch anahtarı sızarsa o kuşak açılır — rotasyon sınırlar · kod sunucudan dağıtılır (defter/pin/numara yakalar, ortadan kaldırmaz) · sansür tespit edilir, engellenmez · metadata açıktır.</p>
+    </div>
   </div>
 
   <footer>
