@@ -141,7 +141,8 @@ function unwrapBootstrap(
 
 export const useAppStore = create<AppState>((set, get) => ({
   loaded: false,
-  view: 'community',
+  // default landing: mektuplar (friends/DM home) — communities open via route
+  view: 'dm',
   communities: [],
   publicKeys: {},
   friends: [],

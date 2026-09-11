@@ -1,16 +1,28 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from './state/authStore';
+import { useAppStore } from './state/appStore';
 import Login from './components/Login';
 import Shell from './components/Shell';
 import JoinScreen from './components/JoinScreen';
 import { ToastContainer } from './components/Toast';
 import { SealMark } from './components/Brand';
 import { parseInviteLink, type ParsedInvite } from './crypto/invite';
+import { writeRoute } from './router';
 
 export default function App() {
   const status = useAuthStore((s) => s.status);
   const restore = useAuthStore((s) => s.restore);
   const [invite, setInvite] = useState<ParsedInvite | null>(() => parseInviteLink(location.hash));
+
+  // mirror the in-app view into the URL slug — F5 (after re-auth) lands back
+  // in the same conversation
+  useEffect(
+    () =>
+      useAppStore.subscribe((s) =>
+        writeRoute(s.view, s.activeDmId, s.activeChannelId),
+      ),
+    [],
+  );
 
   useEffect(() => {
     void restore();

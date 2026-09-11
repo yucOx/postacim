@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyRound, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
@@ -23,6 +23,7 @@ import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { useUnreadStore, unreadCount } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
+import { readRoute } from '../router';
 
 function PasswordModal({ onClose }: { onClose: () => void }) {
   const changePassword = useAuthStore((s) => s.changePassword);
@@ -93,6 +94,9 @@ export default function Shell() {
   const isDmCall = useVoiceStore((s) => s.isDmCall);
   const pip = useVoiceStore((s) => s.pip);
   const dms = useAppStore((s) => s.dms);
+  const gdms = useAppStore((s) => s.gdms);
+  const openDmChat = useAppStore((s) => s.openDmChat);
+  const selectChannel = useAppStore((s) => s.selectChannel);
   const dmMessages = useDmChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap);
 
@@ -115,6 +119,23 @@ export default function Shell() {
   // live connection badge — the socket retries forever; this says when it's down
   const [wsStat, setWsStat] = useState<WsStatus>('offline');
   useEffect(() => onWsStatus(setWsStat), []);
+
+  // F5 restore: once bootstrap is in, the URL slug decides where you land
+  // (the re-auth card sits in front of this — after the password you're back
+  // in the same conversation). Unknown ids fall through to the default view.
+  const routeApplied = useRef(false);
+  useEffect(() => {
+    if (!loaded || routeApplied.current) return;
+    routeApplied.current = true;
+    const r = readRoute();
+    if (r?.view === 'dm') {
+      if (dms.some((d) => d.id === r.dmId) || gdms.some((g) => g.id === r.dmId)) openDmChat(r.dmId);
+    } else if (r?.view === 'community') {
+      if (useAppStore.getState().communities.some((c) => c.channels.some((ch) => ch.id === r.channelId)))
+        selectChannel(r.channelId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   const closeNav = (): void => setNavOpen(false);
 
