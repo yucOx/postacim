@@ -6,6 +6,7 @@ import { generateMnemonic, quizPositions, validateMnemonic } from '../crypto/bip
 import PasswordInput, { passwordScore } from './PasswordInput';
 import Turnstile, { turnstileEnabled } from './Turnstile';
 import { PigeonMark, Postmark, SealMark } from './Brand';
+import { SponsorNote } from './SponsorNote';
 
 type Step = 'login' | 'register' | 'phrase' | 'forgot';
 
@@ -222,6 +223,7 @@ export default function Login() {
           </form>
         </>
       )}
+      <SponsorNote />
     </div>
   );
 }

@@ -222,8 +222,9 @@ export default function DmChat({ dmId }: { dmId: string }) {
                 <div className="group relative">
                   <MessageRow m={m} prev={prev} />
                   <HoverActions
-                    // DM: both participants may tombstone; gdm: sender or creator
-                    canDeleteAll={dm ? true : amSender(m) || gdm?.creator_id === useAuthStore.getState().user?.id}
+                    // delete-for-everyone is the sender's call (dm + gdm same
+                    // rule; gdm creator may also moderate)
+                    canDeleteAll={amSender(m) || (!dm && gdm?.creator_id === useAuthStore.getState().user?.id)}
                     onDeleteAll={() => void deleteForEveryone(dmId, m.id).catch(() => {})}
                     onDeleteForMe={() => hideForMe(dmId, m.id)}
                   />

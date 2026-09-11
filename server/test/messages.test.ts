@@ -277,7 +277,7 @@ describe('message deletion (tombstone)', () => {
 });
 
 describe('DM + GDM deletion', () => {
-  it('either DM participant can tombstone; unknown DM id 404s', async () => {
+  it('only the DM sender can tombstone; recipient gets 403; unknown DM id 404s', async () => {
     const alice = await makeUser(srv.baseUrl, 'da');
     const bob = await makeUser(srv.baseUrl, 'db');
     expect((await alice.call('POST', '/friends/requests', { nick: bob.nick })).status).toBe(204);
@@ -299,8 +299,15 @@ describe('DM + GDM deletion', () => {
     expect(sent.status).toBe(201);
     const msgId = ((await sent.json()) as { id: number }).id;
 
-    // bob is not the sender — still allowed (participant)
-    expect((await bob.call('DELETE', `/messages/dm/${dmId}/${msgId}`)).status).toBe(200);
+    // bob is a participant but NOT the sender — tombstoning for everyone is
+    // the sender's call; the recipient hides for themselves locally instead
+    expect((await bob.call('DELETE', `/messages/dm/${dmId}/${msgId}`)).status).toBe(403);
+    const stillThere = (await (await bob.call('GET', `/dms/${dmId}/messages`)).json()) as {
+      messages: { id: number; deleted: number; nonce: string; ciphertext: string }[];
+    };
+    expect(stillThere.messages.find((m) => m.id === msgId)?.ciphertext).toBe(CT);
+    // the sender can delete for everyone
+    expect((await alice.call('DELETE', `/messages/dm/${dmId}/${msgId}`)).status).toBe(200);
     const hist = (await (await bob.call('GET', `/dms/${dmId}/messages`)).json()) as {
       messages: { id: number; deleted: number; nonce: string | null; ciphertext: string | null }[];
     };

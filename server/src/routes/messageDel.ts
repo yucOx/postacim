@@ -7,7 +7,7 @@ import { hub } from '../ws/hub.js';
 
 // Prepared once per table — no string-built SQL on the request path.
 const msgRow = db.prepare('SELECT sender_id, deleted FROM messages WHERE id = ? AND channel_id = ?');
-const dmRow = db.prepare('SELECT deleted FROM dm_messages WHERE id = ? AND channel_id = ?');
+const dmRow = db.prepare('SELECT sender_id, deleted FROM dm_messages WHERE id = ? AND channel_id = ?');
 const gdmRow = db.prepare('SELECT sender_id, deleted FROM gdm_messages WHERE id = ? AND channel_id = ?');
 
 // Tombstone: keep the row (clients render "silindi"), wipe the content —
@@ -64,9 +64,13 @@ export async function messageDeleteRoutes(app: FastifyInstance): Promise<void> {
       if (scope === 'dm') {
         const dm = getDm(channelId, uid);
         if (!dm) return reply.code(404).send({ error: 'DM bulunamadı' });
-        const row = dmRow.get(id, channelId) as { deleted: number } | undefined;
+        const row = dmRow.get(id, channelId) as { sender_id: string; deleted: number } | undefined;
         if (!row) return reply.code(404).send({ error: 'mesaj bulunamadı' });
-        // either participant may tombstone — both already hold the key
+        // only the sender tombstones for everyone; the recipient hides it for
+        // themselves (benim için sil) — Discord model
+        if (row.sender_id !== uid) {
+          return reply.code(403).send({ error: 'bu mesajı silme yetkin yok' });
+        }
         if (!row.deleted) {
           dmTomb.run(uid, Date.now(), id, channelId);
           hub.sendToUsers([dm.user_a, dm.user_b], {

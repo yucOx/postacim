@@ -5,6 +5,7 @@ import { processAvatarFile, invalidateAvatar } from '../lib/avatar';
 import Avatar from './Avatar';
 import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
+import { SponsorNote } from './SponsorNote';
 
 export default function ProfileModal({ onClose }: { onClose: () => void }): React.ReactNode {
   const user = useAuthStore((s) => s.user);
@@ -177,6 +178,9 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
             onCancel={() => setConfirmDelete(false)}
           />
         )}
+        <div className="mt-2 border-t border-night-700 pt-3">
+          <SponsorNote />
+        </div>
       </div>
     </Modal>
   );
