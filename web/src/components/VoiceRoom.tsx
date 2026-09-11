@@ -32,28 +32,39 @@ function Grid() {
       </div>
     );
   }
+  // 1 → centered capped; 2 → equal split; 3+ → auto-fit grid. Screen shares span full width.
+  const cols =
+    tiles.length === 1
+      ? 'minmax(0, 720px)'
+      : tiles.length === 2
+        ? 'repeat(2, minmax(0, 1fr))'
+        : 'repeat(auto-fit, minmax(280px, 1fr))';
   return (
     <div
-      className="grid flex-1 auto-rows-fr content-start gap-3 overflow-y-auto p-4"
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
+      className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
+      style={{ gridTemplateColumns: cols, justifyItems: tiles.length <= 2 ? 'center' : 'stretch' }}
     >
-      {tiles.map((t) => (
-        <div
-          key={`${t.participant.identity}-${t.source}`}
-          className="relative flex min-h-48 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
-        >
-          <ParticipantTile trackRef={t} className="h-full w-full" />
-          <span className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
-            <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
-              {nickFor(t.participant.identity)}
-              {t.participant.isLocal && ' (sen)'}
+      {tiles.map((t) => {
+        const isScreen = t.source === Track.Source.ScreenShare;
+        return (
+          <div
+            key={`${t.participant.identity}-${t.source}`}
+            className={[
+              'relative flex w-full items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850',
+              isScreen ? 'aspect-video max-h-full' : 'aspect-video',
+            ].join(' ')}
+          >
+            <ParticipantTile trackRef={t} className="h-full w-full" />
+            <span className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
+              <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
+                {nickFor(t.participant.identity)}
+                {t.participant.isLocal && ' (sen)'}
+              </span>
+              {isScreen && <span className="shrink-0 font-mono text-[9px] text-lamp-400">ekran</span>}
             </span>
-            {t.source === Track.Source.ScreenShare && (
-              <span className="shrink-0 font-mono text-[9px] text-lamp-400">ekran</span>
-            )}
-          </span>
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -38,6 +38,9 @@ interface VoiceState {
   /** call window minimized to the corner — chat stays fully usable underneath */
   pip: boolean;
   setPip: (v: boolean) => void;
+  /** PiP corner position, in px from top-left. Persisted so it sticks next time. */
+  pipPos: { x: number; y: number };
+  setPipPos: (p: { x: number; y: number }) => void;
   join: (channelId: string) => Promise<void>;
   leave: () => Promise<void>;
   toggleMic: () => Promise<void>;
@@ -48,6 +51,23 @@ interface VoiceState {
   declineIncoming: () => Promise<void>;
   cancelCall: () => Promise<void>;
   wire: () => void;
+}
+
+const PIP_POS_KEY = 'postacim.pipPos';
+const PIP_DEFAULT = { x: -1, y: -1 } as const; // -1 → "snap to bottom-right" in the widget
+
+function loadPipPos(): { x: number; y: number } {
+  try {
+    const raw = localStorage.getItem(PIP_POS_KEY);
+    if (!raw) return { x: PIP_DEFAULT.x, y: PIP_DEFAULT.y };
+    const parsed = JSON.parse(raw) as { x?: number; y?: number };
+    if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+      return { x: parsed.x, y: parsed.y };
+    }
+  } catch {
+    // ignore — fall through
+  }
+  return { x: PIP_DEFAULT.x, y: PIP_DEFAULT.y };
 }
 
 const cleanup = (room: Room | null): void => {
@@ -91,8 +111,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   callState: null,
   isDmCall: false,
   pip: false,
+  pipPos: loadPipPos(),
 
   setPip: (v) => set({ pip: v }),
+  setPipPos: (p) => {
+    try {
+      localStorage.setItem('postacim.pipPos', JSON.stringify(p));
+    } catch {
+      // private mode / quota — ignore, still update state
+    }
+    set({ pipPos: p });
+  },
 
   join: async (channelId) => {
     if (get().joinedChannelId === channelId && !get().isDmCall) return;

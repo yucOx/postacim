@@ -40,17 +40,40 @@ function Grid(): React.ReactNode {
     seen.add(t.participant.identity);
     return true;
   });
+  // 1 participant → centered, max 720px; 2 → side-by-side equal; 3+ → auto-fit grid.
+  // Screen shares break out of the cap and span the full row so 16:9 sources aren't letterboxed.
+  const cols =
+    tiles.length === 0
+      ? '1fr'
+      : tiles.length === 1
+        ? 'minmax(0, 720px)'
+        : tiles.length === 2
+          ? 'repeat(2, minmax(0, 1fr))'
+          : 'repeat(auto-fit, minmax(280px, 1fr))';
   return (
-    <div className="grid flex-1 auto-rows-fr content-start gap-3 overflow-y-auto p-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-      {tiles.map((t) => (
-        <div
-          key={`${t.participant.identity}-${t.source}`}
-          className="relative flex min-h-48 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
-        >
-          <ParticipantTile trackRef={t} className="h-full w-full" />
-          <Plate identity={t.participant.identity} isLocal={t.participant.isLocal} extra={t.source === Track.Source.ScreenShare ? 'ekran' : undefined} />
-        </div>
-      ))}
+    <div
+      className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
+      style={{ gridTemplateColumns: cols, justifyItems: tiles.length <= 2 ? 'center' : 'stretch' }}
+    >
+      {tiles.map((t) => {
+        const isScreen = t.source === Track.Source.ScreenShare;
+        return (
+          <div
+            key={`${t.participant.identity}-${t.source}`}
+            className={[
+              'relative flex w-full items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850',
+              isScreen ? 'aspect-video max-h-full' : 'aspect-video',
+            ].join(' ')}
+          >
+            <ParticipantTile trackRef={t} className="h-full w-full" />
+            <Plate
+              identity={t.participant.identity}
+              isLocal={t.participant.isLocal}
+              extra={isScreen ? 'ekran' : undefined}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
