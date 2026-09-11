@@ -9,7 +9,8 @@
     "dev:server": "npm -w server run dev",
     "dev:web": "npm -w web run dev",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "integrity": "npm run -w web build && scripts/bundle-hashes.sh"
   },
   "devDependencies": {
     "vitest": "^4.1.11"

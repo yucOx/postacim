@@ -118,6 +118,36 @@ describe('message AEAD + AAD binding', () => {
   });
 });
 
+describe("mesaj boyut padding'i (trafik analizi karşıtı)", () => {
+  const key = randomBytes(32);
+  // sabit overhead: {"t":"msg","body":"<gövde>","sent":<13 haneli ts>}
+  const fixed = new TextEncoder().encode(JSON.stringify({ t: 'msg', body: '', sent: Date.now() })).length;
+
+  // verilen hedef toplam boyut (5 byte header dahil) için gövde üretir;
+  // ciphertext'ten AEAD plaintext boyutunu (poly1305 tag'i düşerek) döndürür
+  const sizeAt = (total: number) => {
+    const body = 'x'.repeat(total - 5 - fixed);
+    const { nonce, ciphertext } = encryptText('ch_1', 1, key, body, 'ch');
+    expect(decryptText('ch_1', 1, key, nonce, ciphertext, 'ch').body).toBe(body);
+    return unb64(ciphertext).length - 16;
+  };
+
+  it('plaintext bucket boyutuna yuvarlanır: 256/256/1024/4096/8192', () => {
+    expect(sizeAt(255)).toBe(256);
+    expect(sizeAt(256)).toBe(256);
+    expect(sizeAt(257)).toBe(1024);
+    expect(sizeAt(1025)).toBe(4096);
+    expect(sizeAt(4097)).toBe(8192);
+  });
+  it('eski format (headersız ham gövde) hâlâ çözülür', () => {
+    const body = 'eski mesaj';
+    const { nonce, ciphertext } = encryptText('ch_1', 1, key, body, 'ch', undefined, true);
+    expect(decryptText('ch_1', 1, key, nonce, ciphertext, 'ch').body).toBe(body);
+    // eski format yuvarlanmaz: boyut = ham gövde + tag
+    expect(unb64(ciphertext).length).toBe(fixed + body.length + 16);
+  });
+});
+
 describe('BIP-39', () => {
   it('generates 12 distinct words and validates', async () => {
     // the 12-word selection is sampled with replacement over 2048 entries;
