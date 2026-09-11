@@ -1,21 +1,38 @@
 import { useRef, useState } from 'react';
+import { api } from '../api/client';
 import { useAuthStore } from '../state/authStore';
 import { processAvatarFile, invalidateAvatar } from '../lib/avatar';
 import Avatar from './Avatar';
 import Modal from './Modal';
+import ConfirmDialog from './ConfirmDialog';
 
 export default function ProfileModal({ onClose }: { onClose: () => void }): React.ReactNode {
   const user = useAuthStore((s) => s.user);
   const setAvatar = useAuthStore((s) => s.setAvatar);
   const clearAvatar = useAuthStore((s) => s.clearAvatar);
+  const logout = useAuthStore((s) => s.logout);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [previewBytes, setPreviewBytes] = useState<number>(0);
   const [hasAvatar, setHasAvatar] = useState<boolean>(user?.avatar_updated_at != null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (!user) return null;
+
+  const onDeleteAccount = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/users/me', { method: 'DELETE' });
+      await logout();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'silinemedi');
+      setBusy(false);
+    }
+  };
 
   const onPick = (): void => fileRef.current?.click();
 
@@ -141,7 +158,25 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
         <p className="text-[11px] text-paper-500">
           resim seç veya yapıştır (Cmd/Ctrl+V) · 64×64 küçük JPEG olarak kaydedilir (~3-8KB)
         </p>
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          disabled={busy}
+          className="mt-2 w-full rounded border border-stamp-500/60 px-3 py-1.5 text-xs text-stamp-400 transition-colors hover:bg-stamp-100"
+        >
+          hesabımı kalıcı sil
+        </button>
         {error && <p className="text-sm text-stamp-400">{error}</p>}
+        {confirmDelete && (
+          <ConfirmDialog
+            title="Hesabı sil"
+            danger
+            confirmLabel="kalıcı sil"
+            message="Hesabın, yazdığın tüm mesajlar, DM'ler, kurduğun gruplar ve topluluklar kalıcı silinir. Bu işlem geri alınamaz — kurtarma ifaden bile eski hesabı getiremez."
+            onConfirm={() => void onDeleteAccount()}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
       </div>
     </Modal>
   );
