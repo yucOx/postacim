@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>postacim — Güvenlik Mimarisi</title>
+<style>
+  :root{
+    --bg:#0a0c10; --bg2:#10131a; --card:#141822; --line:#2a2f3d;
+    --tx:#e8e4d8; --tx2:#8b93a3; --green:#4ade80; --green-bg:#12251a;
+    --red:#f87171; --red-bg:#2a1414; --brass:#b08d4f; --lamp:#7dd3a0; --yellow:#facc15;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.55 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1120px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:26px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 6px}
+  h1 span{color:var(--brass)}
+  .sub{color:var(--tx2);font-size:13px;margin-bottom:34px}
+  h2{font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--brass);border-bottom:1px solid var(--line);padding-bottom:8px;margin:38px 0 18px}
+  /* swimlane */
+  .lanes{display:grid;grid-template-columns:1fr 64px 1fr;gap:0;align-items:stretch}
+  .lane{border:1px solid var(--line);border-radius:14px;background:var(--bg2);padding:18px}
+  .lane.client{border-color:#1f3d2b}
+  .lane.server{border-color:#3d1f1f}
+  .lane h3{margin:0 0 14px;font-size:12px;letter-spacing:.18em;text-transform:uppercase}
+  .lane.client h3{color:var(--green)} .lane.server h3{color:var(--red)}
+  .mid{display:flex;flex-direction:column;justify-content:center;align-items:center;color:var(--tx2);font-size:11px;gap:14px;padding:0 2px;text-align:center}
+  .mid .arr{font-size:18px;color:var(--brass)}
+  .card{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:10px 12px;margin-bottom:10px;font-size:13.5px}
+  .card b{color:var(--tx)}
+  .card small{display:block;color:var(--tx2);font-size:12px;margin-top:2px}
+  .key{border-color:#1f3d2b;background:var(--green-bg)}
+  .enc{border-color:#1f3d2b}
+  .srv{border-color:#3d1f1f;background:var(--red-bg)}
+  .opt{border-style:dashed;border-color:#4a4413}
+  .arrow-note{color:var(--tx2);font-size:12px;text-align:center;margin:6px 0}
+  /* görebilir/göremez */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .duo .col{border-radius:12px;padding:16px;font-size:13.5px}
+  .duo .see{background:var(--red-bg);border:1px solid #3d1f1f}
+  .duo .blind{background:var(--green-bg);border:1px solid #1f3d2b}
+  .duo h3{margin:0 0 10px;font-size:12px;letter-spacing:.16em;text-transform:uppercase}
+  .duo .see h3{color:var(--red)} .duo .blind h3{color:var(--green)}
+  .duo ul{margin:0;padding-left:18px} .duo li{margin-bottom:5px}
+  /* steps */
+  .steps{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 10px;font-size:12.5px;position:relative}
+  .step:after{content:"→";position:absolute;right:-11px;top:50%;transform:translateY(-50%);color:var(--brass);font-size:16px;z-index:1}
+  .step:last-child:after{content:""}
+  .step b{display:block;color:var(--brass);font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+  /* trio */
+  .trio{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .trio .card{margin:0}
+  .kicker{color:var(--tx2);font-size:12px;margin:10px 0 0}
+  footer{margin-top:44px;border-top:1px solid var(--line);padding-top:14px;color:var(--tx2);font-size:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  a{color:var(--lamp);text-decoration:none} a:hover{text-decoration:underline}
+  code{background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12.5px;color:var(--yellow)}
+  @media print{ body{background:#fff;color:#111} .wrap{max-width:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>POSTACIM <span>·</span> GÜVENLİK MİMARİSİ</h1>
+  <p class="sub">uçtan uca şifreli mesajlaşma · sunucu kör relay · her iddia kodla doğrulanabilir · 11 Eylül 2026</p>
+
+  <h2>1 · Anahtar yaşam döngüsü</h2>
+  <div class="lanes">
+    <div class="lane client">
+      <h3>🖥️ İstemci — tüm anahtarlar burada</h3>
+      <div class="card key"><b>🔑 Şifre</b><small>asla sunucuya gitmez</small></div>
+      <div class="arrow-note" style="color:var(--brass);text-align:center">↓ Argon2id · 64 MiB · 3 iterasyon</div>
+      <div class="card enc"><b>authMaterial (32B)</b><small>giriş için sunucuya gönderilir</small></div>
+      <div class="card key"><b>KEK (32B)</b><small>yalnızca bellek — hiçbir depoya yazılmaz</small></div>
+      <div class="card key"><b>Kimlik — X25519 çifti</b><small>KEK, sunucudaki key_blob'u açar</small></div>
+      <div class="card enc"><b>Kanal/DM/GDM anahtarı</b><small>client'ta üretilir · crypto_box_seal ile her üyeye sarılır</small></div>
+      <div class="card opt"><b>⤷ Opsiyonel yollar</b><small>BIP-39 kurtarma ifadesi (2. sarma) · Passkey/WebAuthn PRF (F5 şifresiz)</small></div>
+    </div>
+    <div class="mid">
+      <span class="arr">⟶</span>
+      <div>yalnız türev gider</div>
+      <span class="arr">⟶</span>
+      <div>public_key</div>
+      <span class="arr">⟶</span>
+      <div>sarmalı</div>
+      <span class="arr">⟶</span>
+      <div>nonce + ciphertext</div>
+    </div>
+    <div class="lane server">
+      <h3>☁️ Sunucu — kör relay</h3>
+      <div class="card srv"><b>Argon2id verifier</b><small>authMaterial'in hash'i — düz malzeme değil</small></div>
+      <div class="card srv"><b>Session: SHA-256(token)</b><small>7 gün · rolling refresh · httpOnly+Strict cookie · login backoff</small></div>
+      <div class="card srv"><b>SQLite: mesajlar</b><small>yalnız nonce + ciphertext + metadata — okunabilir içerik yok</small></div>
+      <div class="card srv"><b>LiveKit SFU (self-hosted)</b><small>SFrame E2EE relay — ses/görüntü içerik kapalı</small></div>
+      <div class="card srv"><b>CSP + Trusted Types + log hijyeni</b><small>query'siz log, IP'siz uygulama logu, WS auth timeout</small></div>
+    </div>
+  </div>
+  <p class="arrow-note">Yeşil = anahtar/istemici kaynağı · kırmızı = sunucu tarafı · kesikli = opsiyonel</p>
+
+  <h2>2 · Sunucu neyi görür, neyi göremez</h2>
+  <div class="duo">
+    <div class="col see">
+      <h3>👁️ Görebilir (metadata)</h3>
+      <ul>
+        <li>nick · hesap tarihi · son aktivite</li>
+        <li>sosyal graf: kim ↔ kim, arkadaş, DM, üyelik, rol</li>
+        <li>mesaj zamanı, <b>boyut bucket'ı</b> (padding sonrası), epoch</li>
+        <li>topluluk/kanal/grup adları, avatar (bilerek açık)</li>
+        <li>session hash'i, arama katılımı, WS presence</li>
+      </ul>
+    </div>
+    <div class="col blind">
+      <h3>🔒 Göremez (kripto)</h3>
+      <ul>
+        <li>mesaj/DM/grup <b>içeriği</b> — XChaCha20-Poly1305</li>
+        <li>şifre · KEK · özel anahtar · kurtarma ifadesi</li>
+        <li>kanal anahtarlarının açık hali</li>
+        <li>ses/görüntü içeriği (SFrame)</li>
+        <li>okundu bilgisi (cihaz dışına çıkmaz)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>3 · Bir mesajın yolculuğu</h2>
+  <div class="steps">
+    <div class="step"><b>1 · Türet</b>hash-ratchet: zincir index'i → msg_key</div>
+    <div class="step"><b>2 · Doldur</b>gövde + header → 4 KB bucket'a yuvarlanır</div>
+    <div class="step"><b>3 · Şifrele</b>XChaCha20-Poly1305<br><code>AAD: scope:kanal:epoch:i:clientId</code></div>
+    <div class="step"><b>4 · Relay</b>sunucu saklar + WS broadcast (içerik göremez)</div>
+    <div class="step"><b>5 · Çöz</b>alıcı aynı zincirden key türetir</div>
+    <div class="step"><b>6 · Hata</b>epoch eksik → DecryptError</div>
+  </div>
+
+  <h2>4 · Silme · talepler · sınırlar</h2>
+  <div class="trio">
+    <div class="card"><b>🗑️ Silme</b><small>herkes için: gönderen tombstone, nonce+ciphertext NULL · benim için: localStorage · hesap silme: kimlik+mesajlar+DM'ler+gruplar, tek transaction, geri alınamaz</small></div>
+    <div class="card"><b>⚖️ Hukuki talep</b><small>verilebilir: nick, argon2 verifier, zaman damgaları, loglar · verilemez: içerik — çözme anahtarı hiçbir koşulda elimizde değil</small></div>
+    <div class="card"><b>⚠️ Web sınırı</b><small>istemci JS'i sunucudan dağıtılır — operatör değiştirilmiş kod servise edebilir (her web E2EE'nin sınırı). Çözüm: güvenlik numarası (TOFU pinning + parmak izi karşılaştırması)</small></div>
+  </div>
+
+  <footer>
+    <span>postacim · <a href="https://yuxor.dev">yuxor.dev</a> sponsorluğunda · <a href="https://yubra.tech">yubra.tech</a> ile geliştirildi</span>
+    <span><a href="/PRIVACY.md">gizlilik politikası</a> · <a href="/ARCHITECTURE.md">ARCHITECTURE.md</a></span>
+  </footer>
+</div>
+</body>
+</html>
