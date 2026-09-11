@@ -214,4 +214,14 @@ ALTER TABLE users ADD COLUMN recovery_verifier TEXT;
 ALTER TABLE users ADD COLUMN avatar_data BLOB;
 ALTER TABLE users ADD COLUMN avatar_updated_at INTEGER;
 `,
+  // v11 — channel-internal replay hardening: AAD binds a client UUID +
+  // client timestamp; server stores them so clients can recompute the AAD
+  `
+ALTER TABLE messages ADD COLUMN client_id TEXT;
+ALTER TABLE messages ADD COLUMN sent_at_client INTEGER;
+ALTER TABLE dm_messages ADD COLUMN client_id TEXT;
+ALTER TABLE dm_messages ADD COLUMN sent_at_client INTEGER;
+ALTER TABLE gdm_messages ADD COLUMN client_id TEXT;
+ALTER TABLE gdm_messages ADD COLUMN sent_at_client INTEGER;
+`,
 ];

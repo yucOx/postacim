@@ -101,6 +101,53 @@ describe('per-user send rate bucket', () => {
   });
 });
 
+describe('client replay binding', () => {
+  const CID = '123e4567-e89b-41d3-a456-426614174000';
+  const AT = 1_700_000_000_000;
+  it('stores and echoes client_id + sent_at_client through the list endpoint', async () => {
+    const r = await member.call('POST', `/channels/${chId}/messages`, {
+      key_version: 1,
+      nonce: NONCE,
+      ciphertext: CT,
+      client_id: CID,
+      sent_at_client: AT,
+    });
+    expect(r.status).toBe(201);
+    const g = await member.call('GET', `/channels/${chId}/messages?limit=50`);
+    const j = (await g.json()) as {
+      messages: { client_id: string | null; sent_at_client: number | null }[];
+    };
+    const mine = j.messages.find((m) => m.client_id === CID);
+    expect(mine?.sent_at_client).toBe(AT);
+  });
+  it('rejects a half-specified binding with 400', async () => {
+    const onlyId = await member.call('POST', `/channels/${chId}/messages`, {
+      key_version: 1,
+      nonce: NONCE,
+      ciphertext: CT,
+      client_id: CID,
+    });
+    expect(onlyId.status).toBe(400);
+    const onlyAt = await member.call('POST', `/channels/${chId}/messages`, {
+      key_version: 1,
+      nonce: NONCE,
+      ciphertext: CT,
+      sent_at_client: AT,
+    });
+    expect(onlyAt.status).toBe(400);
+  });
+  it('rejects a malformed client_id', async () => {
+    const r = await member.call('POST', `/channels/${chId}/messages`, {
+      key_version: 1,
+      nonce: NONCE,
+      ciphertext: CT,
+      client_id: 'not-a-uuid',
+      sent_at_client: AT,
+    });
+    expect(r.status).toBe(400);
+  });
+});
+
 describe('rotate roster validation', () => {
   it('rejects a roster that misses a member or includes a stranger', async () => {
     const stranger = await makeUser(srv.baseUrl, 'ms');

@@ -86,6 +86,36 @@ describe('message AEAD + AAD binding', () => {
     t[0] ^= 1;
     expect(() => decryptText('ch_1', 1, key, nonce, b64(t), 'ch')).toThrow();
   });
+  it('roundtrip with client binding', () => {
+    const b = { clientId: '11111111-1111-4111-8111-111111111111', clientSentAt: 1_700_000_000_000 };
+    const { nonce, ciphertext } = encryptText('ch_1', 1, key, 'bağlı', 'ch', b);
+    expect(decryptText('ch_1', 1, key, nonce, ciphertext, 'ch', b).body).toBe('bağlı');
+  });
+  it('tampered binding (wrong client id or ts) rejected', () => {
+    const b = { clientId: '22222222-2222-4222-8222-222222222222', clientSentAt: 1_700_000_000_000 };
+    const { nonce, ciphertext } = encryptText('ch_1', 1, key, 'x', 'ch', b);
+    expect(() =>
+      decryptText('ch_1', 1, key, nonce, ciphertext, 'ch', {
+        clientId: '33333333-3333-4333-8333-333333333333',
+        clientSentAt: b.clientSentAt,
+      }),
+    ).toThrow();
+    expect(() =>
+      decryptText('ch_1', 1, key, nonce, ciphertext, 'ch', { clientId: b.clientId, clientSentAt: b.clientSentAt + 1 }),
+    ).toThrow();
+  });
+  it('same ciphertext replayed under a different binding rejected', () => {
+    const b = { clientId: '44444444-4444-4444-8444-444444444444', clientSentAt: 1 };
+    const { nonce, ciphertext } = encryptText('ch_1', 1, key, 'x', 'ch', b);
+    expect(() =>
+      decryptText('ch_1', 1, key, nonce, ciphertext, 'ch', { clientId: b.clientId, clientSentAt: 2 }),
+    ).toThrow();
+  });
+  it('binding dropped on a bound ciphertext rejected (no legacy downgrade)', () => {
+    const b = { clientId: '55555555-5555-4555-8555-555555555555', clientSentAt: 1 };
+    const { nonce, ciphertext } = encryptText('ch_1', 1, key, 'x', 'ch', b);
+    expect(() => decryptText('ch_1', 1, key, nonce, ciphertext, 'ch')).toThrow();
+  });
 });
 
 describe('BIP-39', () => {

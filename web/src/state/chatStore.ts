@@ -4,7 +4,11 @@ import type { ChatMessage } from '../api/types';
 import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
 import { decryptText, encryptText } from '../crypto/message';
+import { ReplayFilter } from '../lib/replay';
 import { onServerEvent } from '../ws/socket';
+
+// server replay sightings for this session; channel ids never collide with dmChatStore's
+const replays = new ReplayFilter();
 
 export interface DisplayMessage {
   id: number;
@@ -12,6 +16,9 @@ export interface DisplayMessage {
   senderId: string;
   nick: string;
   sentAt: number;
+  /** client-generated AAD binding (replay hardening); absent on legacy rows */
+  clientId?: string;
+  clientSentAt?: number;
   /** null = ciphertext we cannot decrypt (missing epoch key) */
   body: string | null;
 }
@@ -31,7 +38,23 @@ interface ChatState {
 function toDisplay(raw: ChatMessage): DisplayMessage {
   const app = useAppStore.getState();
   const key = app.channelKeys[raw.channel_id]?.[raw.key_version];
-  if (!key) return { id: raw.id, channelId: raw.channel_id, senderId: raw.sender_id, nick: raw.nick, sentAt: raw.sent_at, body: null };
+  // recompute the AAD binding: decrypt only succeeds when the server kept
+  // both columns intact — a forged/dropped binding renders the body unreadable
+  const bind =
+    raw.client_id != null && raw.sent_at_client != null
+      ? { clientId: raw.client_id, clientSentAt: raw.sent_at_client }
+      : undefined;
+  if (!key)
+    return {
+      id: raw.id,
+      channelId: raw.channel_id,
+      senderId: raw.sender_id,
+      nick: raw.nick,
+      sentAt: raw.sent_at,
+      clientId: raw.client_id ?? undefined,
+      clientSentAt: raw.sent_at_client ?? undefined,
+      body: null,
+    };
   try {
     return {
       id: raw.id,
@@ -39,10 +62,21 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       senderId: raw.sender_id,
       nick: raw.nick,
       sentAt: raw.sent_at,
-      body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext).body,
+      clientId: raw.client_id ?? undefined,
+      clientSentAt: raw.sent_at_client ?? undefined,
+      body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, 'ch', bind).body,
     };
   } catch {
-    return { id: raw.id, channelId: raw.channel_id, senderId: raw.sender_id, nick: raw.nick, sentAt: raw.sent_at, body: null };
+    return {
+      id: raw.id,
+      channelId: raw.channel_id,
+      senderId: raw.sender_id,
+      nick: raw.nick,
+      sentAt: raw.sent_at,
+      clientId: raw.client_id ?? undefined,
+      clientSentAt: raw.sent_at_client ?? undefined,
+      body: null,
+    };
   }
 }
 
@@ -64,8 +98,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const res = await api<{ messages: ChatMessage[]; has_more: boolean }>(
       `/channels/${channelId}/messages?limit=50`,
     );
+    // full reload replaces the list — rebuild the replay set so re-served
+    // history is not flagged as injected duplicates
+    replays.reset(channelId);
     set((s) => ({
-      messages: { ...s.messages, [channelId]: res.messages.map(toDisplay) },
+      messages: {
+        ...s.messages,
+        [channelId]: res.messages
+          .filter((m) => !(m.client_id && replays.check(channelId, m.client_id)))
+          .map(toDisplay),
+      },
       hasMore: { ...s.hasMore, [channelId]: res.has_more },
     }));
   },
@@ -80,7 +122,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messages: {
         ...s.messages,
-        [channelId]: [...res.messages.map(toDisplay), ...(s.messages[channelId] ?? [])],
+        [channelId]: [
+          ...res.messages
+            .filter((m) => !(m.client_id && replays.check(channelId, m.client_id)))
+            .map(toDisplay),
+          ...(s.messages[channelId] ?? []),
+        ],
       },
       hasMore: { ...s.hasMore, [channelId]: res.has_more },
     }));
@@ -100,13 +147,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set({ sending: true });
     try {
+      // replay hardening: one client id per logical message, reused across the
+      // retry loop (a 409 means the server never stored the earlier attempt)
+      const clientId = crypto.randomUUID();
+      const clientSentAt = Date.now();
       // encrypt + POST; on 409 (key rotated mid-flight) refresh keys and retry once
       for (let attempt = 0; ; attempt++) {
-        const enc = encryptText(channelId, version, key, body);
+        const enc = encryptText(channelId, version, key, body, 'ch', { clientId, clientSentAt });
         try {
           await api(`/channels/${channelId}/messages`, {
             method: 'POST',
-            body: { key_version: version, ...enc },
+            body: { key_version: version, ...enc, client_id: clientId, sent_at_client: clientSentAt },
           });
           return;
         } catch (err) {
@@ -131,6 +182,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     onServerEvent((e) => {
       if (e.type !== 'message:new') return;
       const raw = e.message as ChatMessage;
+      // replayed ciphertext arrives as a fresh row id with a seen client id — drop it
+      if (raw.client_id && replays.check(raw.channel_id, raw.client_id)) return;
       const display = toDisplay(raw);
       set((s) => ({
         messages: { ...s.messages, [raw.channel_id]: insertSorted(s.messages[raw.channel_id] ?? [], display) },

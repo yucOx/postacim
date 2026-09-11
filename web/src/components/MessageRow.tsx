@@ -38,7 +38,8 @@ export default function MessageRow({
             <span className="text-sm font-semibold" style={{ color }}>
               {m.nick}
             </span>
-            <span className="font-mono text-[10px] text-paper-500">{formatTime(m.sentAt)}</span>
+            {/* client clock wins: the server-forged sent_at stays cosmetic-only */}
+            <span className="font-mono text-[10px] text-paper-500">{formatTime(m.clientSentAt ?? m.sentAt)}</span>
             {own && (
               <span
                 className={`text-brass-500 ${fresh ? 'animate-stamp' : ''}`}

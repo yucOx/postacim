@@ -34,6 +34,9 @@ export interface ChatMessage {
   nonce: string;
   ciphertext: string;
   sent_at: number;
+  /** client-generated AAD binding (replay hardening); null on legacy rows */
+  client_id?: string | null;
+  sent_at_client?: number | null;
 }
 
 export interface VoiceTokenResponse {

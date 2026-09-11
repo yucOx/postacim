@@ -11,8 +11,17 @@ export interface PlainMessage {
 // relocate a captured ciphertext into another context or replay it under
 // another epoch. Scope: 'ch' = community channel, 'dm' = direct, 'gdm' = group DM.
 export type MsgScope = 'ch' | 'dm' | 'gdm';
-const aad = (scope: MsgScope, channelId: string, version: number): string =>
-  `${scope}:${channelId}:v${version}`;
+// optional client binding: a client-generated UUID + timestamp join the AAD so
+// a malicious server cannot re-inject the same ciphertext as a "new" message or
+// forge its send time. Absent binding keeps the legacy AAD (existing DB rows).
+export interface MsgBinding {
+  clientId: string;
+  clientSentAt: number;
+}
+const aad = (scope: MsgScope, channelId: string, version: number, binding?: MsgBinding): string =>
+  binding
+    ? `${scope}:${channelId}:v${version}:${binding.clientId}:${binding.clientSentAt}`
+    : `${scope}:${channelId}:v${version}`;
 
 export function encryptText(
   channelId: string,
@@ -20,6 +29,7 @@ export function encryptText(
   key: Uint8Array,
   body: string,
   scope: MsgScope = 'ch',
+  binding?: MsgBinding,
 ): { nonce: string; ciphertext: string } {
   const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
   const plain = new TextEncoder().encode(
@@ -27,7 +37,7 @@ export function encryptText(
   );
   const ct = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     plain,
-    aad(scope, channelId, version),
+    aad(scope, channelId, version, binding),
     null,
     nonce,
     key,
@@ -48,13 +58,14 @@ export function decryptText(
   nonceB64: string,
   ciphertextB64: string,
   scope: MsgScope = 'ch',
+  binding?: MsgBinding,
 ): PlainMessage {
   let pt: Uint8Array;
   try {
     pt = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
       null,
       unb64(ciphertextB64),
-      aad(scope, channelId, version),
+      aad(scope, channelId, version, binding),
       unb64(nonceB64),
       key,
     );

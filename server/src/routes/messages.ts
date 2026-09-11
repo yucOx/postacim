@@ -7,11 +7,25 @@ interface PostBody {
   key_version?: number;
   nonce?: string;
   ciphertext?: string;
+  client_id?: string;
+  sent_at_client?: number;
 }
 
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 // 64 KiB decoded → ~87.5k base64 chars
 const MAX_CIPHERTEXT_B64 = 87_484;
+// replay hardening: client UUID + timestamp bound into the AAD; the server
+// only stores/echoes them. Both-or-neither — a half-bound row could never
+// decrypt on the client.
+const CLIENT_ID_RE = /^[0-9a-f-]{36}$/;
+const SENT_AT_CLIENT_MAX = 4_102_444_800_000; // 2100-01-01
+const validBinding = (clientId: unknown, sentAtClient: unknown): boolean =>
+  typeof clientId === 'string' &&
+  CLIENT_ID_RE.test(clientId) &&
+  typeof sentAtClient === 'number' &&
+  Number.isInteger(sentAtClient) &&
+  sentAtClient >= 0 &&
+  sentAtClient <= SENT_AT_CLIENT_MAX;
 
 export async function messageRoutes(app: FastifyInstance): Promise<void> {
   app.get('/channels/:id/messages', async (req, reply) => {
@@ -26,7 +40,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 100);
     const rows = db
       .prepare(
-        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at
+        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client
          FROM messages m JOIN users u ON u.id = m.sender_id
          WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`,
       )
@@ -64,12 +78,18 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       if (body.key_version !== channel.key_version) {
         return reply.code(409).send({ error: 'anahtar sürümü eski' });
       }
+      const hasBinding = body.client_id !== undefined || body.sent_at_client !== undefined;
+      if (hasBinding && !validBinding(body.client_id, body.sent_at_client)) {
+        return reply.code(400).send({ error: 'geçersiz mesaj verisi' });
+      }
+      const clientId = hasBinding ? body.client_id ?? null : null;
+      const sentAtClient = hasBinding ? body.sent_at_client ?? null : null;
       const now = Date.now();
       const info = db
         .prepare(
-          'INSERT INTO messages(channel_id, sender_id, key_version, nonce, ciphertext, sent_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO messages(channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         )
-        .run(id, req.user.id, body.key_version, body.nonce, body.ciphertext, now);
+        .run(id, req.user.id, body.key_version, body.nonce, body.ciphertext, now, clientId, sentAtClient);
       const message = {
         id: Number(info.lastInsertRowid),
         channel_id: id,
@@ -79,6 +99,8 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
         nonce: body.nonce,
         ciphertext: body.ciphertext,
         sent_at: now,
+        client_id: clientId,
+        sent_at_client: sentAtClient,
       };
       hub.broadcast(channel.community_id, { type: 'message:new', channel_id: id, message });
       return reply.code(201).send({ id: message.id, sent_at: now });
