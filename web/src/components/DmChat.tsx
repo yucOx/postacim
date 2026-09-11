@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, LogOut, Phone, UserPlus, Users, Video } from 'lucide-react';
+import { ChevronLeft, Fingerprint, LogOut, Phone, UserPlus, Users, Video } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore, type DmDisplayMessage } from '../state/dmChatStore';
 import { useUnreadStore } from '../state/unreadStore';
@@ -9,6 +9,7 @@ import ConfirmDialog from './ConfirmDialog';
 import MessageRow from './MessageRow';
 import Composer from './Composer';
 import Modal from './Modal';
+import SafetyModal from './SafetyModal';
 import { ShieldCheck } from 'lucide-react';
 
 // stable ref: `?? []` in a zustand selector recreates it each call and loops React 19 (#185)
@@ -77,6 +78,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
   const stickToBottom = useRef(true);
   const [adding, setAdding] = useState(false);
   const [showLeave, setShowLeave] = useState(false);
+  const [safety, setSafety] = useState(false);
 
   useEffect(() => {
     void loadHistory(dmId);
@@ -163,6 +165,14 @@ export default function DmChat({ dmId }: { dmId: string }) {
               <Video size={13} />
               görüntülü
             </button>
+            <button
+              onClick={() => setSafety(true)}
+              className="btn-ghost !px-2.5 !py-1 !text-xs"
+              title="güvenlik numarası"
+            >
+              <Fingerprint size={13} />
+              güvenlik
+            </button>
           </>
         )}
       </div>
@@ -206,6 +216,9 @@ export default function DmChat({ dmId }: { dmId: string }) {
         placeholder={dm ? `@${dm.peer.nick} — şifreli mesaj…  (Enter: gönder)` : `${gdm!.name} — şifreli mesaj…  (Enter: gönder)`}
       />
       {adding && gdm && <AddMemberModal gdmId={gdm.id} onClose={() => setAdding(false)} />}
+      {safety && dm && (
+        <SafetyModal peerId={dm.peer.id} peerNick={dm.peer.nick} onClose={() => setSafety(false)} />
+      )}
       {showLeave && gdm && (
         <ConfirmDialog
           title="Gruptan ayrıl"
