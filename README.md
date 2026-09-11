@@ -114,16 +114,21 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Otomatik testler
 
 ```bash
-npm test    # 64 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 105 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
 ```
 
 - `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
+- `web/src/crypto/fingerprint.test.ts` — safety number simetrisi, bilinen vektör, biçim
+- `web/src/csp.test.ts` — nginx CSP'nin WASM kripto uyumu (wasm-unsafe-eval), HSTS yalnız TLS conf'da
+- `web/src/lib/replay.test.ts` — client_id tekrar oynatma filtresi (aynı kanalda yinelenen id reddi)
+- `web/src/lib/safety.test.ts` — safety number sıra bağımsızlığı/biçim
 - `server/test/auth.test.ts` — kayıt/giriş, IP başına limitler, httpOnly çerez (+ Secure bayrağı TLS arkasında) + WS çerez auth, logout iptali, şifre değişimi oturum düşürme, BIP-39 kurtarma döngüsü
 - `server/test/messages.test.ts` — geçmiş sayfalama imleci, kullanıcı başına (IP değil) gönderim limiti, rotate kadro doğrulaması
 - `server/test/moderation.test.ts` — roller, kick→dondur→rotate, ban, kanal limiti
 - `server/test/join.test.ts` — açık/hedefli davet, süre/kullanım limiti, başvurular, katılım şifresi
 - `server/test/social.test.ts` — arkadaşlık, DM, grup DM rekey, WS canlı olay + sesli durum yayını
 - `server/test/boot.test.ts` — zayıf secret reddi, taze DB migration zinciri
+- `server/test/delete.test.ts` — hesap silme: kimlik/mesaj/DM/grup/topluluk tek transaction, kurucu devri
 - `.github/workflows/ci.yml` — push/PR'da tip kontrolü + tüm testler
 
 ## Elle test (iki tarayıcı profili)
@@ -169,6 +174,6 @@ npm test    # 64 test: kripto/istemci birim + kara kutu entegrasyon (geçici sun
 - [x] Sprint 1 — bütünlük: per-user limitler, pending rekey, LiveKit eviction, oturum düşürme
 - [x] Sprint 2 — TLS/HSTS + CSP + httpOnly çerez + WS dayanıklılık
 - [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
-- [x] Test turu — 64 otomatik test + CI
+- [x] Test turu — 105 otomatik test + CI
 
 **Sıradaki (kurul kararı):** MLS/forward-secrecy araştırması · Onion/Tor rehberi · çoklu cihaz (MLS sonrası)
