@@ -17,8 +17,13 @@ export default function Login() {
   const [ackReady, setAckReady] = useState(false); // 3s anti-reflex timer
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const status = useAuthStore((s) => s.status);
+  const sessionNick = useAuthStore((s) => s.user?.nick ?? '');
   const login = useAuthStore((s) => s.login);
   const register = useAuthStore((s) => s.register);
+
+  // reload with a live session: password-only card, the nick is already known
+  if (status === 'needs_password') return <ReauthStep nick={sessionNick} />;
 
   useEffect(() => {
     if (!ack) return;
@@ -201,6 +206,74 @@ export default function Login() {
           </form>
         </>
       )}
+    </div>
+  );
+}
+
+// --- reload re-auth: session cookie alive, KEK gone with the old tab ---
+
+function ReauthStep({ nick }: { nick: string }) {
+  const reauthenticate = useAuthStore((s) => s.reauthenticate);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: FormEvent): Promise<void> => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await reauthenticate(password);
+    } catch (err) {
+      // wrong password only fails locally — the session stays valid, so the
+      // user stays here and can retry
+      setError(err instanceof Error ? err.message : 'bir hata oluştu');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-10 bg-night-950 px-4 py-10 text-paper-100">
+      <div className="text-brass-400">
+        <SealMark size={96} />
+      </div>
+      <form
+        onSubmit={submit}
+        className="w-full max-w-88 rounded-lg border border-brass-700/70 bg-night-900 p-6 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)]"
+      >
+        <div className="mb-5 flex items-center gap-2.5 border-b border-night-700 pb-4">
+          <PigeonMark size={22} className="text-lamp-500" />
+          <div>
+            <div className="plate !text-sm !tracking-[0.2em] text-paper-100">TEKRAR GİRİŞ</div>
+            <p className="mt-0.5 text-[11px] text-paper-500">
+              oturumun hâlâ açık — anahtarın için şifren gerekiyor
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="text-paper-300">nick</span>
+            <div className="input select-all">{nick}</div>
+          </div>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="text-paper-300">şifre</span>
+            <PasswordInput
+              value={password}
+              onChange={setPassword}
+              placeholder="••••••••"
+              showStrength={false}
+              autoFocus
+            />
+          </div>
+          {error && (
+            <p className="rounded-md border border-stamp-500/60 bg-stamp-100 px-3 py-2 text-sm text-stamp-400">{error}</p>
+          )}
+          <button type="submit" disabled={busy || !password} className="btn-lamp w-full">
+            {busy ? 'anahtar türetiliyor…' : 'giriş yap'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

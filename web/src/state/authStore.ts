@@ -7,14 +7,39 @@ import { deriveRecoveryKeys } from '../crypto/recovery';
 import { generateIdentity, openIdentityBlob, sealIdentityBlob } from '../crypto/identity';
 import { sodiumReady } from '../crypto/sodium';
 
+// shared tail of login / reauthenticate / restore: unwrap key_blob under the
+// fresh KEK. A wrong password throws here, before any authed state is set.
+function authedPatch(user: AuthedUser, kek: Uint8Array) {
+  const publicKey = unb64(user.public_key);
+  let privateKey: Uint8Array;
+  try {
+    privateKey = openIdentityBlob(user.key_blob, kek);
+  } catch {
+    throw new ApiError(401, 'şifre hatalı');
+  }
+  return {
+    status: 'authed' as const,
+    user: {
+      id: user.id,
+      nick: user.nick,
+      avatar_updated_at: user.avatar_updated_at ?? null,
+    },
+    publicKey,
+    privateKey,
+    kek,
+  };
+}
+
 interface AuthState {
-  status: 'loading' | 'anonymous' | 'authed';
+  // needs_password: session cookie alive but the KEK died with the old tab
+  status: 'loading' | 'anonymous' | 'needs_password' | 'authed';
   user: { id: string; nick: string; avatar_updated_at: number | null } | null;
   publicKey: Uint8Array | null;
   privateKey: Uint8Array | null;
   kek: Uint8Array | null;
   register: (nick: string, password: string, recoveryWords?: string[]) => Promise<void>;
   login: (nick: string, password: string) => Promise<void>;
+  reauthenticate: (password: string) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   setupRecovery: (recoveryWords: string[]) => Promise<void>;
   recoverLogin: (nick: string, recoveryWords: string[], newPassword: string) => Promise<void>;
@@ -82,24 +107,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       method: 'POST',
       body: { nick, auth_material: b64(authMaterial) },
     });
-    const publicKey = unb64(res.user.public_key);
-    let privateKey: Uint8Array;
-    try {
-      privateKey = openIdentityBlob(res.user.key_blob, kek);
-    } catch {
-      throw new ApiError(401, 'şifre hatalı');
-    }
-    set({
-      status: 'authed',
-      user: {
-        id: res.user.id,
-        nick: res.user.nick,
-        avatar_updated_at: res.user.avatar_updated_at ?? null,
-      },
-      publicKey,
-      privateKey,
-      kek,
-    });
+    set(authedPatch(res.user, kek));
+  },
+
+  // needs_password path: the cookie session is still valid, only this tab's
+  // KEK is gone. Re-derive it from the password and unwrap the same key_blob;
+  // no new login, so nothing server-side changes on a wrong password.
+  reauthenticate: async (password) => {
+    await sodiumReady;
+    const nick = get().user?.nick;
+    if (!nick) throw new Error('giriş yapılmamış');
+    const params = await api<{ kdf_salt: string }>(
+      `/auth/kdf-params?nick=${encodeURIComponent(nick)}`,
+    );
+    const { kek } = await deriveKeys(password, params.kdf_salt);
+    const me = await api<{ user: AuthedUser }>('/auth/me');
+    set(authedPatch(me.user, kek));
   },
 
   // Password change re-wraps the identity blob under the new KEK. Channel keys
@@ -191,12 +214,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ status: 'anonymous', user: null, publicKey: null, privateKey: null, kek: null });
   },
 
-  // no KEK persistence — reload = password reprompt; deliberate: a JS-readable
-  // KEK would let a single XSS unwrap the identity key. Without a KEK the
-  // server's key_blob cannot be opened, so /auth/me is pointless and boot goes
-  // straight to anonymous.
+  // The KEK never persists — a JS-readable copy would let a single XSS unwrap
+  // the identity key. The httpOnly session cookie does outlive the tab, so
+  // restore consults /auth/me: anonymous → login, KEK still in memory → in,
+  // cookie alive without a KEK (reload) → password reprompt (needs_password).
   restore: async () => {
-    set({ status: 'anonymous' });
+    let me: { user: AuthedUser };
+    try {
+      me = await api<{ user: AuthedUser }>('/auth/me');
+    } catch {
+      set({ status: 'anonymous' });
+      return;
+    }
+    const { kek } = get();
+    if (kek) {
+      await sodiumReady;
+      set(authedPatch(me.user, kek));
+      return;
+    }
+    set({
+      status: 'needs_password',
+      user: {
+        id: me.user.id,
+        nick: me.user.nick,
+        avatar_updated_at: me.user.avatar_updated_at ?? null,
+      },
+    });
   },
 
   setAvatar: async (dataUrl) => {
