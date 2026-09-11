@@ -52,6 +52,7 @@ export interface DmInfo {
 export interface GdmInfo {
   id: string;
   name: string;
+  creator_id: string;
   key_version: number;
   members: { id: string; nick: string; public_key: string }[];
   my_wrapped_key: string | null;

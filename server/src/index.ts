@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import crypto from 'node:crypto';
-import { config } from './config.js';
+import { config, clientIp } from './config.js';
 import './db.js'; // open + migrate on boot
 import './types.js';
 import {
@@ -48,7 +48,7 @@ await app.register(rateLimit, {
   keyGenerator: (req) => {
     const auth = req.headers.authorization ?? req.cookies?.[SESSION_COOKIE];
     if (auth) return 'u:' + crypto.createHash('sha256').update(auth).digest('hex').slice(0, 32);
-    return req.ip;
+    return clientIp(req);
   },
 });
 

@@ -230,7 +230,8 @@ export default function Login() {
 
 function ReauthStep({ nick }: { nick: string }) {
   const reauthenticate = useAuthStore((s) => s.reauthenticate);
-  const [password, setPassword] = useState('');
+  const logout = useAuthStore((s) => s.logout);
+  const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -279,6 +280,7 @@ function ReauthStep({ nick }: { nick: string }) {
               onChange={setPassword}
               placeholder="••••••••"
               showStrength={false}
+              autoComplete="current-password"
               autoFocus
             />
           </div>
@@ -287,6 +289,14 @@ function ReauthStep({ nick }: { nick: string }) {
           )}
           <button type="submit" disabled={busy || !password} className="btn-lamp w-full">
             {busy ? 'anahtar türetiliyor…' : 'giriş yap'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void logout()}
+            disabled={busy}
+            className="w-full text-center text-xs text-paper-500 transition-colors hover:text-paper-300"
+          >
+            bu hesap değil — başka hesapla gir
           </button>
         </div>
       </form>

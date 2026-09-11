@@ -23,6 +23,7 @@ export default function PasswordInput({
   autoFocus,
   minLength = 6,
   showStrength = true,
+  autoComplete = 'new-password',
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -30,6 +31,8 @@ export default function PasswordInput({
   autoFocus?: boolean;
   minLength?: number;
   showStrength?: boolean;
+  /** 'new-password' when creating; 'current-password' when re-entering an existing one */
+  autoComplete?: 'new-password' | 'current-password';
 }) {
   const [show, setShow] = useState(false);
   const score = passwordScore(value);
@@ -43,7 +46,7 @@ export default function PasswordInput({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           minLength={minLength}
-          autoComplete="new-password"
+          autoComplete={autoComplete}
           className="input pr-10"
         />
         <button

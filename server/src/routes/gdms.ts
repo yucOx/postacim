@@ -47,6 +47,7 @@ export function gdmMemberIds(channelId: string): string[] {
 export function gdmPayload(userId: string): {
   id: string;
   name: string;
+  creator_id: string;
   key_version: number;
   members: { id: string; nick: string; public_key: string }[];
   my_wrapped_key: string | null;
@@ -54,13 +55,19 @@ export function gdmPayload(userId: string): {
 }[] {
   const rows = db
     .prepare(
-      `SELECT g.id, g.name, g.key_version,
+      `SELECT g.id, g.name, g.creator_id, g.key_version,
         (SELECT MAX(sent_at) FROM gdm_messages m WHERE m.channel_id = g.id) AS last_at
        FROM gdm_channels g
        JOIN gdm_members mem ON mem.channel_id = g.id AND mem.user_id = ?
        ORDER BY last_at DESC, g.created_at DESC`,
     )
-    .all(userId) as { id: string; name: string; key_version: number; last_at: number | null }[];
+    .all(userId) as {
+    id: string;
+    name: string;
+    creator_id: string;
+    key_version: number;
+    last_at: number | null;
+  }[];
   return rows.map((r) => {
     const members = db
       .prepare(
@@ -74,6 +81,7 @@ export function gdmPayload(userId: string): {
     return {
       id: r.id,
       name: r.name,
+      creator_id: r.creator_id,
       key_version: r.key_version,
       members,
       my_wrapped_key: key?.wrapped_key ?? null,

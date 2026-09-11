@@ -46,4 +46,19 @@ export const config = {
     process.env.TURNSTILE_VERIFY_URL ?? 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
   /** dev/testing knob — keep 3 in production */
   registerRatePerHour: num(process.env.REGISTER_RATE_PER_HOUR, 3),
+  /** set 1 when the app sits behind a Cloudflare proxy: rate limits and the
+   *  Turnstile remoteip then use the CF-Connecting-IP header (the real client)
+   *  instead of the CF edge IP nginx forwards. Only enable it when the server
+   *  is reachable ONLY through Cloudflare — a direct client could forge the header. */
+  trustCfConnectingIp: process.env.PGV_TRUST_CF_IP === '1',
 };
+
+/** the client IP to bucket on: CF-Connecting-IP when behind Cloudflare, else
+ *  the trustProxy-resolved address */
+export function clientIp(req: { ip: string; headers: Record<string, unknown> }): string {
+  if (config.trustCfConnectingIp) {
+    const cf = req.headers['cf-connecting-ip'];
+    if (typeof cf === 'string' && cf) return cf;
+  }
+  return req.ip;
+}

@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { loginSchema, NICK_REGEX, registerSchema } from '../schemas.js';
 import { issueSession, revokeAllSessions, revokeSession, SESSION_COOKIE } from '../auth/sessions.js';
-import { config } from '../config.js';
+import { config, clientIp } from '../config.js';
 
 // Cookie mirrors the Bearer token 1:1. httpOnly + SameSite=strict keeps it out
 // of JS and cross-site requests; Secure flips on automatically behind TLS.
@@ -69,7 +69,7 @@ async function burnVerify(): Promise<void> {
 // verified server-side at siteverify. Any transport/parse/verification failure
 // counts as failed — fail closed.
 async function verifyTurnstile(
-  req: { ip: string },
+  req: { ip: string; headers: Record<string, unknown> },
   token: unknown,
 ): Promise<boolean> {
   if (!config.turnstileSecret) return true;
@@ -81,7 +81,7 @@ async function verifyTurnstile(
       body: new URLSearchParams({
         secret: config.turnstileSecret,
         response: token,
-        remoteip: req.ip,
+        remoteip: clientIp(req),
       }),
     });
     if (!res.ok) return false;

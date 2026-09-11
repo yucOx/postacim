@@ -3,6 +3,7 @@ import { ChevronLeft, Fingerprint, LogOut, Phone, UserPlus, Users, Video } from 
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore, type DmDisplayMessage } from '../state/dmChatStore';
 import { amSender } from '../state/chatStore';
+import { useAuthStore } from '../state/authStore';
 import { useHiddenStore, NO_HIDDEN } from '../state/hiddenStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
@@ -221,9 +222,8 @@ export default function DmChat({ dmId }: { dmId: string }) {
                 <div className="group relative">
                   <MessageRow m={m} prev={prev} />
                   <HoverActions
-                    // DM: both participants may tombstone; gdm: sender only
-                    // (gdm creator is allowed server-side but the client has no creator_id)
-                    canDeleteAll={dm ? true : amSender(m)}
+                    // DM: both participants may tombstone; gdm: sender or creator
+                    canDeleteAll={dm ? true : amSender(m) || gdm?.creator_id === useAuthStore.getState().user?.id}
                     onDeleteAll={() => void deleteForEveryone(dmId, m.id).catch(() => {})}
                     onDeleteForMe={() => hideForMe(dmId, m.id)}
                   />
