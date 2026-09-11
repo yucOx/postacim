@@ -144,9 +144,15 @@ async function connectRoom(
     useVoiceStore.setState({ error: 'E2EE hatası: anahtarlar uyuşmuyor' });
   });
   room.on(RoomEvent.Disconnected, onDisconnected);
-  await keyProvider.setKey(key.slice().buffer as ArrayBuffer);
-  await room.setE2EEEnabled(true);
-  await room.connect(url, token);
+  try {
+    await keyProvider.setKey(key.slice().buffer as ArrayBuffer);
+    await room.setE2EEEnabled(true);
+    await room.connect(url, token);
+  } catch (err) {
+    // a failed attempt must not leak its half-connected room + worker
+    cleanup(room);
+    throw err;
+  }
   return { room, keyProvider };
 }
 
@@ -224,18 +230,36 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         method: 'POST',
       });
 
-      const onDisconnected = (): void => {
-        const st = useVoiceStore.getState();
-        if (st.room === room) {
-          if (st.joinedChannelId && !st.isDmCall) {
-            wsSend({ type: 'voice_state', channel_id: st.joinedChannelId, state: 'left' });
+      // "could not establish pc connection": livekit gives the RTCPeerConnection
+      // 15s to reach CONNECTED, and ICE sometimes loses that race on an
+      // otherwise-fine network (mDNS candidate lookups, TURN relay probing,
+      // dead-interface candidate pairs). The second attempt is warm and fast —
+      // retry instead of dead-ending the join.
+      let lastErr: unknown = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const onDisconnected = (): void => {
+            const st = useVoiceStore.getState();
+            if (st.room === room) {
+              if (st.joinedChannelId && !st.isDmCall) {
+                wsSend({ type: 'voice_state', channel_id: st.joinedChannelId, state: 'left' });
+              }
+              useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
+            }
+          };
+          const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
+          wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
+          set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: false, camOn: false, isDmCall: false });
+          return;
+        } catch (err) {
+          lastErr = err;
+          if (attempt < 3) {
+            set({ error: `bağlantı kuruluyor — yeniden deneniyor (${attempt + 1}/3)…` });
+            await new Promise((r) => setTimeout(r, 1200 * attempt));
           }
-          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
         }
-      };
-      const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
-      wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
-      set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: false, camOn: false, isDmCall: false });
+      }
+      throw lastErr;
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
       throw err;
