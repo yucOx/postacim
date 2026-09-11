@@ -69,4 +69,4 @@ Tam ekran `fixed inset-0 z-50`, `night-950/97` arka plan. Üst bar: `plate "GÖR
 
 ## Testler
 
-Vitest, **105/105 yeşil**. Kapsam: crypto (BIP-39 üretim + doğrulama + **çakışma retry** — collision test'i), auth mağazası, sohbet/DM state, voice/drawer davranışı, rekey, komponent snapshot'ları. `crypto.test.ts` deterministik RNG'yi tolere eden çakışma stratejisini sınar — aynı kelime iki kez üretildiğinde tekrar üretir.
+Vitest, **153/153 yeşil**. Kapsam: crypto (BIP-39 üretim + doğrulama + **çakışma retry** — collision test'i), auth mağazası, sohbet/DM state, voice/drawer davranışı, rekey, komponent snapshot'ları. `crypto.test.ts` deterministik RNG'yi tolere eden çakışma stratejisini sınar — aynı kelime iki kez üretildiğinde tekrar üretir.

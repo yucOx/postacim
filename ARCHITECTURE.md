@@ -18,19 +18,22 @@ Akış: tarayıcı `web/` nginx'den yüklenir → `/api/*` server'a, `/ws` WS'e,
 2. 64B ikiye bölünür (`authStore.ts`): ilk 32B **authMaterial** → sunucuda argon2id verifier olarak saklanır (şifre gönderilmez); son 32B **KEK** — tarayıcıdan çıkmaz, memory-only (reload'da şifre yeniden istenir)
 3. KEK, X25519 private key blob'unu açar: `key_blob` = nonce(24) ‖ XChaCha20-Poly1305(privateKey), AAD `postacim/v1/identity` (`crypto/identity.ts`)
 4. Private key, kanal anahtarlarının **sealed-box** (`crypto_box_seal`) wrapped_key satırlarını açar (`unwrapMyKey`)
-5. Kanal anahtarı (32B rastgele) → mesaj: **XChaCha20-Poly1305**, AAD = `scope:channelId:v<key_version>` + opsiyonel client binding (`crypto/message.ts`). Scope: `ch` (topluluk kanalı) / `dm` / `gdm`
+5. Kanal anahtarı (32B rastgele) → mesaj: **XChaCha20-Poly1305**, AAD = `scope:channelId:v<key_version>` + opsiyonel client binding (`crypto/message.ts`). Scope: `ch` (topluluk kanalı) / `dm` / `gdm`. Per-gönderici ratchet: `msg_key_i = H(root_i)`, zincir `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir — güncel kök sızarsa geçmiş korunur; plaintext boyut bucket padding'li (magic `0x01`/`0x02` v2 ratchet'li)
 6. Client binding: UUID + client timestamp AAD'ye girer, sunucu `client_id` + `sent_at_client` kolonlarında echo eder → bant dışı tekrar oynatma ve timestamp sahteciliği tespit edilebilir (`lib/replay.ts` istemcide dedupe eder)
 7. Ses/görüntü: aynı kanal anahtarı → LiveKit **SFrame** (HKDF türevi). DM araması aynı DM anahtarını kullanır
 8. Epoklar: her sarma yeni `key_version`; eski satırlar kalır → rotasyon öncesi geçmiş okunur. Üye çıkarma = `needs_rekey` → kanal donar, staff rotate edene kadar yazı/ses/davet/üye ekleme kapalı
 9. BIP-39 kurtarma: 12 kelime → aynı Argon2id zinciri (`crypto/recovery.ts`) → identity blob ikinci kez sarılır (`recovery_blob`). Şifre kaybı hesap kaybı değil; ikisi de kaybolursa hesap kurtarılamaz
+10. Cihaz kilidi (ops.): WebAuthn PRF'ten cihaz KEK'i → private key + auth_material XChaCha20 ile sarılıp IndexedDB'ye (`pgv-device`, `crypto/devicekey.ts`) — F5'te parmak izi/PIN, şifre akışı fallback
+11. Anahtar defteri: kayıtta public key `key_log`'a append-only satır düşer; istemci boot'ta `GET /keys/log` ile zinciri doğrular, kendi kaydını kontrol eder, head'i localStorage'a yazar (`lib/keytransparency.ts`)
 
 ## DB şeması
 
-Kaynak: `server/src/migrations.ts` (v1–v12, sıralı, `schema_version` tablosuyla takip). Tüm tablolar `server/src/db.ts` açar (WAL, FK açık).
+Kaynak: `server/src/migrations.ts` (v1–v13, sıralı, `schema_version` tablosuyla takip). Tüm tablolar `server/src/db.ts` açar (WAL, FK açık).
 
 | Tablo | Kolonlar | Amaç | Yazan/okuyan route'lar |
 |---|---|---|---|
 | `users` | `id` TEXT PK · `nick` TEXT UNIQUE NOCASE · `kdf_salt` TEXT · `verifier` TEXT · `public_key` TEXT · `key_blob` TEXT · `created_at` INT · `recovery_salt`/`recovery_blob`/`recovery_verifier` TEXT (n) · `avatar_data` BLOB (n) · `avatar_updated_at` INT (n) | Kimlik + argon2id verifier + KEK altında sarılı private key blob; kurtarma ikinci sarma; küçük avatar | auth (register/login/password/recovery/recover), users (pubkey/avatar/me DELETE) |
+| `key_log` | `id` INT PK AUTOINC · `user_id` TEXT (bilinçli FK değil — kanıt hesap silinse de kalır) · `public_key` TEXT · `prev_hash`/`entry_hash` TEXT · `created_at` INT · `idx_key_log_user` | Append-only public key defteri; `entry_hash = sha256(prev_hash ‖ '\x00' ‖ user_id ‖ '\x00' ‖ public_key)`, genesis 64×'0' | keys (appendKeyLog — tek yazı yolu, yalnız INSERT), auth (register), boot (backfill), users (me DELETE dokunmaz) |
 | `sessions` | `token_hash` TEXT PK (sha256) · `user_id` FK · `expires_at` INT · `created_at` INT | Oturum tokenları — ham token hiçbir yerde durmaz | auth (login/logout/password/recover), tüm auth hook (`index.ts`), janitor `pruneSessions` saatlik |
 | `communities` | `id` TEXT PK · `name` TEXT · `owner_id` FK · `created_at` INT · `join_kdf_salt`/`join_verifier` TEXT (n) | Topluluk + opsiyonel katılım şifresi argon2 verifier'ı | communities (create/join-password), bootstrap |
 | `members` | (`community_id`,`user_id`) PK · `role` CHECK(owner/admin/member) · `joined_at` INT | Üyelik + rol | communities (members/admins/bans/join-requests/approve), invites complete, access.ts |
@@ -62,7 +65,7 @@ Tümü `/api` önekli. `index.ts` auth hook'u: `PUBLIC_PATHS` dışında her şe
 |---|---|---|---|
 | GET `/auth/kdf-params?nick=` | istemci KDF salt'ı (bilinmeyen nick → pseudo-salt) | hayır | 20/dk |
 | POST `/auth/register` | hesap aç: kdf_salt + auth_material + public_key + key_blob (+ recovery, turnstile) | hayır | 3/sa |
-| POST `/auth/login` | auth_material verify → token + cookie + key_blob | hayır | 5/dk |
+| POST `/auth/login` | auth_material verify → token + cookie + key_blob; pencere içi art arda hatada IP kademeli blok (1→15 dk) | hayır | 5/dk |
 | GET `/auth/me` | reload sonrası oturum/blob geri yükleme | evet | — |
 | POST `/auth/logout` | oturum iptali + çerez sil | evet | — |
 | POST `/auth/password` | eski material verify → yeni salt/verifier/blob; tüm oturumlar düşer | evet | 5/dk |
@@ -162,11 +165,17 @@ Tümü `/api` önekli. `index.ts` auth hook'u: `PUBLIC_PATHS` dışında her şe
 | GET `/users/:id/pubkey` | herhangi bir kullanıcının public key'i (safety number için) | evet | 30/dk |
 | DELETE `/users/me` | kalıcı hesap silme — tek transaction: kendi mesaj satırları, DM kanalları, grup üyeliği (kurucu devri), davetler, sahip olduğu topluluklar, kimlik | evet | 5/sa |
 
+### Anahtar defteri (`routes/keys.ts`)
+
+| Uç | Amaç | Auth | Limit |
+|---|---|---|---|
+| GET `/keys/log?after=&limit=` | defter sayfalama (limit 1–500, default 200) + her sayfada güncel head; istemce `entry_hash`'leri yeniden hesaplayıp zinciri doğrular | hayır | 30/dk (anonim IP kovası) |
+
 Ayrıca: GET `/api/health` → `{"ok":true}` (public).
 
 ## WS protokolü
 
-Sunucu: `server/src/ws/` — `/ws`, maxPayload 1 MiB, ilk kare auth zorunlu (aksi halde `4001 önce auth`; hatalı JSON `4002`; geçersiz oturum `4003`), token yerine `pgv_session` çerezi de kabul. Ping/pong reaper 30 sn'de bir süpürür. İstemci: `web/src/ws/socket.ts` (auth frame'siz — çerez taşınır; sonsuz reconnect, 500 ms→30 s üstel backoff + ±%20 jitter, `ws/backoff.ts`).
+Sunucu: `server/src/ws/` — `/ws`, maxPayload 1 MiB, ilk kare auth zorunlu (aksi halde `4001 önce auth`; hatalı JSON `4002`; geçersiz oturum `4003`; auth frame 10 sn'de gelmezse `4004`), token yerine `pgv_session` çerezi de kabul. Ping/pong reaper 30 sn'de bir süpürür. İstemci: `web/src/ws/socket.ts` (auth frame'siz — çerez taşınır; sonsuz reconnect, 500 ms→30 s üstel backoff + ±%20 jitter, `ws/backoff.ts`).
 
 Client → server:
 
@@ -218,10 +227,11 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `crypto/identity.ts` | X25519 keypair; blob seal/open (KEK altında); sealed-box wrap/unwrap |
 | `crypto/invite.ts` | davet linki kur/ayrıştır (`#/davet/<code>/<eph-priv>` fragment); ephemeral anahtarla açma |
 | `crypto/joinpw.ts` | katılım şifresi JW anahtarı altında kanal anahtarı seal/open |
-| `crypto/message.ts` | XChaCha20-Poly1305 mesaj AEAD; AAD = scope + kanal + epok + client binding |
+| `crypto/message.ts` | XChaCha20-Poly1305 mesaj AEAD; AAD = scope + kanal + epok + client binding; per-gönderici ratchet zinciri (msg_key_i) + boyut bucket padding |
+| `crypto/devicekey.ts` | WebAuthn PRF cihaz kilidi: passkey üret/enroll, cihaz KEK türetimi, blob sar/çöz, IndexedDB `pgv-device` |
 | `crypto/recovery.ts` | kurtarma ifadesinden Argon2id anahtar türetme (şifre yoluyla aynı zincir) |
 | `crypto/sodium.ts` | libsodium hazır olma sözü (WASM) |
-| `state/authStore.ts` | kayıt/giriş/reauth (needs_password)/şifre değişimi/kurtarma; KEK memory-only |
+| `state/authStore.ts` | kayıt/giriş/reauth (needs_password)/şifre değişimi/kurtarma; KEK memory-only; passkey unlock boot dalı |
 | `state/appStore.ts` | bootstrap hidrasyonu, topluluk/kanal seçimi, üye/rol/davet/başvuru yönetimi, WS kabloları |
 | `state/chatStore.ts` | kanal geçmişi + sayfalama + canlı mesaj akışı, anahtar açma |
 | `state/dmChatStore.ts` | DM + grup DM sohbet state'i, gizli mesaj filtresi |
@@ -229,6 +239,7 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `state/joinStore.ts` | davet/başvuru katılım akışı (link ayrıştırma, şifre kanıtı, anahtar sarma) |
 | `state/hiddenStore.ts` | "benim için sil" — yalnız istemcide mesaj gizleme (localStorage) |
 | `state/unreadStore.ts` | okunmadı sayacı — sunucu neyi okuduğunu bilmez (localStorage) |
+| `state/securityStore.ts` | defter doğrulama uyarıları — Shell üstünde kırmızı güvenlik bandı |
 | `api/client.ts` | fetch sarmalayıcı (çerez auth, ApiError) |
 | `api/types.ts` | API tip tanımları |
 | `ws/socket.ts` | WS istemcisi: auth frame, olay dağıtımı, reconnect |
@@ -236,6 +247,7 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `lib/avatar.ts` | istemci tarafı avatar küçültme (64×64 JPEG ~3-8 KB) |
 | `lib/format.ts` | saat/gün biçimleme (tr-TR) |
 | `lib/keypins.ts` | TOFU public-key pin store — sunucu anahtar değişimini yakalar |
+| `lib/keytransparency.ts` | anahtar defteri: zincir doğrulama, head localStorage, kendi kayıt kontrolü, head damga formatı |
 | `lib/nick.ts` | userId → nick çözümleyici (tüm bilinen kaynaklardan) |
 | `lib/replay.ts` | client_id dedupe — sunucu ciphertext'i yeni satır olarak yeniden enjekte edemez |
 | `lib/safety.ts` | 30 haneli safety number (sıralı public key hash) |
@@ -243,7 +255,7 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `App.tsx` / `main.tsx` / `router.ts` | kök bileşen, giriş, hash tabanlı yönlendirme (davet linkleri) |
 | `index.css` | tasarım token sözleşmesi (`@theme`) + bileşen sınıfları — bkz. DESIGN.md |
 | `components/Brand.tsx` | marka atomları: PigeonMark, SealMark, Postmark |
-| `components/Shell.tsx` | uygulama kabuğu: rota plakası, drawer, modal/arama katmanları |
+| `components/Shell.tsx` | uygulama kabuğu: rota plakası, drawer, modal/arama katmanları, güvenlik uyarı bandı |
 | `components/Login.tsx` | giriş/kayıt/kurtarma formları (posta senedi kartı) |
 | `components/JoinScreen.tsx` | davet/başvuru ile katılma ekranı |
 | `components/ServerRail.tsx` | sol dikey topluluk rayı |
@@ -256,11 +268,12 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `components/CallView.tsx` / `CallControls.tsx` / `CallQualityPicker.tsx` / `IncomingCall.tsx` / `PiPWidget.tsx` | 1:1 arama yüzeyleri: tam ekran, kontroller, kalite, gelen arama, küçük pencere |
 | `components/Avatar.tsx` | avatar bileşeni (initial + renk fallback) |
 | `components/Modal.tsx` / `ConfirmDialog.tsx` / `Toast.tsx` | diyalog ve bildirim altyapısı |
+| `components/DeviceLockModal.tsx` | "bu cihazda hatırla" passkey teklif diyaloğu |
 | `components/PasswordInput.tsx` | şifre alanı + güç heuristiği |
 | `components/MsgDelete.tsx` | mesaj silme diyaloğu (herkes/benim için) |
 | `components/KeyFingerprintModal.tsx` | safety number karşılaştırma diyaloğu |
 | `components/SafetyModal.tsx` | güvenlik bilgisi/pin uyarıları |
-| `components/ProfileModal.tsx` | profil: avatar yükleme, şifre, kurtarma ifadesi |
+| `components/ProfileModal.tsx` | profil: avatar yükleme, şifre, kurtarma ifadesi, anahtar defteri damgası |
 | `components/Turnstile.tsx` | Cloudflare Turnstile widget (sunucuda secret varsa) |
 | `components/SponsorNote.tsx` | dağıtım notu |
 
@@ -268,15 +281,15 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 
 | Dosya | Amaç |
 |---|---|
-| `index.ts` | Fastify app: trustProxy, auth hook (PUBLIC_PATHS), rate-limit kovaları, route kaydı, WS mount |
+| `index.ts` | Fastify app: trustProxy, auth hook (PUBLIC_PATHS), rate-limit kovaları, sansürlü req log (query/IP'siz), route kaydı, WS mount |
 | `config.ts` | env (port, dataDir, LiveKit, TTL, Turnstile, CF-IP); bilinen zayıf secret reddi; `clientIp` |
 | `db.ts` | SQLite aç (WAL, FK, busy_timeout) + sırayla migration uygula |
-| `migrations.ts` | v1–v12 sıralı şema betikleri (bkz. DB şeması) |
+| `migrations.ts` | v1–v13 sıralı şema betikleri (bkz. DB şeması) |
 | `schemas.ts` | NICK_REGEX + kayıt/giriş JSON şemaları (istemci/sunucu tek kaynak) |
 | `types.ts` | Fastify tip genişletmesi: `req.user`, `req.sessionToken` |
 | `livekit.ts` | oda token üretimi (offline JWT, 15 dk) + `evictFromRooms` (kick/ban'da canlı bağlantı düşürme) |
 | `auth/sessions.ts` | token üret (sha256 saklanır)/verify/iptal; rolling refresh; saatlik janitor |
-| `routes/auth.ts` | kayıt/giriş/çerez/logout/şifre değişimi/avatar/BIP-39 kurtarma; nick enumeration karşıtı pseudo-salt + timing-parity |
+| `routes/auth.ts` | kayıt/giriş/çerez/logout/şifre değişimi/avatar/BIP-39 kurtarma; nick enumeration karşıtı pseudo-salt + timing-parity; login kademeli IP bloğu; register defter satırı |
 | `routes/bootstrap.ts` | tek çağrılık tam hidrasyon |
 | `routes/communities.ts` | topluluk/kanal/üye/rol/ban/başvuru/katılım şifresi |
 | `routes/channels.ts` | my-key + rotate (rekey) |
@@ -288,7 +301,8 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `routes/dms.ts` | DM aç/liste/geçmiş/gönder/anahtar/arama token'ı |
 | `routes/gdms.ts` | grup DM: kur/üye ekle (rekey)/ayrıl (rekey)/geçmiş/gönder |
 | `routes/users.ts` | pubkey dağıtımı + kalıcı hesap silme |
+| `routes/keys.ts` | anahtar defteri: appendKeyLog (tek yazı yolu), GET /keys/log, boot backfill |
 | `ws/hub.ts` | socket kaydı, oda/kullanıcı yayını, ses kadro haritası, DM arama takibi |
-| `ws/index.ts` | WS upgrade + auth-first-frame + voice_state/call sinyal işleme |
+| `ws/index.ts` | WS upgrade + auth-first-frame (10 sn'de 4004 timeout) + voice_state/call sinyal işleme |
 | `lib/access.ts` | üyelik/rol/kanal/topluluk erişim sorguları (isStaff, needsRekey) |
 | `lib/social.ts` | arkadaş/DM yardımcıları (areFriends, findDmByPair, dm id üretimi) |
