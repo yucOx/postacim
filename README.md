@@ -138,10 +138,23 @@ npm test    # 64 test: kripto/istemci birim + kara kutu entegrasyon (geçici sun
 ## Güvenlik notları
 
 - Rate limit: kayıt 3/sa, giriş 5/dk, lookup/kdf-params 20/dk, mesaj 60/dk (kullanıcı+IP kovaları ayrı)
-- Oturum token'ları DB'de sha256; 30 gün TTL; süresi geçenler saatlik janitor ile temizlenir
+- Oturum token'ları DB'de sha256; 7 gün TTL (env ile ayarlanabilir); süresi geçenler saatlik janitor ile temizlenir
 - WS: ilk kare auth zorunlu (aksi halde 4001 ile kapanır), maxPayload 1 MiB, ping reaper
 - Dev: localhost secure context; ağ erişimi için [TLS overlay](#httpswss-tls-overlay) — repo'da hazır
 - LiveKit anahtarları `.env` üzerinden livekit (`--keys`) ve server'a aynı anda dağıtılır — tek kaynak
+
+## Tehdit modeli ve bilinen sınırlar
+
+- **Model**: sunucu kör ama kötü olabilir; ağ pasif dinleyici değildir (TLS overlay ile).
+- **Forward secrecy yok** — kanal/DM anahtarları epoch bazlı ve statik; bir epoch anahtarı sızarsa o dönemin geçmişi açılır. Signal tarzı ratchet yok.
+- **Web JS trust** — uygulama JS'i sunucudan dağıtılır; kötü niyetli/gözden geçirilmemiş sunucu değişmiş JS ile KEK'i çalabilir. Signed release/ayrı origin olmadan tarayıcı E2EE'de kapatılamaz. (KEK artık memory-only: reload'da şifre yeniden istenir.)
+- **Sansür/sıralama** — kör sunucu mesaj gizleyebilir, sıralamayı ve timestamp'i manipüle edebilir (client timestamp + UUID AAD'ye bağlı, tespit edilebilir; gizleme engellenemez).
+- **Gönderen atıfı kriptografik değil** — sender_id sunucu kolonu; içerikte imza yok.
+- **Metadata** — sosyal graf (kim kiminle), zamanlama, mesaj boyutu, presence, çağrı katılım/mute durumu sunucuda görünür.
+- **Nick enumeration** — login/kurtarma pseudo-salt ile kapalı; kalan kanal kayıt sırasındaki "nick alınmış" (rate-limited).
+- **Public key doğrulama** — sunucu üye public key'lerini dağıtır; DM başlıklarındaki güvenlik numarası ile bant dışı karşılaştırma tek savunma.
+- **DM anahtarları** arkadaşlık bitse de taraflarda kalır (geçmiş okunabilir, gelecek okunamaz — grup/DM anahtarı yenilenmediği sürece).
+- **Session TTL**: 7 gün (env ile ayarlanabilir); şifre değişimi tüm oturumları düşürür.
 
 ## Durum
 

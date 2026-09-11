@@ -7,17 +7,6 @@ import { deriveRecoveryKeys } from '../crypto/recovery';
 import { generateIdentity, openIdentityBlob, sealIdentityBlob } from '../crypto/identity';
 import { sodiumReady } from '../crypto/sodium';
 
-// KEK lives for the tab's lifetime only — reload skips the password prompt,
-// a new tab asks for it once.
-const KEK_STORAGE_KEY = 'pgv_kek';
-
-const saveKek = (kek: Uint8Array): void => sessionStorage.setItem(KEK_STORAGE_KEY, b64(kek));
-const loadKek = (): Uint8Array | null => {
-  const s = sessionStorage.getItem(KEK_STORAGE_KEY);
-  return s ? unb64(s) : null;
-};
-const clearKek = (): void => sessionStorage.removeItem(KEK_STORAGE_KEY);
-
 interface AuthState {
   status: 'loading' | 'anonymous' | 'authed';
   user: { id: string; nick: string; avatar_updated_at: number | null } | null;
@@ -74,7 +63,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         },
       },
     );
-    saveKek(kek);
     set({
       status: 'authed',
       user: { id: res.user.id, nick: res.user.nick, avatar_updated_at: null },
@@ -101,7 +89,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       throw new ApiError(401, 'şifre hatalı');
     }
-    saveKek(kek);
     set({
       status: 'authed',
       user: {
@@ -137,7 +124,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         new_key_blob: sealIdentityBlob(privateKey, next.kek),
       },
     });
-    saveKek(next.kek);
     set({ kek: next.kek });
   },
 
@@ -187,7 +173,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         new_key_blob: sealIdentityBlob(privateKey, next.kek),
       },
     });
-    saveKek(next.kek);
     set({
       status: 'authed',
       user: {
@@ -203,35 +188,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
-    clearKek();
     set({ status: 'anonymous', user: null, publicKey: null, privateKey: null, kek: null });
   },
 
+  // no KEK persistence — reload = password reprompt; deliberate: a JS-readable
+  // KEK would let a single XSS unwrap the identity key. Without a KEK the
+  // server's key_blob cannot be opened, so /auth/me is pointless and boot goes
+  // straight to anonymous.
   restore: async () => {
-    const kek = loadKek();
-    if (!kek) {
-      set({ status: 'anonymous' });
-      return;
-    }
-    try {
-      await sodiumReady;
-      const res = await api<{ user: AuthedUser }>('/auth/me');
-      const privateKey = openIdentityBlob(res.user.key_blob, kek);
-      set({
-        status: 'authed',
-        user: {
-          id: res.user.id,
-          nick: res.user.nick,
-          avatar_updated_at: res.user.avatar_updated_at ?? null,
-        },
-        publicKey: unb64(res.user.public_key),
-        privateKey,
-        kek,
-      });
-    } catch {
-      clearKek();
-      set({ status: 'anonymous' });
-    }
+    set({ status: 'anonymous' });
   },
 
   setAvatar: async (dataUrl) => {

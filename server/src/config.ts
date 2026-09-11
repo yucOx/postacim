@@ -36,7 +36,8 @@ export const config = {
   livekitUrl: process.env.LIVEKIT_URL ?? 'http://localhost:7880',
   livekitApiKey: process.env.LIVEKIT_API_KEY ?? 'devkey',
   livekitSecret,
-  sessionTtlDays: num(process.env.SESSION_TTL_DAYS, 30),
+  // default 7 days — a stolen cookie's validity window; SESSION_TTL_DAYS env overrides
+  sessionTtlDays: num(process.env.SESSION_TTL_DAYS, 7),
   /** dev/testing knob — keep 3 in production */
   registerRatePerHour: num(process.env.REGISTER_RATE_PER_HOUR, 3),
 };
