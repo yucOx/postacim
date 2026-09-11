@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY web/package.json web/tsconfig.json web/vite.config.ts web/index.html ./web/
 RUN npm ci -w web
 COPY web/src ./web/src
+COPY web/public ./web/public
 WORKDIR /app/web
 RUN npm run build
 
