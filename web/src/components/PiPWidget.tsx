@@ -138,7 +138,9 @@ function PiPTile(): React.ReactNode {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare, Track.Source.Microphone], {
     onlySubscribed: true,
   });
-  const remote = tracks.filter((t) => !t.participant.isLocal);
+  // muted = camera/screen off (livekit keeps muted tracks published) — those
+  // would paint a black tile, drop them and fall through to the waiting state
+  const remote = tracks.filter((t) => !t.participant.isLocal && !(t.publication?.isMuted ?? false));
   const pick =
     remote.find((t) => t.source === Track.Source.ScreenShare) ??
     remote.find((t) => t.source === Track.Source.Camera) ??

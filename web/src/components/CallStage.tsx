@@ -70,10 +70,15 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: false,
   });
-  const screens = tracks.filter((t) => t.source === Track.Source.ScreenShare);
+  // livekit v2 disables a camera by MUTING the published track, not
+  // unpublishing it — muted refs would keep rendering and paint black
+  // <video> tiles. Treat a muted track as "camera off" so the participant's
+  // avatar placeholder comes back instead.
+  const live = (t: TrackReference): boolean => !!t.publication && !t.publication.isMuted;
+  const screens = tracks.filter((t) => t.source === Track.Source.ScreenShare && live(t));
   const camByIdentity = new Map<string, TrackReference>();
   for (const t of tracks) {
-    if (t.source === Track.Source.Camera && !camByIdentity.has(t.participant.identity)) {
+    if (t.source === Track.Source.Camera && live(t) && !camByIdentity.has(t.participant.identity)) {
       camByIdentity.set(t.participant.identity, t);
     }
   }
