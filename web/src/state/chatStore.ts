@@ -3,7 +3,7 @@ import { api, ApiError } from '../api/client';
 import type { ChatMessage } from '../api/types';
 import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
-import { decryptText, encryptText } from '../crypto/message';
+import { decryptText, encryptText, nextSendIndex } from '../crypto/message';
 import { ReplayFilter } from '../lib/replay';
 import { onServerEvent } from '../ws/socket';
 
@@ -80,7 +80,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       sentAt: raw.sent_at,
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
-      body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, 'ch', bind).body,
+      body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, 'ch', bind, raw.sender_id).body,
     };
   } catch {
     return {
@@ -168,13 +168,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set({ sending: true });
     try {
+      const senderId = useAuthStore.getState().user?.id;
+      if (!senderId) throw new Error('oturum yok');
       // replay hardening: one client id per logical message, reused across the
       // retry loop (a 409 means the server never stored the earlier attempt)
       const clientId = crypto.randomUUID();
       const clientSentAt = Date.now();
       // encrypt + POST; on 409 (key rotated mid-flight) refresh keys and retry once
       for (let attempt = 0; ; attempt++) {
-        const enc = encryptText(channelId, version, key, body, 'ch', { clientId, clientSentAt });
+        // ratchet index'i per (channel, key_version) sayaçtan tüket; 409 ile
+        // version değişirse yeni version'ın sayacı kullanılır
+        const index = nextSendIndex(channelId, version);
+        const enc = encryptText(channelId, version, key, body, 'ch', { clientId, clientSentAt }, false, {
+          senderId,
+          index,
+        });
         try {
           await api(`/channels/${channelId}/messages`, {
             method: 'POST',

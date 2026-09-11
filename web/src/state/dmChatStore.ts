@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { api } from '../api/client';
 import type { ChatMessage } from '../api/types';
 import { useAppStore } from './appStore';
-import { decryptText, encryptText, type MsgScope } from '../crypto/message';
+import { useAuthStore } from './authStore';
+import { decryptText, encryptText, nextSendIndex, type MsgScope } from '../crypto/message';
 import { ReplayFilter } from '../lib/replay';
 import { playPop } from '../lib/sound';
 import { onServerEvent } from '../ws/socket';
@@ -92,7 +93,7 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
       sentAt: raw.sent_at,
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
-      body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, kind, bind).body,
+      body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, kind, bind, raw.sender_id).body,
     };
   } catch {
     return {
@@ -171,10 +172,15 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
       keyInfo = keyFor(dmId);
       if (!keyInfo) throw new Error('DM anahtarı yok');
     }
+    const senderId = useAuthStore.getState().user?.id;
+    if (!senderId) throw new Error('oturum yok');
     // replay hardening: client id rides the AAD and the body as one logical message
     const clientId = crypto.randomUUID();
     const clientSentAt = Date.now();
-    const enc = encryptText(dmId, keyInfo.version, keyInfo.key, body, kindOf(dmId), { clientId, clientSentAt });
+    const enc = encryptText(dmId, keyInfo.version, keyInfo.key, body, kindOf(dmId), { clientId, clientSentAt }, false, {
+      senderId,
+      index: nextSendIndex(dmId, keyInfo.version),
+    });
     set({ sending: true });
     try {
       await api(`${baseOf(dmId)}/${dmId}/messages`, {
