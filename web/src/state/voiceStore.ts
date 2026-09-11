@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { Room, RoomEvent, ExternalE2EEKeyProvider } from 'livekit-client';
-import type { LocalParticipant } from 'livekit-client';
+import { Room, RoomEvent, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets } from 'livekit-client';
+import type { LocalParticipant, TrackPublishOptions, VideoCaptureOptions } from 'livekit-client';
 import { api } from '../api/client';
 import type { VoiceTokenResponse } from '../api/types';
 import { useAppStore } from './appStore';
@@ -29,6 +29,11 @@ interface VoiceState {
   micOn: boolean;
   camOn: boolean;
   screenOn: boolean;
+  /** selected publish quality (kalite seçici); persisted in localStorage */
+  quality: CallQuality;
+  setQuality: (q: CallQuality) => void;
+  /** quality the currently published screen share was started with */
+  screenQuality: CallQuality | null;
   error: string | null;
   /** channelId -> participants (sidebar presence, from WS voice:update) */
   presence: Record<string, VoiceParticipant[]>;
@@ -70,6 +75,47 @@ function loadPipPos(): { x: number; y: number } {
   return { x: PIP_DEFAULT.x, y: PIP_DEFAULT.y };
 }
 
+export type CallQuality = 'hizli' | 'dengeli' | 'yuksek';
+
+const QUALITY_KEY = 'postacim.voiceQuality';
+
+function loadQuality(): CallQuality {
+  try {
+    const raw = localStorage.getItem(QUALITY_KEY);
+    if (raw === 'hizli' || raw === 'dengeli' || raw === 'yuksek') return raw;
+  } catch {
+    // ignore — fall through to default
+  }
+  return 'dengeli';
+}
+
+/** Publish presets per quality tier. Simulcast is on by default; combined with
+ *  adaptiveStream + dynacast on the room this is the fast-transfer path: the SFU
+ *  forwards each receiver only the layer its bandwidth supports, and unused
+ *  layers are not published at all. */
+const qualityTiers: Record<
+  CallQuality,
+  { camCapture: VideoCaptureOptions; camPublish: TrackPublishOptions; screenPublish: TrackPublishOptions }
+> = {
+  // hızlı: small + framerate-first — encoder sheds resolution before frames
+  hizli: {
+    camCapture: { resolution: VideoPresets.h360.resolution },
+    camPublish: { videoEncoding: VideoPresets.h360.encoding, degradationPreference: 'maintain-framerate' },
+    screenPublish: { screenShareEncoding: ScreenSharePresets.h720fps15.encoding, degradationPreference: 'maintain-framerate' },
+  },
+  dengeli: {
+    camCapture: { resolution: VideoPresets.h720.resolution },
+    camPublish: { videoEncoding: VideoPresets.h720.encoding },
+    screenPublish: { screenShareEncoding: ScreenSharePresets.h1080fps15.encoding },
+  },
+  // yüksek: resolution-first — encoder keeps pixels, drops frames if squeezed
+  yuksek: {
+    camCapture: { resolution: VideoPresets.h1080.resolution },
+    camPublish: { videoEncoding: VideoPresets.h1080.encoding, degradationPreference: 'maintain-resolution' },
+    screenPublish: { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding, degradationPreference: 'maintain-resolution' },
+  },
+};
+
 const cleanup = (room: Room | null): void => {
   if (!room) return;
   try {
@@ -88,7 +134,9 @@ async function connectRoom(
 ): Promise<{ room: Room; keyProvider: ExternalE2EEKeyProvider }> {
   const keyProvider = new ExternalE2EEKeyProvider();
   const worker = new E2EEWorker();
-  const room = new Room({ encryption: { keyProvider, worker } });
+  // adaptiveStream + dynacast: receivers auto-switch to the simulcast layer their
+  // bandwidth supports and unused layers stop being published — fastest transfer
+  const room = new Room({ adaptiveStream: true, dynacast: true, encryption: { keyProvider, worker } });
   room.on(RoomEvent.EncryptionError, () => {
     useVoiceStore.setState({ error: 'E2EE hatası: anahtarlar uyuşmuyor' });
   });
@@ -99,19 +147,52 @@ async function connectRoom(
   return { room, keyProvider };
 }
 
-export const useVoiceStore = create<VoiceState>((set, get) => ({
+export const useVoiceStore = create<VoiceState>((set, get) => {
+  // full teardown: disconnect any live room and clear every call flag so the
+  // next join / startDmCall / acceptIncoming never collides with stale state
+  const teardownAll = (keepCallState = false): void => {
+    const st = get();
+    if (st.joinedChannelId && !st.isDmCall) {
+      wsSend({ type: 'voice_state', channel_id: st.joinedChannelId, state: 'left' });
+    }
+    cleanup(st.room);
+    set({
+      room: null,
+      keyProvider: null,
+      joinedChannelId: null,
+      micOn: false,
+      camOn: false,
+      screenOn: false,
+      isDmCall: false,
+      pip: false,
+      callState: keepCallState ? st.callState : null,
+    });
+  };
+
+  return {
   joinedChannelId: null,
   room: null,
   keyProvider: null,
   micOn: false,
   camOn: false,
   screenOn: false,
+  quality: loadQuality(),
+  screenQuality: null,
   error: null,
   presence: {},
   callState: null,
   isDmCall: false,
   pip: false,
   pipPos: loadPipPos(),
+
+  setQuality: (q) => {
+    try {
+      localStorage.setItem(QUALITY_KEY, q);
+    } catch {
+      // private mode / quota — ignore, still update state
+    }
+    set({ quality: q });
+  },
 
   setPip: (v) => set({ pip: v }),
   setPipPos: (p) => {
@@ -125,16 +206,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   join: async (channelId) => {
     if (get().joinedChannelId === channelId && !get().isDmCall) return;
-    // leave any current call first
-    const prev = get().room;
-    const prevChannel = get().joinedChannelId;
-    if (prev) {
-      if (prevChannel && !get().isDmCall) {
-        wsSend({ type: 'voice_state', channel_id: prevChannel, state: 'left' });
-      }
-      cleanup(prev);
-      set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
-    }
+    // leave any current call first (fully clears room + flags)
+    teardownAll();
 
     set({ error: null });
     try {
@@ -189,7 +262,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     const room = get().room;
     if (!room) return;
     const next = !get().camOn;
-    await (room.localParticipant as LocalParticipant).setCameraEnabled(next);
+    const q = qualityTiers[get().quality];
+    await (room.localParticipant as LocalParticipant).setCameraEnabled(
+      next,
+      next ? q.camCapture : undefined,
+      next ? q.camPublish : undefined,
+    );
     set({ camOn: next });
   },
 
@@ -197,8 +275,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     const room = get().room;
     if (!room) return;
     const next = !get().screenOn;
-    await room.localParticipant.setScreenShareEnabled(next);
-    set({ screenOn: next });
+    const q = get().quality;
+    await room.localParticipant.setScreenShareEnabled(
+      next,
+      undefined,
+      next ? qualityTiers[q].screenPublish : undefined,
+    );
+    set({ screenOn: next, screenQuality: next ? q : null });
   },
 
   // DM call: join the room, then ring. Media path identical to community calls
@@ -226,8 +309,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         }
       }
       if (!key) throw new Error('DM anahtarı yok');
-      const prev = get().room;
-      if (prev) cleanup(prev);
+      // fresh start: tear down any previous room/community channel first
+      teardownAll();
       const { url, token } = await api<VoiceTokenResponse>(`/dms/${dmId}/call-token`, { method: 'POST' });
       const onDisconnected = (): void => {
         const st = useVoiceStore.getState();
@@ -238,9 +321,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
       wsSend({ type: 'call:ring', channel_id: dmId });
       // open camera first so the callee can see the caller immediately on accept
+      let camOpened = false;
       if (video) {
+        const q = qualityTiers[get().quality];
         try {
-          await (room.localParticipant as LocalParticipant).setCameraEnabled(true);
+          await (room.localParticipant as LocalParticipant).setCameraEnabled(true, q.camCapture, q.camPublish);
+          camOpened = true;
         } catch {
           // permission denied or no camera — fall back to voice only
         }
@@ -250,7 +336,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         keyProvider,
         joinedChannelId: dmId,
         micOn: false,
-        camOn: !!video,
+        camOn: camOpened,
         screenOn: false,
         isDmCall: true,
         callState: { phase: 'ringing', channelId: dmId, fromNick: video ? 'görüntülü arama' : undefined },
@@ -276,8 +362,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         if (!key) throw new Error('DM anahtarı yok');
       }
       if (!key) throw new Error('DM anahtarı yok');
-      const prev = get().room;
-      if (prev) cleanup(prev);
+      // tear down any previous room (community channel etc.) but keep callState
+      // so a failed connect can be retried from the incoming banner
+      teardownAll(true);
       const { url, token } = await api<VoiceTokenResponse>(`/dms/${call.channelId}/call-token`, { method: 'POST' });
       const onDisconnected = (): void => {
         const st = useVoiceStore.getState();
@@ -331,8 +418,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         }
       } else if (e.type === 'call:incoming') {
         const call = get().callState;
-        if (call) {
-          // busy → auto-decline the new one
+        if (call && call.phase !== 'ended') {
+          // busy (ringing/active/incoming) → auto-decline the new one.
+          // a leftover 'ended' state must NOT block the next call.
           wsSend({ type: 'call:decline', channel_id: e.channel_id as string });
           return;
         }
@@ -382,4 +470,5 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       }
     });
   },
-}));
+  };
+});

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { RoomContext, useTracks, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
-import { Maximize2, PhoneOff, PictureInPicture, Pin } from 'lucide-react';
+import { Maximize2, PhoneOff } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { nickFor } from '../lib/nick';
@@ -12,19 +12,8 @@ const WIDGET_W = 288; // w-72
 const WIDGET_H = 252; // header + tile + controls
 const MARGIN = 16;
 
-type DocPipWin = Window & { close?: () => void };
-interface DocPipApi {
-  requestWindow: (opts?: { width?: number; height?: number; disallowReturnToOpener?: boolean; preferInitialWindowPlacement?: boolean }) => Promise<DocPipWin>;
-  window: DocPipWin | null;
-}
-function getDocPip(): DocPipApi | null {
-  const dpip = (window as unknown as { documentPictureInPicture?: DocPipApi }).documentPictureInPicture;
-  return dpip ?? null;
-}
-
-/** The minimized call — a draggable corner window over the chat. Three states:
- *  in-page corner (default), user-dragged anywhere on screen, or browser-native
- *  document PiP (separate real OS window). Everything underneath stays interactive. */
+/** The minimized call — a draggable corner window over the chat, with snap
+ *  back to the corner on double-click. Everything underneath stays interactive. */
 export default function PiPWidget(): React.ReactNode {
   const room = useVoiceStore((s) => s.room);
   const callState = useVoiceStore((s) => s.callState);
@@ -36,8 +25,6 @@ export default function PiPWidget(): React.ReactNode {
 
   const ref = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ dx: number; dy: number; pointerId: number } | null>(null);
-  const docPipRef = useRef<DocPipWin | null>(null);
-  const [docPipSupported] = useState<boolean>(() => getDocPip() !== null);
 
   const snapToCorner = useCallback((): void => {
     if (typeof window === 'undefined') return;
@@ -96,93 +83,6 @@ export default function PiPWidget(): React.ReactNode {
     return () => window.removeEventListener('resize', onResize);
   }, [clamp, pos.x, pos.y, pipPos.x, pipPos.y, setPipPos]);
 
-  // close doc PiP if call ends or component unmounts
-  useEffect(() => {
-    return () => {
-      try {
-        docPipRef.current?.close?.();
-      } catch {
-        // already closed
-      }
-      docPipRef.current = null;
-    };
-  }, []);
-
-  const openDocPip = useCallback(async () => {
-    const dpip = getDocPip();
-    if (!dpip) return;
-    if (docPipRef.current) {
-      try {
-        docPipRef.current.focus?.();
-      } catch {
-        // ignore
-      }
-      return;
-    }
-    const win = await dpip.requestWindow({ width: WIDGET_W, height: WIDGET_H, disallowReturnToOpener: true });
-    docPipRef.current = win;
-    // mirror the app's dark surface so the doc PiP window doesn't flash white
-    win.document.title = 'postacim · arama';
-    const style = win.document.createElement('style');
-    style.textContent = `html,body{margin:0;background:#0b0e13;color:#efe6d0;font-family:system-ui,sans-serif}`;
-    win.document.head.appendChild(style);
-    const mount = win.document.createElement('div');
-    mount.id = 'pip-mount';
-    win.document.body.appendChild(mount);
-    // close handler — when user closes the doc PiP, just unfocus; widget stays in corner
-    win.addEventListener('pagehide', () => {
-      docPipRef.current = null;
-    });
-  }, []);
-
-  // Keep the doc PiP window on top while it's open. Browsers don't expose an
-  // alwaysOnTop flag for documentPictureInPicture, so we re-focus it on a short
-  // interval and whenever the main window itself takes focus. The user can
-  // close it from its own chrome to opt out.
-  const keepOnTopRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (!docPipSupported) return;
-    const tick = (): void => {
-      const win = docPipRef.current;
-      if (!win) return;
-      try {
-        win.focus?.();
-      } catch {
-        // window already gone
-      }
-    };
-    keepOnTopRef.current = window.setInterval(tick, 1500);
-    const onMainFocus = (): void => tick();
-    window.addEventListener('focus', onMainFocus);
-    return () => {
-      if (keepOnTopRef.current !== null) window.clearInterval(keepOnTopRef.current);
-      window.removeEventListener('focus', onMainFocus);
-    };
-  }, [docPipSupported]);
-
-  const [videoPipOn, setVideoPipOn] = useState<boolean>(false);
-  const toggleVideoPip = useCallback(async (): Promise<void> => {
-    // pick the best remote <video> from LiveKit's ParticipantTile
-    const v = document.querySelector('video');
-    if (!v) return;
-    try {
-      if (document.pictureInPictureElement === v) {
-        await document.exitPictureInPicture();
-        setVideoPipOn(false);
-      } else if ((v as HTMLVideoElement & { requestPictureInPicture?: () => Promise<PictureInPictureWindow> }).requestPictureInPicture) {
-        await (v as HTMLVideoElement & { requestPictureInPicture: () => Promise<PictureInPictureWindow> }).requestPictureInPicture();
-        setVideoPipOn(true);
-      }
-    } catch {
-      // user dismissed or browser refused
-    }
-  }, []);
-  useEffect(() => {
-    const onLeave = (): void => setVideoPipOn(false);
-    document.addEventListener('leavepictureinpicture', onLeave);
-    return () => document.removeEventListener('leavepictureinpicture', onLeave);
-  }, []);
-
   if (!callState) return null;
   const peerNick = dms.find((d) => d.id === callState.channelId)?.peer.nick ?? '?';
 
@@ -202,26 +102,6 @@ export default function PiPWidget(): React.ReactNode {
         <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50">
           {peerNick}
         </span>
-        {docPipSupported && (
-          <button
-            onClick={() => void openDocPip()}
-            className="rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
-            title="ayrı pencereye al"
-            aria-label="aramayı ayrı pencereye al"
-          >
-            <PictureInPicture size={14} />
-          </button>
-        )}
-        <button
-          onClick={() => void toggleVideoPip()}
-          className={`rounded p-1 transition-colors hover:bg-night-800 ${
-            videoPipOn ? 'text-lamp-400' : 'text-paper-500 hover:text-paper-100'
-          }`}
-          title="tarayıcı PiP — üstte tutar"
-          aria-label="tarayıcı PiP"
-        >
-          <Pin size={14} />
-        </button>
         <button
           onClick={() => setPip(false)}
           className="rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
@@ -253,7 +133,7 @@ export default function PiPWidget(): React.ReactNode {
   );
 }
 
-/** prefers the remote camera; falls back to anything, then to the mark */
+/** prefers the remote screen share, then camera; falls back to anything */
 function PiPTile(): React.ReactNode {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare, Track.Source.Microphone], {
     onlySubscribed: true,
