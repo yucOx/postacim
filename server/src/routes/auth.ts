@@ -63,6 +63,37 @@ async function burnVerify(): Promise<void> {
   await argon2.verify(dummyVerifier, '0'.repeat(44)).catch(() => false);
 }
 
+// --- login brute-force geri çekilmesi ---
+// Rate limit (5/dk) pencere içindeki patlamayı keser; bu, pencereyi aşıp
+// denemeye devam eden tek-IP saldırgana kademeli blok verir. In-memory —
+// restart'ta sıfırlanır, kalıcı olması gerekmiyor.
+const LOGIN_FAIL_WINDOW = 15 * 60_000;
+const loginFails = new Map<string, number[]>();
+const loginBlock = new Map<string, number>();
+
+function loginBlocked(ip: string): boolean {
+  const until = loginBlock.get(ip) ?? 0;
+  if (Date.now() >= until) {
+    loginBlock.delete(ip); // blok süresi doldu — unut
+    return false;
+  }
+  return true;
+}
+
+function noteLoginFail(ip: string): void {
+  const now = Date.now();
+  const fails = (loginFails.get(ip) ?? []).filter((t) => now - t < LOGIN_FAIL_WINDOW);
+  if (fails.length === 0) loginFails.delete(ip);
+  fails.push(now);
+  loginFails.set(ip, fails);
+  // serbest kredinin üstünde her ekstra hata bloğu ikiye katlar (1, 2, 4, 8
+  // dk...) — 15 dk'da tavan yapar
+  if (fails.length > config.loginFailFree) {
+    const mins = Math.min(2 ** (fails.length - config.loginFailFree - 1), 15);
+    loginBlock.set(ip, now + mins * 60_000);
+  }
+}
+
 // --- Cloudflare Turnstile (optional) ---
 // Secret unset → the check vanishes entirely: self-hosted/LAN deployments run
 // without Cloudflare. Set → register/login must carry a fresh widget token,
@@ -178,6 +209,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: loginSchema } },
     async (req, reply) => {
       const body = req.body as LoginBody;
+      const ip = clientIp(req);
+      // kademeli blok, arama maliyeti ödemeden önce reddedilir
+      if (loginBlocked(ip)) {
+        return reply.code(429).send({ error: 'çok fazla başarısız giriş — sonra tekrar dene' });
+      }
       // before the lookup: a missing/bad token must not probe nicks any further
       if (!(await verifyTurnstile(req, body.turnstile_token))) {
         return reply.code(400).send({ error: 'insan doğrulaması başarısız' });
@@ -190,10 +226,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!row) {
         // burn the same argon2 cost a real verify would, then fail uniformly
         await burnVerify();
+        noteLoginFail(ip);
         return reply.code(401).send({ error: 'nick veya şifre hatalı' });
       }
       const ok = await argon2.verify(row.verifier, body.auth_material).catch(() => false);
-      if (!ok) return reply.code(401).send({ error: 'nick veya şifre hatalı' });
+      if (!ok) {
+        noteLoginFail(ip);
+        return reply.code(401).send({ error: 'nick veya şifre hatalı' });
+      }
+      loginFails.delete(ip);
+      loginBlock.delete(ip);
       const token = issueSession(row.id);
       sessionCookie(reply, req, token);
       return {

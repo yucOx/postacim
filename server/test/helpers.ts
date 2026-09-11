@@ -12,7 +12,9 @@ export interface TestServer {
 
 const STRONG_SECRET = 'vitest-secret-0123456789abcdef-vitest-secret-98765';
 
-export async function startServer(): Promise<TestServer> {
+export async function startServer(
+  opts: { env?: Record<string, string>; onLog?: (line: string) => void } = {},
+): Promise<TestServer> {
   const port = 20_000 + Math.floor(Math.random() * 20_000);
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pgv-test-'));
   const proc = spawn(
@@ -26,6 +28,7 @@ export async function startServer(): Promise<TestServer> {
         LIVEKIT_SECRET: STRONG_SECRET,
         LIVEKIT_API_KEY: 'testkey',
         REGISTER_RATE_PER_HOUR: '5000',
+        ...opts.env,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -33,6 +36,10 @@ export async function startServer(): Promise<TestServer> {
   let bootErr = '';
   proc.stderr.on('data', (d) => {
     bootErr += d.toString();
+    opts.onLog?.(d.toString());
+  });
+  proc.stdout.on('data', (d) => {
+    opts.onLog?.(d.toString());
   });
   const baseUrl = `http://127.0.0.1:${port}/api`;
   for (let i = 0; i < 100; i++) {

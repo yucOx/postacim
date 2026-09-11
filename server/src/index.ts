@@ -34,6 +34,12 @@ export const app = Fastify({
   trustProxy: true,
   logger: {
     level: 'info',
+    // PRIVACY: log yalnız yöntem+yol taşır. Default seriyalayıcı url'yi
+    // query'siz değil yazıyor (?nick=... gibi hassas parametreler düşer) ve
+    // remoteAddress (istemci IP'si) ekliyordu — ikisini de sansürledik.
+    serializers: {
+      req: (req) => ({ method: req.method, url: req.url?.split('?')[0] }),
+    },
     redact: { paths: ['req.headers.authorization'], remove: true },
   },
   bodyLimit: 1024 * 1024,

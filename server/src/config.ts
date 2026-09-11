@@ -46,6 +46,9 @@ export const config = {
     process.env.TURNSTILE_VERIFY_URL ?? 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
   /** dev/testing knob — keep 3 in production */
   registerRatePerHour: num(process.env.REGISTER_RATE_PER_HOUR, 3),
+  /** dev/testing knob — keep 10 in production: login geri çekilmesindeki
+   *  pencere içi cezasız hata hakkı (LOGIN_FAIL_FREE) */
+  loginFailFree: num(process.env.LOGIN_FAIL_FREE, 10),
   /** set 1 when the app sits behind a Cloudflare proxy: rate limits and the
    *  Turnstile remoteip then use the CF-Connecting-IP header (the real client)
    *  instead of the CF edge IP nginx forwards. Only enable it when the server

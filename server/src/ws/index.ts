@@ -18,6 +18,12 @@ export function attachWs(app: FastifyInstance): void {
     // upgrade request, so the auth frame needs no token at all
     const cookieToken = /(?:^|;\s*)pgv_session=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
 
+    // auth gelmeden bekleyen soket sonsuza kadar açık kalamaz — açılıp
+    // bırakılan bağlantı havuzunu doldurur; kısa süre sonra kes
+    const authTimer = setTimeout(() => {
+      if (!authed) ws.close(4004, 'auth zaman aşımı');
+    }, 10_000);
+
     ws.on('message', (raw) => {
       let msg: { type?: string; token?: string; channel_id?: string; state?: string };
       try {
@@ -39,6 +45,7 @@ export function attachWs(app: FastifyInstance): void {
         }
         authed = true;
         userId = user.id;
+        clearTimeout(authTimer);
         hub.register(ws, user);
         ws.send(JSON.stringify({ type: 'ready' }));
         return;
@@ -102,6 +109,7 @@ export function attachWs(app: FastifyInstance): void {
 
     ws.on('pong', () => hub.markAlive(ws));
     ws.on('close', () => {
+      clearTimeout(authTimer);
       if (authed) hub.unregister(ws);
     });
   });
