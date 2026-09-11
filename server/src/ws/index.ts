@@ -76,6 +76,8 @@ export function attachWs(app: FastifyInstance): void {
         const nickStr = nick?.nick ?? '?';
         switch (msg.type) {
           case 'call:ring':
+            // caller is signaling — track the call so we can end it on disconnect
+            hub.addDmCall(msg.channel_id, userId, peerId);
             hub.sendToUser(peerId, {
               type: 'call:incoming',
               channel_id: msg.channel_id,
@@ -83,12 +85,15 @@ export function attachWs(app: FastifyInstance): void {
             });
             break;
           case 'call:accept':
+            hub.addDmCall(msg.channel_id, userId, peerId);
             hub.sendToUser(peerId, { type: 'call:accepted', channel_id: msg.channel_id });
             break;
           case 'call:decline':
+            hub.endDmCallFor(userId, 'declined');
             hub.sendToUser(peerId, { type: 'call:declined', channel_id: msg.channel_id });
             break;
           case 'call:cancel':
+            hub.endDmCallFor(userId, 'cancelled');
             hub.sendToUser(peerId, { type: 'call:cancelled', channel_id: msg.channel_id });
             break;
         }

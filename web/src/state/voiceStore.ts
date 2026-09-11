@@ -46,7 +46,7 @@ interface VoiceState {
   toggleMic: () => Promise<void>;
   toggleCam: () => Promise<void>;
   toggleScreen: () => Promise<void>;
-  startDmCall: (dmId: string) => Promise<void>;
+  startDmCall: (dmId: string, video?: boolean) => Promise<void>;
   acceptIncoming: () => Promise<void>;
   declineIncoming: () => Promise<void>;
   cancelCall: () => Promise<void>;
@@ -202,8 +202,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   // DM call: join the room, then ring. Media path identical to community calls
-  // (same LiveKit E2EE machinery, DM channel key as the shared key).
-  startDmCall: async (dmId) => {
+  // (same LiveKit E2EE machinery, DM channel key as the shared key). When video
+  // is requested the camera opens before the ring so the callee sees the caller.
+  startDmCall: async (dmId, video) => {
     if (get().isDmCall && get().callState?.channelId === dmId) return;
     set({ error: null });
     try {
@@ -236,7 +237,24 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       };
       const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
       wsSend({ type: 'call:ring', channel_id: dmId });
-      set({ room, keyProvider, joinedChannelId: dmId, micOn: false, camOn: false, isDmCall: true, callState: { phase: 'ringing', channelId: dmId } });
+      // open camera first so the callee can see the caller immediately on accept
+      if (video) {
+        try {
+          await (room.localParticipant as LocalParticipant).setCameraEnabled(true);
+        } catch {
+          // permission denied or no camera — fall back to voice only
+        }
+      }
+      set({
+        room,
+        keyProvider,
+        joinedChannelId: dmId,
+        micOn: false,
+        camOn: !!video,
+        screenOn: false,
+        isDmCall: true,
+        callState: { phase: 'ringing', channelId: dmId, fromNick: video ? 'görüntülü arama' : undefined },
+      });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'aranamadı' });
       throw err;
@@ -335,15 +353,31 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         if (call && call.channelId === e.channel_id) {
           cleanup(get().room);
           set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, pip: false, callState: { phase: 'ended', channelId: call.channelId, note: 'reddedildi' } });
-          setTimeout(() => {
-            const st = get().callState;
-            if (st?.phase === 'ended') set({ callState: null });
-          }, 3000);
+          // no 3s lock — the "ara" button reads phase and is enabled in 'ended' too
         }
       } else if (e.type === 'call:cancelled') {
         const call = get().callState;
         if (call && call.channelId === e.channel_id && call.phase === 'incoming') {
           set({ callState: null });
+        }
+      } else if (e.type === 'call:ended') {
+        // the other side hung up (or their socket dropped). tear the call down
+        // immediately so the "ara" button comes back the moment we get the event.
+        const call = get().callState;
+        const reason = (e as { reason?: string }).reason ?? 'bitti';
+        if (call && call.channelId === e.channel_id) {
+          cleanup(get().room);
+          set({
+            room: null,
+            keyProvider: null,
+            joinedChannelId: null,
+            micOn: false,
+            camOn: false,
+            screenOn: false,
+            isDmCall: false,
+            pip: false,
+            callState: { phase: 'ended', channelId: call.channelId, note: reason },
+          });
         }
       }
     });

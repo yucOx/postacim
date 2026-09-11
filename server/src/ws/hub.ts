@@ -12,9 +12,18 @@ export interface HubClient {
 // LiveKit stays the source of truth for actual call state; this drives sidebar UI.
 type VoiceMap = Map<string, Map<string, Map<string, string>>>;
 
+interface DmCallRow {
+  channelId: string;
+  userA: string;
+  userB: string;
+}
+
 class Hub {
   private clients = new Map<WebSocket, HubClient>();
   private voice: VoiceMap = new Map();
+  // active 1:1 DM calls keyed by dm channel id; mirrors voice above but for DMs.
+  // needed so a peer dropping their socket cleanly notifies the other side.
+  private dmCalls = new Map<string, DmCallRow>();
 
   register(ws: WebSocket, user: { id: string; nick: string }): void {
     const communities = new Set(
@@ -39,6 +48,8 @@ class Hub {
         }
       }
     }
+    // a DM-call peer just dropped — end the call for the other side too
+    this.endDmCallFor(client.userId, 'peer_disconnected');
   }
 
   markAlive(ws: WebSocket): void {
@@ -89,6 +100,21 @@ class Hub {
     const data = JSON.stringify(payload);
     for (const [ws, c] of this.clients) {
       if (set.has(c.userId) && ws.readyState === ws.OPEN) ws.send(data);
+    }
+  }
+
+  /** mark a DM call as active between two users. notify the other side when one drops. */
+  addDmCall(channelId: string, userA: string, userB: string): void {
+    this.dmCalls.set(channelId, { channelId, userA, userB });
+  }
+
+  /** user is leaving the call (or just disconnected) — end it for the peer too. */
+  endDmCallFor(userId: string, reason: string): void {
+    for (const [channelId, call] of this.dmCalls) {
+      if (call.userA !== userId && call.userB !== userId) continue;
+      const peer = call.userA === userId ? call.userB : call.userA;
+      this.sendToUser(peer, { type: 'call:ended', channel_id: channelId, reason });
+      this.dmCalls.delete(channelId);
     }
   }
 

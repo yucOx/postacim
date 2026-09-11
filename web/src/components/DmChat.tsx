@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, LogOut, Phone, UserPlus, Users } from 'lucide-react';
+import { ChevronLeft, LogOut, Phone, UserPlus, Users, Video } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore, type DmDisplayMessage } from '../state/dmChatStore';
 import { useUnreadStore } from '../state/unreadStore';
@@ -67,7 +67,11 @@ export default function DmChat({ dmId }: { dmId: string }) {
   const sending = useDmChatStore((s) => s.sending);
   const send = useDmChatStore((s) => s.send);
   const startDmCall = useVoiceStore((s) => s.startDmCall);
+  const callPhase = useVoiceStore((s) => s.callState?.phase ?? null);
   const callChannelId = useVoiceStore((s) => s.callState?.channelId ?? null);
+  // only lock the buttons while a call is actually live; "ended" or absent is
+  // re-callable immediately, no 3s grace.
+  const callLocked = callPhase === 'active' || callPhase === 'ringing' || callPhase === 'incoming';
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -140,15 +144,26 @@ export default function DmChat({ dmId }: { dmId: string }) {
           </>
         )}
         {dm && (
-          <button
-            onClick={() => void startDmCall(dmId).catch(() => {})}
-            disabled={callChannelId !== null}
-            className="btn-ghost ml-auto !px-2.5 !py-1 !text-xs"
-            title="şifreli sesli/görüntülü ara"
-          >
-            <Phone size={13} />
-            ara
-          </button>
+          <>
+            <button
+              onClick={() => void startDmCall(dmId, false).catch(() => {})}
+              disabled={callLocked}
+              className="btn-ghost ml-auto !px-2.5 !py-1 !text-xs"
+              title={callLocked && callChannelId === dmId ? 'arama sürüyor' : 'şifreli sesli ara'}
+            >
+              <Phone size={13} />
+              ara
+            </button>
+            <button
+              onClick={() => void startDmCall(dmId, true).catch(() => {})}
+              disabled={callLocked}
+              className="btn-ghost !px-2.5 !py-1 !text-xs"
+              title={callLocked && callChannelId === dmId ? 'arama sürüyor' : 'şifreli görüntülü ara'}
+            >
+              <Video size={13} />
+              görüntülü
+            </button>
+          </>
         )}
       </div>
       {sub && <div className="truncate border-b border-night-700/60 px-4 py-1 text-[11px] text-paper-500">{sub}</div>}
