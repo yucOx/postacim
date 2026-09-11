@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, Fingerprint, LogOut, Phone, UserPlus, Users, Video } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore, type DmDisplayMessage } from '../state/dmChatStore';
+import { amSender } from '../state/chatStore';
+import { useHiddenStore, NO_HIDDEN } from '../state/hiddenStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { formatDay, sameDay } from '../lib/format';
 import ConfirmDialog from './ConfirmDialog';
 import MessageRow from './MessageRow';
+import { deleteForEveryone, DeletedRow, HoverActions } from './MsgDelete';
 import Composer from './Composer';
 import Modal from './Modal';
 import SafetyModal from './SafetyModal';
@@ -91,9 +94,17 @@ export default function DmChat({ dmId }: { dmId: string }) {
     if (lastId) markRead(dmId, lastId);
   }, [dmId, lastId, markRead]);
 
+  // "benim için sil" — locally hidden rows never render
+  const hiddenIds = useHiddenStore((s) => s.hidden[dmId] ?? NO_HIDDEN);
+  const hideForMe = useHiddenStore((s) => s.hideForMe);
+  const visible = useMemo(
+    () => messages.filter((m) => !hiddenIds.includes(m.id)),
+    [messages, hiddenIds],
+  );
+
   useEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView();
-  }, [messages.length]);
+  }, [visible.length]);
 
   const onScroll = (): void => {
     const el = scrollRef.current;
@@ -185,13 +196,13 @@ export default function DmChat({ dmId }: { dmId: string }) {
             </button>
           </div>
         )}
-        {messages.length === 0 && (
+        {visible.length === 0 && (
           <div className="flex h-full items-center justify-center text-sm text-paper-500">
             {dm ? `${dm.peer.nick} ile ilk mühürlü zarfı sen bırak` : 'grupta ilk mühürlü zarfı sen bırak'}
           </div>
         )}
-        {messages.map((m, i) => {
-          const prev = messages[i - 1] ?? null;
+        {visible.map((m, i) => {
+          const prev = visible[i - 1] ?? null;
           const newDay = !prev || !sameDay(prev.sentAt, m.sentAt);
           return (
             <div key={m.id}>
@@ -204,7 +215,20 @@ export default function DmChat({ dmId }: { dmId: string }) {
                   <div className="perf flex-1" aria-hidden />
                 </div>
               )}
-              <MessageRow m={m} prev={prev} />
+              {m.deleted ? (
+                <DeletedRow nick={m.nick} sentAt={m.sentAt} />
+              ) : (
+                <div className="group relative">
+                  <MessageRow m={m} prev={prev} />
+                  <HoverActions
+                    // DM: both participants may tombstone; gdm: sender only
+                    // (gdm creator is allowed server-side but the client has no creator_id)
+                    canDeleteAll={dm ? true : amSender(m)}
+                    onDeleteAll={() => void deleteForEveryone(dmId, m.id).catch(() => {})}
+                    onDeleteForMe={() => hideForMe(dmId, m.id)}
+                  />
+                </div>
+              )}
             </div>
           );
         })}

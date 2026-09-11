@@ -123,7 +123,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 100);
     const rows = db
       .prepare(
-        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client
+        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client, m.deleted
          FROM dm_messages m JOIN users u ON u.id = m.sender_id
          WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`,
       )

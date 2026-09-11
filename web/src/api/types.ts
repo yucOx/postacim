@@ -37,6 +37,8 @@ export interface ChatMessage {
   /** client-generated AAD binding (replay hardening); null on legacy rows */
   client_id?: string | null;
   sent_at_client?: number | null;
+  /** tombstone: deleted for everyone — server sends 1/0, nonce/ciphertext are null */
+  deleted?: boolean | number;
 }
 
 export interface VoiceTokenResponse {

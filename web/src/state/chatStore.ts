@@ -21,6 +21,8 @@ export interface DisplayMessage {
   clientSentAt?: number;
   /** null = ciphertext we cannot decrypt (missing epoch key) */
   body: string | null;
+  /** tombstone: deleted for everyone — body is always null */
+  deleted?: boolean;
 }
 
 interface ChatState {
@@ -36,6 +38,20 @@ interface ChatState {
 }
 
 function toDisplay(raw: ChatMessage): DisplayMessage {
+  // tombstone row: the server kept the placeholder and wiped the content
+  if (raw.deleted) {
+    return {
+      id: raw.id,
+      channelId: raw.channel_id,
+      senderId: raw.sender_id,
+      nick: raw.nick,
+      sentAt: raw.sent_at,
+      clientId: raw.client_id ?? undefined,
+      clientSentAt: raw.sent_at_client ?? undefined,
+      body: null,
+      deleted: true,
+    };
+  }
   const app = useAppStore.getState();
   const key = app.channelKeys[raw.channel_id]?.[raw.key_version];
   // recompute the AAD binding: decrypt only succeeds when the server kept
@@ -87,6 +103,11 @@ const insertSorted = (list: DisplayMessage[], m: DisplayMessage): DisplayMessage
   next.sort((a, b) => a.id - b.id);
   return next;
 };
+
+// tombstone push: keep the row (UI renders "silindi"), drop the body.
+// caller guarantees the channel list is loaded.
+const markDeleted = (list: DisplayMessage[], id: number): DisplayMessage[] =>
+  list.map((m) => (m.id === id ? { ...m, body: null, deleted: true } : m));
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: {},
@@ -180,6 +201,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   wire: () => {
     onServerEvent((e) => {
+      // dm_/gdm_ channel ids belong to dmChatStore (its wire handles those)
+      if (e.type === 'message:deleted') {
+        const d = e as unknown as { channel_id: string; id: number };
+        if (d.channel_id.startsWith('dm_') || d.channel_id.startsWith('gdm_')) return;
+        set((s) => {
+          const cur = s.messages[d.channel_id];
+          if (!cur) return s; // channel not loaded — history fetch shows the tombstone
+          return { messages: { ...s.messages, [d.channel_id]: markDeleted(cur, d.id) } };
+        });
+        return;
+      }
       if (e.type !== 'message:new') return;
       const raw = e.message as ChatMessage;
       // replayed ciphertext arrives as a fresh row id with a seen client id — drop it

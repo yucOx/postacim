@@ -184,3 +184,159 @@ describe('rotate roster validation', () => {
     expect(ch.needs_rekey).toBe(false);
   });
 });
+
+// --- message deletion (tombstone) ---
+// The rotate suite above bumped the channel epoch to 2 — every post here uses it.
+const KV = 2;
+const W = (c: string): string => c.repeat(48);
+
+async function wsCollect(token: string): Promise<{
+  ws: import('ws').WebSocket;
+  events: { type: string;[k: string]: unknown }[];
+  close: () => void;
+}> {
+  const { WebSocket } = await import('ws');
+  const ws = new WebSocket(srv.baseUrl.replace('/api', '').replace(/^http/, 'ws') + '/ws', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const events: { type: string;[k: string]: unknown }[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('ws ready timeout')), 5000);
+    ws.on('message', (d: { toString(): string }) => {
+      const e = JSON.parse(d.toString()) as { type: string };
+      if (e.type === 'ready') {
+        clearTimeout(t);
+        resolve();
+      }
+    });
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token })));
+    ws.on('error', reject);
+  });
+  ws.on('message', (d: { toString(): string }) => {
+    events.push(JSON.parse(d.toString()) as { type: string });
+  });
+  return { ws, events, close: () => ws.close() };
+}
+
+async function post(u: TestUser): Promise<{ id: number }> {
+  const r = await u.call('POST', `/channels/${chId}/messages`, {
+    key_version: KV,
+    nonce: NONCE,
+    ciphertext: CT,
+  });
+  expect(r.status).toBe(201);
+  return (await r.json()) as { id: number };
+}
+
+describe('message deletion (tombstone)', () => {
+  it('sender deletes → peer gets WS message:deleted and the GET row is wiped', async () => {
+    const listener = await wsCollect(owner.token);
+    const { id } = await post(member);
+    const del = await member.call('DELETE', `/messages/ch/${chId}/${id}`);
+    expect(del.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(listener.events).toContainEqual({
+      type: 'message:deleted',
+      channel_id: chId,
+      id,
+    });
+    listener.close();
+    const g = await owner.call('GET', `/channels/${chId}/messages?limit=50`);
+    const row = ((await g.json()) as { messages: { id: number; deleted: number; nonce: string | null; ciphertext: string | null }[] })
+      .messages.find((m) => m.id === id);
+    expect(row?.deleted).toBe(1);
+    expect(row?.nonce).toBeNull();
+    expect(row?.ciphertext).toBeNull();
+    // idempotent: second delete of the same row stays 200
+    const again = await member.call('DELETE', `/messages/ch/${chId}/${id}`);
+    expect(again.status).toBe(200);
+  });
+
+  it('admin deletes another user\'s message; plain member gets 403 on someone else\'s', async () => {
+    const admin = await makeUser(srv.baseUrl, 'md');
+    const add = await owner.call('POST', `/communities/${comId}/members`, {
+      user_id: admin.userId,
+      wrapped_keys: [{ channel_id: chId, wrapped_key: 'A'.repeat(48) }],
+    });
+    expect(add.status).toBe(204);
+    expect((await owner.call('POST', `/communities/${comId}/admins`, { user_id: admin.userId })).status).toBe(204);
+
+    const theirs = await post(member);
+    expect((await admin.call('DELETE', `/messages/ch/${chId}/${theirs.id}`)).status).toBe(200);
+
+    const adminMsg = await post(admin);
+    expect((await member.call('DELETE', `/messages/ch/${chId}/${adminMsg.id}`)).status).toBe(403);
+  });
+
+  it('unknown id and unknown scope return 404', async () => {
+    expect((await owner.call('DELETE', `/messages/ch/${chId}/999999999`)).status).toBe(404);
+    // member, not owner — owner's send bucket is spent by the rate-limit suite above
+    const { id } = await post(member);
+    expect((await owner.call('DELETE', `/messages/xx/${chId}/${id}`)).status).toBe(404);
+  });
+});
+
+describe('DM + GDM deletion', () => {
+  it('either DM participant can tombstone; unknown DM id 404s', async () => {
+    const alice = await makeUser(srv.baseUrl, 'da');
+    const bob = await makeUser(srv.baseUrl, 'db');
+    expect((await alice.call('POST', '/friends/requests', { nick: bob.nick })).status).toBe(204);
+    expect((await bob.call('POST', `/friends/requests/${alice.userId}/accept`, {})).status).toBe(204);
+    const open = await alice.call('POST', '/dms', {
+      user_id: bob.userId,
+      wrapped_keys: [
+        { user_id: alice.userId, wrapped_key: W('A') },
+        { user_id: bob.userId, wrapped_key: W('B') },
+      ],
+    });
+    expect(open.status).toBe(201);
+    const dmId = ((await open.json()) as { channel: { id: string } }).channel.id;
+    const sent = await alice.call('POST', `/dms/${dmId}/messages`, {
+      key_version: 1,
+      nonce: NONCE,
+      ciphertext: CT,
+    });
+    expect(sent.status).toBe(201);
+    const msgId = ((await sent.json()) as { id: number }).id;
+
+    // bob is not the sender — still allowed (participant)
+    expect((await bob.call('DELETE', `/messages/dm/${dmId}/${msgId}`)).status).toBe(200);
+    const hist = (await (await bob.call('GET', `/dms/${dmId}/messages`)).json()) as {
+      messages: { id: number; deleted: number; nonce: string | null; ciphertext: string | null }[];
+    };
+    const row = hist.messages.find((m) => m.id === msgId);
+    expect(row?.deleted).toBe(1);
+    expect(row?.ciphertext).toBeNull();
+
+    expect((await alice.call('DELETE', `/messages/dm/dm_nope/${msgId}`)).status).toBe(404);
+  });
+
+  it('gdm creator can tombstone a member\'s message', async () => {
+    const ga = await makeUser(srv.baseUrl, 'ga');
+    const gb = await makeUser(srv.baseUrl, 'gb');
+    expect((await ga.call('POST', '/friends/requests', { nick: gb.nick })).status).toBe(204);
+    expect((await gb.call('POST', `/friends/requests/${ga.userId}/accept`, {})).status).toBe(204);
+    const create = await ga.call('POST', '/gdms', {
+      name: 'sil-test',
+      member_ids: [gb.userId],
+      wrapped_keys: [
+        { user_id: ga.userId, wrapped_key: W('G') },
+        { user_id: gb.userId, wrapped_key: W('H') },
+      ],
+    });
+    expect(create.status).toBe(201);
+    const gid = ((await create.json()) as { channel: { id: string } }).channel.id;
+    const sent = await gb.call('POST', `/gdms/${gid}/messages`, {
+      key_version: 1,
+      nonce: NONCE,
+      ciphertext: CT,
+    });
+    expect(sent.status).toBe(201);
+    const msgId = ((await sent.json()) as { id: number }).id;
+    expect((await ga.call('DELETE', `/messages/gdm/${gid}/${msgId}`)).status).toBe(200);
+    const hist = (await (await gb.call('GET', `/gdms/${gid}/messages`)).json()) as {
+      messages: { id: number; deleted: number }[];
+    };
+    expect(hist.messages.find((m) => m.id === msgId)?.deleted).toBe(1);
+  });
+});

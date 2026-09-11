@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../state/appStore';
-import { useChatStore, type DisplayMessage } from '../state/chatStore';
+import { useChatStore, type DisplayMessage, amSender } from '../state/chatStore';
+import { useHiddenStore, NO_HIDDEN } from '../state/hiddenStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { formatDay, sameDay } from '../lib/format';
 import { AlertTriangle, Lock, ShieldCheck } from 'lucide-react';
 import MessageRow from './MessageRow';
+import { deleteForEveryone, DeletedRow, HoverActions } from './MsgDelete';
 import Composer from './Composer';
 
 // stable ref: `?? []` in a zustand selector recreates it each call and loops React 19 (#185)
@@ -43,10 +45,18 @@ export default function ChatView({ channelId, channelName }: { channelId: string
     if (lastId) markRead(channelId, lastId);
   }, [channelId, lastId, markRead]);
 
+  // "benim için sil" — locally hidden rows never render
+  const hiddenIds = useHiddenStore((s) => s.hidden[channelId] ?? NO_HIDDEN);
+  const hideForMe = useHiddenStore((s) => s.hideForMe);
+  const visible = useMemo(
+    () => messages.filter((m) => !hiddenIds.includes(m.id)),
+    [messages, hiddenIds],
+  );
+
   // keep pinned to bottom while the user is at the bottom; preserve position otherwise
   useEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView();
-  }, [messages.length]);
+  }, [visible.length]);
 
   const onScroll = (): void => {
     const el = scrollRef.current;
@@ -95,13 +105,13 @@ export default function ChatView({ channelId, channelName }: { channelId: string
             </button>
           </div>
         )}
-        {messages.length === 0 && (
+        {visible.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-paper-500">
             <p className="text-sm">henüz yük yok — ilk mühürlü zarfı sen bırak</p>
           </div>
         )}
-        {messages.map((m, i) => {
-          const prev = messages[i - 1] ?? null;
+        {visible.map((m, i) => {
+          const prev = visible[i - 1] ?? null;
           const newDay = !prev || !sameDay(prev.sentAt, m.sentAt);
           return (
             <div key={m.id}>
@@ -114,7 +124,18 @@ export default function ChatView({ channelId, channelName }: { channelId: string
                   <div className="perf flex-1" aria-hidden />
                 </div>
               )}
-              <MessageRow m={m} prev={prev} />
+              {m.deleted ? (
+                <DeletedRow nick={m.nick} sentAt={m.sentAt} />
+              ) : (
+                <div className="group relative">
+                  <MessageRow m={m} prev={prev} />
+                  <HoverActions
+                    canDeleteAll={amSender(m) || isStaff}
+                    onDeleteAll={() => void deleteForEveryone(channelId, m.id).catch(() => {})}
+                    onDeleteForMe={() => hideForMe(channelId, m.id)}
+                  />
+                </div>
+              )}
             </div>
           );
         })}

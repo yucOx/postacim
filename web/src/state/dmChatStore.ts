@@ -34,6 +34,8 @@ export interface DmDisplayMessage {
   clientId?: string;
   clientSentAt?: number;
   body: string | null;
+  /** tombstone: deleted for everyone — body is always null */
+  deleted?: boolean;
 }
 
 interface DmChatState {
@@ -47,6 +49,20 @@ interface DmChatState {
 }
 
 function toDisplay(raw: ChatMessage): DmDisplayMessage {
+  // tombstone row: the server kept the placeholder and wiped the content
+  if (raw.deleted) {
+    return {
+      id: raw.id,
+      channelId: raw.channel_id,
+      senderId: raw.sender_id,
+      nick: raw.nick,
+      sentAt: raw.sent_at,
+      clientId: raw.client_id ?? undefined,
+      clientSentAt: raw.sent_at_client ?? undefined,
+      body: null,
+      deleted: true,
+    };
+  }
   const kind = kindOf(raw.channel_id);
   const key = useAppStore.getState().dmChannelKeys[raw.channel_id]?.[raw.key_version];
   // recompute the AAD binding: decrypt only succeeds when the server kept
@@ -99,6 +115,11 @@ const insertSorted = (list: DmDisplayMessage[], m: DmDisplayMessage): DmDisplayM
   next.sort((a, b) => a.id - b.id);
   return next;
 };
+
+// tombstone push: keep the row (UI renders "silindi"), drop the body.
+// caller guarantees the channel list is loaded.
+const markDeleted = (list: DmDisplayMessage[], id: number): DmDisplayMessage[] =>
+  list.map((m) => (m.id === id ? { ...m, body: null, deleted: true } : m));
 
 export const useDmChatStore = create<DmChatState>((set, get) => ({
   messages: {},
@@ -178,6 +199,16 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
     onServerEvent((e) => {
       if (e.type === 'dm:message') onMsg(e.message as ChatMessage);
       else if (e.type === 'gdm:message') onMsg(e.message as ChatMessage);
+      // community-channel ids belong to chatStore (its wire handles those)
+      else if (e.type === 'message:deleted') {
+        const d = e as unknown as { channel_id: string; id: number };
+        if (!d.channel_id.startsWith('dm_') && !d.channel_id.startsWith('gdm_')) return;
+        set((s) => {
+          const cur = s.messages[d.channel_id];
+          if (!cur) return s; // channel not loaded — history fetch shows the tombstone
+          return { messages: { ...s.messages, [d.channel_id]: markDeleted(cur, d.id) } };
+        });
+      }
     });
   },
 }));

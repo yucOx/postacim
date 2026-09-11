@@ -224,4 +224,71 @@ ALTER TABLE dm_messages ADD COLUMN sent_at_client INTEGER;
 ALTER TABLE gdm_messages ADD COLUMN client_id TEXT;
 ALTER TABLE gdm_messages ADD COLUMN sent_at_client INTEGER;
 `,
+  // v12 — message tombstones ("delete for everyone"): the row stays as a
+  // placeholder clients render as "silindi", but nonce/ciphertext are wiped —
+  // the server never needs the content again. SQLite cannot ALTER a NOT NULL
+  // column, so each message table is rebuilt with nullable content columns +
+  // the tombstone fields, copying every existing row. "delete for me" is
+  // client-local and never reaches the server.
+  `
+CREATE TABLE messages_v12(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL REFERENCES users(id),
+  key_version INTEGER NOT NULL,
+  nonce TEXT,
+  ciphertext TEXT,
+  sent_at INTEGER NOT NULL,
+  client_id TEXT,
+  sent_at_client INTEGER,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  deleted_by TEXT,
+  deleted_at INTEGER
+);
+INSERT INTO messages_v12(id, channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client)
+  SELECT id, channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client FROM messages;
+DROP TABLE messages;
+ALTER TABLE messages_v12 RENAME TO messages;
+CREATE INDEX idx_messages_channel ON messages(channel_id, id DESC);
+
+CREATE TABLE dm_messages_v12(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL,
+  key_version INTEGER NOT NULL,
+  nonce TEXT,
+  ciphertext TEXT,
+  sent_at INTEGER NOT NULL,
+  client_id TEXT,
+  sent_at_client INTEGER,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  deleted_by TEXT,
+  deleted_at INTEGER
+);
+INSERT INTO dm_messages_v12(id, channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client)
+  SELECT id, channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client FROM dm_messages;
+DROP TABLE dm_messages;
+ALTER TABLE dm_messages_v12 RENAME TO dm_messages;
+CREATE INDEX idx_dm_messages ON dm_messages(channel_id, id DESC);
+
+CREATE TABLE gdm_messages_v12(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id TEXT NOT NULL REFERENCES gdm_channels(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL,
+  key_version INTEGER NOT NULL,
+  nonce TEXT,
+  ciphertext TEXT,
+  sent_at INTEGER NOT NULL,
+  client_id TEXT,
+  sent_at_client INTEGER,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  deleted_by TEXT,
+  deleted_at INTEGER
+);
+INSERT INTO gdm_messages_v12(id, channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client)
+  SELECT id, channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client FROM gdm_messages;
+DROP TABLE gdm_messages;
+ALTER TABLE gdm_messages_v12 RENAME TO gdm_messages;
+CREATE INDEX idx_gdm_messages ON gdm_messages(channel_id, id DESC);
+`,
 ];
