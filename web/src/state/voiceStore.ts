@@ -24,6 +24,9 @@ export interface CallState {
 
 interface VoiceState {
   joinedChannelId: string | null;
+  /** the community voice channel the user manually left — VoiceRoom's
+   *  auto-join effect must not rejoin it until an explicit join clears it */
+  leftChannelId: string | null;
   room: Room | null;
   keyProvider: ExternalE2EEKeyProvider | null;
   micOn: boolean;
@@ -171,6 +174,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
 
   return {
   joinedChannelId: null,
+  leftChannelId: null,
   room: null,
   keyProvider: null,
   micOn: false,
@@ -231,7 +235,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       };
       const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
       wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
-      set({ room, keyProvider, joinedChannelId: channelId, micOn: false, camOn: false, isDmCall: false });
+      set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: false, camOn: false, isDmCall: false });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
       throw err;
@@ -247,7 +251,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       wsSend({ type: 'call:cancel', channel_id: callState.channelId });
     }
     cleanup(room);
-    set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
+    set({
+      room: null,
+      keyProvider: null,
+      joinedChannelId: null,
+      // remember the manual leave — VoiceRoom's auto-join would otherwise
+      // reconnect the user to the room they just hung up on
+      leftChannelId: joinedChannelId && !isDmCall ? joinedChannelId : null,
+      micOn: false,
+      camOn: false,
+      screenOn: false,
+      isDmCall: false,
+      callState: null,
+      pip: false,
+    });
   },
 
   toggleMic: async () => {

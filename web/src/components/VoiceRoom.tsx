@@ -10,6 +10,7 @@ import CallQualityPicker from './CallQualityPicker';
 export default function VoiceRoom({ channelId, channelName }: { channelId: string; channelName: string }) {
   const room = useVoiceStore((s) => s.room);
   const joined = useVoiceStore((s) => s.joinedChannelId);
+  const leftChannelId = useVoiceStore((s) => s.leftChannelId);
   const error = useVoiceStore((s) => s.error);
   const join = useVoiceStore((s) => s.join);
   const leave = useVoiceStore((s) => s.leave);
@@ -20,9 +21,14 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
         ?.channels.find((ch) => ch.id === channelId)?.needs_rekey,
   );
 
+  // auto-join covers landing on the room (sidebar click already joins
+  // explicitly; this catches F5/route-restore) — but never the room the user
+  // just manually left; the sidebar's explicit join clears leftChannelId.
   useEffect(() => {
-    if (!needsRekey && joined !== channelId) void join(channelId).catch(() => {});
-  }, [channelId, joined, join, needsRekey]);
+    if (!needsRekey && joined !== channelId && leftChannelId !== channelId) {
+      void join(channelId).catch(() => {});
+    }
+  }, [channelId, joined, leftChannelId, join, needsRekey]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
