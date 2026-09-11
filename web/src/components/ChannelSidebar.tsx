@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Hash, Lock, Plus, Settings, Volume2 } from 'lucide-react';
+import { Hash, Lock, MoreVertical, Plus, Settings, Volume2 } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useChatStore } from '../state/chatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
 import Modal from './Modal';
+import ConfirmDialog from './ConfirmDialog';
 import CommunitySettings from './CommunitySettings';
 
 export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void }) {
@@ -17,6 +18,10 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
   const chatMessages = useChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap); // re-render when markers change
   const [settings, setSettings] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [confirm, setConfirm] = useState<'leave' | 'delete' | null>(null);
+  const leaveCommunity = useAppStore((s) => s.leaveCommunity);
+  const deleteCommunity = useAppStore((s) => s.deleteCommunity);
   const [modalType, setModalType] = useState<'text' | 'voice' | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -87,20 +92,19 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
         <span className="truncate font-display text-base font-semibold uppercase tracking-[0.12em] text-paper-100">
           {community.name}
         </span>
-        {isStaff && (
-          <button
-            onClick={() => setSettings(true)}
-            className="relative ml-2 rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
-            title="topluluk ayarları"
-          >
-            <Settings size={15} />
-            {(community.pending_join_requests ?? 0) > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-night-900 bg-lamp-500 px-0.5 font-display text-[9px] font-bold text-night-950">
-                {community.pending_join_requests}
-              </span>
-            )}
-          </button>
-        )}
+        <button
+          onClick={() => setMenu(true)}
+          className="relative ml-2 shrink-0 rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
+          title="topluluk menüsü"
+          aria-label="topluluk menüsü"
+        >
+          <MoreVertical size={15} />
+          {(community.pending_join_requests ?? 0) > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-night-900 bg-lamp-500 px-0.5 font-display text-[9px] font-bold text-night-950">
+              {community.pending_join_requests}
+            </span>
+          )}
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
         <div className="plate mb-1 flex items-center justify-between px-2">
@@ -175,6 +179,61 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
       </div>
 
       {settings && <CommunitySettings communityId={community.id} onClose={() => setSettings(false)} />}
+
+      {menu && (
+        <Modal title={community.name} onClose={() => setMenu(false)}>
+          <div className="flex flex-col gap-2">
+            {isStaff && (
+              <button
+                onClick={() => {
+                  setMenu(false);
+                  setSettings(true);
+                }}
+                className="btn-ghost"
+              >
+                <Settings size={14} />
+                ayarlar
+              </button>
+            )}
+            {isOwner ? (
+              <button onClick={() => setConfirm('delete')} className="btn-stamp">
+                topluluğu sil
+              </button>
+            ) : (
+              <button onClick={() => setConfirm('leave')} className="btn-stamp">
+                topluluktan ayrıl
+              </button>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {confirm === 'leave' && (
+        <ConfirmDialog
+          title="Topluluktan ayrıl"
+          message={`'${community.name}' topluluğundan ayrılmak istediğine emin misin? Kalan yöneticiler kanal anahtarlarını yenileyene kadar odalar kilitli kalır.`}
+          danger
+          confirmLabel="ayrıl"
+          onConfirm={() => {
+            setConfirm(null);
+            void leaveCommunity(community.id).catch(() => {});
+          }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+      {confirm === 'delete' && (
+        <ConfirmDialog
+          title="Topluluğu sil"
+          message={`'${community.name}' topluluğu, tüm odaları ve mesajlarıyla birlikte kalıcı olarak silinecek. Bu geri alınamaz.`}
+          danger
+          confirmLabel="sil"
+          onConfirm={() => {
+            setConfirm(null);
+            void deleteCommunity(community.id).catch(() => {});
+          }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
 
       {modalType && (
         <Modal title={modalType === 'text' ? 'Yeni yazı odası' : 'Yeni ses odası'} onClose={() => setModalType(null)}>

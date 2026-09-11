@@ -91,6 +91,8 @@ interface AppState {
   removeMember: (communityId: string, userId: string) => Promise<void>;
   banMember: (communityId: string, userId: string) => Promise<void>;
   setRole: (communityId: string, userId: string, makeAdmin: boolean) => Promise<void>;
+  leaveCommunity: (communityId: string) => Promise<void>;
+  deleteCommunity: (communityId: string) => Promise<void>;
   createInvite: (
     communityId: string,
     opts: { targetNick?: string; maxUses?: number; ttlHours?: number },
@@ -139,7 +141,25 @@ function unwrapBootstrap(
   return { communities: out, keys };
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set, get) => {
+  // drop a community from local state: used by self-leave, delete, and the
+  // member_removed broadcast. Falls back to the first remaining community,
+  // or to the DM home when none are left.
+  const dropCommunity = (id: string): void => {
+    const state = get();
+    const communities = state.communities.filter((c) => c.id !== id);
+    const activeWasIn = state.activeCommunityId === id;
+    const first = communities[0];
+    set({
+      communities,
+      activeCommunityId: activeWasIn ? (first?.id ?? null) : state.activeCommunityId,
+      activeChannelId: activeWasIn
+        ? (first?.channels.find((c) => c.type === 'text')?.id ?? null)
+        : state.activeChannelId,
+      view: activeWasIn && communities.length === 0 ? 'dm' : state.view,
+    });
+  };
+  return ({
   loaded: false,
   // default landing: mektuplar (friends/DM home) — communities open via route
   view: 'dm',
@@ -379,6 +399,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     // roles_updated event refreshes bootstrap
   },
 
+  // Self-leave: the server freezes channels + kills invites; remaining staff
+  // see the rekey locks. The member_removed broadcast also drops it locally.
+  leaveCommunity: async (communityId) => {
+    await api(`/communities/${communityId}/leave`, { method: 'POST' });
+    dropCommunity(communityId);
+  },
+
+  deleteCommunity: async (communityId) => {
+    await api(`/communities/${communityId}`, { method: 'DELETE' });
+    dropCommunity(communityId);
+  },
+
   // Open invite: keys sealed to an ephemeral keypair whose private half lives in
   // the link (never on the server) → owner can be offline when it is redeemed.
   // Targeted invite: sealed straight to the target's identity key.
@@ -564,21 +596,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         void get().loadBootstrap();
       } else if (e.type === 'community:member_removed') {
         if (e.user_id === me) {
-          const removed = e.community_id as string;
-          const state = get();
-          const communities = state.communities.filter((c) => c.id !== removed);
-          const activeWasIn = state.activeCommunityId === removed;
-          const first = communities[0];
-          set({
-            communities,
-            activeCommunityId: activeWasIn ? (first?.id ?? null) : state.activeCommunityId,
-            activeChannelId: activeWasIn
-              ? (first?.channels.find((c) => c.type === 'text')?.id ?? null)
-              : state.activeChannelId,
-          });
+          dropCommunity(e.community_id as string);
         } else {
           void get().loadBootstrap();
         }
+      } else if (e.type === 'community:deleted') {
+        dropCommunity(e.community_id as string);
       } else if (
         e.type === 'channel:created' ||
         e.type === 'channel:rotated' ||
@@ -596,4 +619,4 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     });
   },
-}));
+}) });

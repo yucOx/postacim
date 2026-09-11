@@ -165,3 +165,56 @@ describe('bans', () => {
     expect(bans.bans.some((b) => b.user_id === mallory.userId)).toBe(true);
   });
 });
+
+describe('self-leave + delete', () => {
+  it('member leaves: keys purged, channels freeze, bootstrap drops it', async () => {
+    const c = await createCommunity(owner, 'ayrilma-test');
+    const add = await owner.call('POST', `/communities/${c.id}/members`, {
+      user_id: member.userId,
+      wrapped_keys: c.channels.map((ch) => ({ channel_id: ch.id, wrapped_key: 'A'.repeat(48) })),
+    });
+    expect(add.status).toBe(204);
+    const leave = await member.call('POST', `/communities/${c.id}/leave`);
+    expect(leave.status).toBe(200);
+    const affected = ((await leave.json()) as { affected_channel_ids: string[] }).affected_channel_ids;
+    expect(affected).toHaveLength(2);
+    // gone from the leaver's bootstrap
+    const boot = (await (await member.call('GET', '/bootstrap')).json()) as {
+      communities: { id: string }[];
+    };
+    expect(boot.communities.some((x) => x.id === c.id)).toBe(false);
+    // leaver holds the raw keys → channels froze for everyone left behind
+    expect(
+      (await owner.call('POST', `/channels/${c.channels[0]!.id}/messages`, { key_version: 1, nonce: NONCE, ciphertext: CT })).status,
+    ).toBe(409);
+    // leaver can no longer mint voice tokens
+    expect([403, 404]).toContain((await member.call('POST', `/channels/${c.channels[1]!.id}/voice-token`)).status);
+  });
+
+  it('owner cannot leave; non-member gets 404', async () => {
+    expect((await owner.call('POST', `/communities/${communityId}/leave`)).status).toBe(400);
+    const outsider = await makeUser(srv.baseUrl, 'ml');
+    expect((await outsider.call('POST', `/communities/${communityId}/leave`)).status).toBe(404);
+  });
+
+  it('owner deletes: cascade removes everything, non-owner blocked', async () => {
+    const c = await createCommunity(owner, 'silme-test');
+    const add = await owner.call('POST', `/communities/${c.id}/members`, {
+      user_id: member.userId,
+      wrapped_keys: c.channels.map((ch) => ({ channel_id: ch.id, wrapped_key: 'A'.repeat(48) })),
+    });
+    expect(add.status).toBe(204);
+    expect((await member.call('DELETE', `/communities/${c.id}`)).status).toBe(403);
+    expect((await owner.call('DELETE', `/communities/${c.id}`)).status).toBe(204);
+    // gone from both bootstraps
+    for (const u of [owner, member]) {
+      const boot = (await (await u.call('GET', '/bootstrap')).json()) as {
+        communities: { id: string }[];
+      };
+      expect(boot.communities.some((x) => x.id === c.id)).toBe(false);
+    }
+    // channel rows (and thus messages/keys via cascade) are gone
+    expect((await owner.call('POST', `/channels/${c.channels[0]!.id}/messages`, { key_version: 1, nonce: NONCE, ciphertext: CT })).status).toBe(404);
+    expect((await owner.call('DELETE', `/communities/${c.id}`)).status).toBe(404);
+  });
+});

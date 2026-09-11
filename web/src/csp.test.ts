@@ -55,4 +55,13 @@ describe('nginx CSP stays crypto-compatible', () => {
     expect(plain).not.toMatch(/strict-transport-security/i);
     expect(tls).toMatch(/strict-transport-security/i);
   });
+
+  // require-trusted-types-for breaks livekit's E2EE Worker (raw blob: URL), so
+  // the allowlist must name the exact policy web/src/lib/ttWorker.ts mints —
+  // anything broader would let injected script mint a pass-through policy.
+  it.each(files)('%s: trusted-types allowlist pins the E2EE worker policy', (f) => {
+    const conf = readFileSync(join(confDir, f), 'utf8');
+    expect(conf).toMatch(/require-trusted-types-for 'script'/);
+    expect(conf).toMatch(/trusted-types e2ee-worker/);
+  });
 });

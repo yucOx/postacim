@@ -258,6 +258,62 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     return { affected_channel_ids: affected };
   });
 
+  // --- self-leave ---
+  // The leaver keeps the raw channel keys, so the kick tail applies: channels
+  // freeze until staff rotate, outstanding invites die with them, live voice
+  // rooms are evicted. The leaver's own socket receives the member_removed
+  // broadcast before it is parted from the room.
+  app.post('/communities/:id/leave', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const role = memberRole(id, req.user.id);
+    if (!role) return reply.code(404).send({ error: 'üye değilsin' });
+    if (role === 'owner') {
+      return reply.code(400).send({ error: 'sahip ayrılamaz — topluluğu sil' });
+    }
+    const channels = communityChannels(id);
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM members WHERE community_id = ? AND user_id = ?').run(id, req.user.id);
+      db.prepare(
+        `DELETE FROM wrapped_channel_keys
+         WHERE user_id = ? AND channel_id IN (SELECT id FROM channels WHERE community_id = ?)`,
+      ).run(req.user.id, id);
+    });
+    tx();
+    memberRemovedCleanup(id, req.user.id, true);
+    const affected = channels.map((c) => c.id);
+    hub.broadcast(id, {
+      type: 'community:member_removed',
+      community_id: id,
+      user_id: req.user.id,
+      affected_channel_ids: affected,
+    });
+    hub.leaveCommunity(req.user.id, id);
+    return { affected_channel_ids: affected };
+  });
+
+  // --- delete ---
+  // Owner-only. Every related row (members, channels, messages, wrapped keys,
+  // invites, bans, join requests) goes via FK ON DELETE CASCADE. Members are
+  // evicted from live rooms and told the community is gone.
+  app.delete('/communities/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const community = getCommunity(id);
+    if (!community) return reply.code(404).send({ error: 'topluluk bulunamadı' });
+    if (community.owner_id !== req.user.id) {
+      return reply.code(403).send({ error: 'sadece sahip silebilir' });
+    }
+    const members = communityMembers(id);
+    const voiceChannels = communityChannels(id).filter((c) => c.type === 'voice').map((c) => c.id);
+    db.prepare('DELETE FROM communities WHERE id = ?').run(id);
+    // sockets still sit in the room: they get the notice, then we part them
+    hub.broadcast(id, { type: 'community:deleted', community_id: id });
+    for (const m of members) {
+      void evictFromRooms({ id: m.id }, voiceChannels);
+      hub.leaveCommunity(m.id, id);
+    }
+    return reply.code(204).send();
+  });
+
   // --- roles ---
   app.post('/communities/:id/admins', async (req, reply) => {
     const { id } = req.params as { id: string };

@@ -2,6 +2,7 @@ import type { DisplayMessage } from '../state/chatStore';
 import { useChatStore } from '../state/chatStore';
 import { formatTime, nickColor, sameDay } from '../lib/format';
 import { amSender } from '../state/chatStore';
+import Avatar from './Avatar';
 import { Postmark } from './Brand';
 
 export default function MessageRow({
@@ -22,15 +23,7 @@ export default function MessageRow({
   return (
     <div className={`group flex gap-3 px-4 ${grouped ? 'py-0.5' : 'pt-3 pb-0.5'}`}>
       <div className="w-9 shrink-0">
-        {!grouped && (
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-sm border border-brass-700/40 bg-night-800 font-display text-base font-bold"
-            style={{ color }}
-            aria-hidden
-          >
-            {m.nick[0]?.toLocaleUpperCase('tr-TR')}
-          </div>
-        )}
+        {!grouped && <Avatar userId={m.senderId} label={m.nick} size={36} />}
       </div>
       <div className="min-w-0 flex-1">
         {!grouped && (
