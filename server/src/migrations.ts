@@ -291,4 +291,22 @@ DROP TABLE gdm_messages;
 ALTER TABLE gdm_messages_v12 RENAME TO gdm_messages;
 CREATE INDEX idx_gdm_messages ON gdm_messages(channel_id, id DESC);
 `,
+  // v13 — key transparency: her public key ilk yayınlandığında (register)
+  // append-only bir hash zincirine yazılır. entry_hash = sha256(prev_hash ||
+  // '\x00' || user_id || '\x00' || public_key); genesis prev_hash = 64 adet '0'.
+  // UPDATE/DELETE yolunun olmaması esas özellik: sunucu bir key'i sessizce
+  // değiştiremez — değişse zincir kopar/çelişir ve kanıt kalır. Hesap silinse
+  // bile satır kalır (denetim); user_id bilinçli olarak FK değil — FK silince
+  // cascade kanıtı da silerdi.
+  `
+CREATE TABLE key_log(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  prev_hash TEXT NOT NULL,
+  entry_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_key_log_user ON key_log(user_id);
+`,
 ];

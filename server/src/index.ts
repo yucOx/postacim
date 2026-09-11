@@ -24,6 +24,7 @@ import { friendRoutes } from './routes/friends.js';
 import { dmRoutes } from './routes/dms.js';
 import { gdmRoutes } from './routes/gdms.js';
 import { userRoutes } from './routes/users.js';
+import { keyRoutes, backfillKeyLog } from './routes/keys.js';
 import { attachWs } from './ws/index.js';
 
 export const app = Fastify({
@@ -67,6 +68,7 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/recovery-params',
   '/api/auth/recover/unlock',
   '/api/auth/recover/finish',
+  '/api/keys/log',
 ]);
 
 app.addHook('onRequest', async (req, reply) => {
@@ -99,6 +101,11 @@ await app.register(friendRoutes, { prefix: '/api' });
 await app.register(dmRoutes, { prefix: '/api' });
 await app.register(userRoutes, { prefix: '/api' });
 await app.register(gdmRoutes, { prefix: '/api' });
+await app.register(keyRoutes, { prefix: '/api' });
+
+// anahtar defteri: özellikten önce kaydolmuş hesaplar için eksik satırları
+// işle (tek yazı yolu appendKeyLog — sadece ekler)
+backfillKeyLog();
 
 attachWs(app);
 

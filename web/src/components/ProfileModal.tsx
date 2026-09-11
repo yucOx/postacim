@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { useAuthStore } from '../state/authStore';
 import { processAvatarFile, invalidateAvatar } from '../lib/avatar';
 import { deviceUnlockSupported, hasDeviceUnlock } from '../crypto/devicekey';
+import { useSecurityStore } from '../state/securityStore';
 import Avatar from './Avatar';
 import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
@@ -10,6 +11,8 @@ import { SponsorNote } from './SponsorNote';
 
 export default function ProfileModal({ onClose }: { onClose: () => void }): React.ReactNode {
   const user = useAuthStore((s) => s.user);
+  // anahtar defteri damgası — head'in kısa parmak izi (bant dışı karşılaştırma için)
+  const keylogStamp = useSecurityStore((s) => s.keylogStamp);
   const setAvatar = useAuthStore((s) => s.setAvatar);
   const clearAvatar = useAuthStore((s) => s.clearAvatar);
   const logout = useAuthStore((s) => s.logout);
@@ -173,6 +176,21 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
           onChange={(e) => void onFile(e)}
           className="hidden"
         />
+
+        {keylogStamp && (
+          <div className="rounded-sm border border-brass-700/40 bg-night-950/70 px-3 py-2">
+            <p className="font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-paper-500">
+              anahtar defteri damgası
+            </p>
+            <p className="select-all font-mono text-sm font-semibold tracking-[0.08em] text-lamp-300">
+              {keylogStamp}
+            </p>
+            <p className="mt-0.5 text-[11px] text-paper-500">
+              sunucudaki herkese açık anahtar defterinin son kaydının damgası — güvendiğin
+              başka bir cihazdaki damgayla bant dışı karşılaştır
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2">
           <button onClick={onPick} disabled={busy} className="btn-ghost">

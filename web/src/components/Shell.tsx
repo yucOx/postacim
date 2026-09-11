@@ -25,6 +25,7 @@ import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { useUnreadStore, unreadCount } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
+import { useSecurityStore } from '../state/securityStore';
 import { readRoute } from '../router';
 
 function PasswordModal({ onClose }: { onClose: () => void }) {
@@ -102,6 +103,7 @@ export default function Shell() {
   const selectChannel = useAppStore((s) => s.selectChannel);
   const dmMessages = useDmChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap);
+  const keylogWarning = useSecurityStore((s) => s.keylogWarning);
 
   // browser-tab badge: total unread DMs
   const dmUnreadTotal = dms.reduce((n, d) => n + unreadCount(d.id, dmMessages[d.id]), 0);
@@ -137,6 +139,13 @@ export default function Shell() {
     void loadBootstrap();
     return () => wsDisconnect();
   }, [wireEvents, loadBootstrap]);
+
+  // anahtar defteri doğrulaması — Shell mount'unda bir kez (giriş/kayıt
+  // sonrası): defteri çek, zinciri doğrula, kendi kaydını kontrol et
+  useEffect(() => {
+    const { user, publicKey } = useAuthStore.getState();
+    if (user && publicKey) void useSecurityStore.getState().runKeyLogCheck(user.id, publicKey);
+  }, []);
 
   // live connection badge — the socket retries forever; this says when it's down
   const [wsStat, setWsStat] = useState<WsStatus>('offline');
@@ -215,6 +224,17 @@ export default function Shell() {
           </button>
         </div>
       </header>
+
+      {/* anahtar defteri çelişkisi — zincir kopmuş / yeniden yazılmış /
+          kimliğimiz başka anahtarla yayınlanıyor: bariz kırmızı */}
+      {keylogWarning && (
+        <div className="shrink-0 border-b border-stamp-500/70 bg-stamp-100 px-3 py-1.5">
+          <p className="text-xs font-semibold text-stamp-400">
+            güvenlik uyarısı — {keylogWarning}. durum düzelene kadar bu sunucudaki hiçbir
+            anahtara güvenmeyin
+          </p>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         {/* desktop rails */}

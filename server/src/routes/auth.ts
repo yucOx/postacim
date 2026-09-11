@@ -5,6 +5,7 @@ import { db } from '../db.js';
 import { loginSchema, NICK_REGEX, registerSchema } from '../schemas.js';
 import { issueSession, revokeAllSessions, revokeSession, SESSION_COOKIE } from '../auth/sessions.js';
 import { config, clientIp } from '../config.js';
+import { appendKeyLog } from './keys.js';
 
 // Cookie mirrors the Bearer token 1:1. httpOnly + SameSite=strict keeps it out
 // of JS and cross-site requests; Secure flips on automatically behind TLS.
@@ -177,21 +178,27 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         const verifier = await argon2.hash(body.auth_material);
         const recVerifier = rec ? await argon2.hash(rec.auth_material) : null;
         const id = crypto.randomUUID();
-        db.prepare(
-          `INSERT INTO users(id, nick, kdf_salt, verifier, public_key, key_blob, recovery_salt, recovery_blob, recovery_verifier, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          id,
-          body.nick,
-          body.kdf_salt,
-          verifier,
-          body.public_key,
-          body.key_blob,
-          rec?.kdf_salt ?? null,
-          rec?.blob ?? null,
-          recVerifier,
-          Date.now(),
-        );
+        // kullanıcı satırı + anahtar defteri satırı tek işlemde — defterde
+        // kaydı olmayan yayılmış bir public key kalmasın
+        const tx = db.transaction(() => {
+          db.prepare(
+            `INSERT INTO users(id, nick, kdf_salt, verifier, public_key, key_blob, recovery_salt, recovery_blob, recovery_verifier, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).run(
+            id,
+            body.nick,
+            body.kdf_salt,
+            verifier,
+            body.public_key,
+            body.key_blob,
+            rec?.kdf_salt ?? null,
+            rec?.blob ?? null,
+            recVerifier,
+            Date.now(),
+          );
+          appendKeyLog(id, body.public_key);
+        });
+        tx();
         const token = issueSession(id);
         sessionCookie(reply, req, token);
         return reply.code(201).send({ token, user: publicUser(id, body.nick) });
