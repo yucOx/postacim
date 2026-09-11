@@ -1,8 +1,24 @@
-import { ParticipantTile, useParticipants, useTracks } from '@livekit/components-react';
+import { ParticipantTile, useParticipants, useTracks, AudioTrack } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
 import { nickFor } from '../lib/nick';
 import Avatar from './Avatar';
+
+/** Remote mic audio — invisible <audio> elements. Without this nothing in the
+ *  app attaches RemoteAudioTracks (stage tiles are video-only), so peers would
+ *  publish fine but nobody would hear them. Local mic is never attached (echo). */
+function RemoteAudio(): React.ReactNode {
+  const tracks = useTracks([Track.Source.Microphone], { onlySubscribed: true });
+  return (
+    <>
+      {tracks
+        .filter((t) => !t.participant.isLocal)
+        .map((t) => (
+          <AudioTrack key={t.participant.identity} trackRef={t} className="hidden" />
+        ))}
+    </>
+  );
+}
 
 function NamePlate({
   identity,
@@ -63,10 +79,15 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   }
 
   if (participants.length === 0) {
-    return emptyLabel ? (
-      <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{emptyLabel}</div>
-    ) : (
-      <div className="flex-1" />
+    return (
+      <>
+        <RemoteAudio />
+        {emptyLabel ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{emptyLabel}</div>
+        ) : (
+          <div className="flex-1" />
+        )}
+      </>
     );
   }
 
@@ -74,40 +95,43 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
 
   if (screens.length > 0) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-        {/* primary stage — the share owns the full area, sized by the flex
-            container (definite height, no aspect/percentage sizing cycles) */}
-        <div className="flex min-h-0 flex-1 gap-2">
-          {screens.map((t) => (
-            <div
-              key={slotKey(t.participant.identity) + '-screen'}
-              className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
-            >
-              <ParticipantTile trackRef={t} className="h-full w-full" />
-              <NamePlate identity={t.participant.identity} isLocal={t.participant.isLocal} isScreen />
-            </div>
-          ))}
-        </div>
-        {/* every participant gets a strip slot — placeholder when cam is off */}
-        <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">
-          {participants.map((p) => {
-            const cam = camByIdentity.get(p.identity);
-            return cam ? (
-              <div key={slotKey(p.identity)} className="relative aspect-video h-full shrink-0">
-                <ParticipantTile
-                  trackRef={cam}
-                  className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
-                />
-                <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+      <>
+        <RemoteAudio />
+        <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+          {/* primary stage — the share owns the full area, sized by the flex
+              container (definite height, no aspect/percentage sizing cycles) */}
+          <div className="flex min-h-0 flex-1 gap-2">
+            {screens.map((t) => (
+              <div
+                key={slotKey(t.participant.identity) + '-screen'}
+                className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
+              >
+                <ParticipantTile trackRef={t} className="h-full w-full" />
+                <NamePlate identity={t.participant.identity} isLocal={t.participant.isLocal} isScreen />
               </div>
-            ) : (
-              <div key={slotKey(p.identity)} className="aspect-video h-full shrink-0">
-                <CamPlaceholder identity={p.identity} isLocal={p.isLocal} />
-              </div>
-            );
-          })}
+            ))}
+          </div>
+          {/* every participant gets a strip slot — placeholder when cam is off */}
+          <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">
+            {participants.map((p) => {
+              const cam = camByIdentity.get(p.identity);
+              return cam ? (
+                <div key={slotKey(p.identity)} className="relative aspect-video h-full shrink-0">
+                  <ParticipantTile
+                    trackRef={cam}
+                    className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+                  />
+                  <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+                </div>
+              ) : (
+                <div key={slotKey(p.identity)} className="aspect-video h-full shrink-0">
+                  <CamPlaceholder identity={p.identity} isLocal={p.isLocal} />
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -119,18 +143,21 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         ? 'repeat(2, minmax(0, 1fr))'
         : 'repeat(auto-fit, minmax(280px, 1fr))';
   return (
-    <div
-      className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
-      style={{ gridTemplateColumns: cols, justifyItems: count <= 2 ? 'center' : 'stretch' }}
-    >
-      {participants.map((p) => {
-        const cam = camByIdentity.get(p.identity);
-        return cam ? (
-          <CamTile key={slotKey(p.identity)} trackRef={cam} />
-        ) : (
-          <CamPlaceholder key={slotKey(p.identity)} identity={p.identity} isLocal={p.isLocal} />
-        );
-      })}
-    </div>
+    <>
+      <RemoteAudio />
+      <div
+        className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
+        style={{ gridTemplateColumns: cols, justifyItems: count <= 2 ? 'center' : 'stretch' }}
+      >
+        {participants.map((p) => {
+          const cam = camByIdentity.get(p.identity);
+          return cam ? (
+            <CamTile key={slotKey(p.identity)} trackRef={cam} />
+          ) : (
+            <CamPlaceholder key={slotKey(p.identity)} identity={p.identity} isLocal={p.isLocal} />
+          );
+        })}
+      </div>
+    </>
   );
 }
