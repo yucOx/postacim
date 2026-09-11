@@ -25,6 +25,7 @@ interface RegisterBody {
   auth_material: string;
   public_key: string;
   key_blob: string;
+  turnstile_token?: string;
   recovery?: {
     kdf_salt: string;
     auth_material: string;
@@ -34,6 +35,7 @@ interface RegisterBody {
 interface LoginBody {
   nick: string;
   auth_material: string;
+  turnstile_token?: string;
 }
 
 const publicUser = (id: string, nick: string) => ({ id, nick });
@@ -59,6 +61,35 @@ let dummyVerifier: string | null = null;
 async function burnVerify(): Promise<void> {
   dummyVerifier ??= await argon2.hash('timing-parity-dummy');
   await argon2.verify(dummyVerifier, '0'.repeat(44)).catch(() => false);
+}
+
+// --- Cloudflare Turnstile (optional) ---
+// Secret unset → the check vanishes entirely: self-hosted/LAN deployments run
+// without Cloudflare. Set → register/login must carry a fresh widget token,
+// verified server-side at siteverify. Any transport/parse/verification failure
+// counts as failed — fail closed.
+async function verifyTurnstile(
+  req: { ip: string },
+  token: unknown,
+): Promise<boolean> {
+  if (!config.turnstileSecret) return true;
+  if (typeof token !== 'string' || token.length === 0) return false;
+  try {
+    const res = await fetch(config.turnstileVerifyUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        secret: config.turnstileSecret,
+        response: token,
+        remoteip: req.ip,
+      }),
+    });
+    if (!res.ok) return false;
+    const out = (await res.json()) as { success?: boolean };
+    return out.success === true;
+  } catch {
+    return false;
+  }
 }
 
 // Magic-byte sniff — the client picks the format, but the server is the gate.
@@ -96,6 +127,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     { config: { rateLimit: { max: config.registerRatePerHour, timeWindow: '1 hour' } }, schema: { body: registerSchema } },
     async (req, reply) => {
       const body = req.body as RegisterBody;
+      if (!(await verifyTurnstile(req, body.turnstile_token))) {
+        return reply.code(400).send({ error: 'insan doğrulaması başarısız' });
+      }
       const rec = body.recovery;
       if (
         rec !== undefined &&
@@ -144,6 +178,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, schema: { body: loginSchema } },
     async (req, reply) => {
       const body = req.body as LoginBody;
+      // before the lookup: a missing/bad token must not probe nicks any further
+      if (!(await verifyTurnstile(req, body.turnstile_token))) {
+        return reply.code(400).send({ error: 'insan doğrulaması başarısız' });
+      }
       const row = db
         .prepare('SELECT id, nick, verifier, public_key, key_blob FROM users WHERE nick = ?')
         .get(body.nick) as

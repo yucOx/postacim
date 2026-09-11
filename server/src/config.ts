@@ -38,6 +38,12 @@ export const config = {
   livekitSecret,
   // default 7 days — a stolen cookie's validity window; SESSION_TTL_DAYS env overrides
   sessionTtlDays: num(process.env.SESSION_TTL_DAYS, 7),
+  /** optional Cloudflare Turnstile — unset secret disables the check entirely
+   *  (self-hosted/LAN deployments run with no third-party dependency) */
+  turnstileSecret: process.env.TURNSTILE_SECRET ?? '',
+  // env override exists for tests: point it at an offline mock of siteverify
+  turnstileVerifyUrl:
+    process.env.TURNSTILE_VERIFY_URL ?? 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
   /** dev/testing knob — keep 3 in production */
   registerRatePerHour: num(process.env.REGISTER_RATE_PER_HOUR, 3),
 };

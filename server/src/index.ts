@@ -5,12 +5,19 @@ import crypto from 'node:crypto';
 import { config } from './config.js';
 import './db.js'; // open + migrate on boot
 import './types.js';
-import { verifySession, SESSION_COOKIE, pruneSessions } from './auth/sessions.js';
+import {
+  verifySession,
+  touchSession,
+  sha256,
+  SESSION_COOKIE,
+  pruneSessions,
+} from './auth/sessions.js';
 import { authRoutes } from './routes/auth.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { communityRoutes } from './routes/communities.js';
 import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
+import { messageDeleteRoutes } from './routes/messageDel.js';
 import { voiceRoutes } from './routes/voice.js';
 import { inviteRoutes } from './routes/invites.js';
 import { friendRoutes } from './routes/friends.js';
@@ -66,6 +73,8 @@ app.addHook('onRequest', async (req, reply) => {
     (header?.startsWith('Bearer ') ? header.slice(7) : null) ?? req.cookies?.[SESSION_COOKIE] ?? null;
   const user = token ? verifySession(token) : null;
   if (!user) return reply.code(401).send({ error: 'oturum gerekli' });
+  // rolling refresh: extends at most once per half-TTL, skipped while young
+  touchSession(sha256(token!), user.expires_at);
   req.user = user;
   req.sessionToken = token!;
 });
@@ -77,6 +86,7 @@ await app.register(bootstrapRoutes, { prefix: '/api' });
 await app.register(communityRoutes, { prefix: '/api' });
 await app.register(channelRoutes, { prefix: '/api' });
 await app.register(messageRoutes, { prefix: '/api' });
+await app.register(messageDeleteRoutes, { prefix: '/api' });
 await app.register(voiceRoutes, { prefix: '/api' });
 await app.register(inviteRoutes, { prefix: '/api' });
 await app.register(friendRoutes, { prefix: '/api' });

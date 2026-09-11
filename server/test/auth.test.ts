@@ -1,5 +1,11 @@
 // Auth surface: register/login, per-IP rate buckets, httpOnly cookie session,
 // password change session-drops, BIP-39 recovery, weak-secret boot refusal.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer, makeUser, type TestServer, type TestUser } from './helpers';
 import { b64 } from '../../web/src/crypto/bytes';
@@ -365,5 +371,194 @@ describe('cookie hardening details', () => {
       headers: { cookie, 'x-forwarded-for': '10.30.6.2' },
     });
     expect(me2.status).toBe(401); // revoked, not just forgotten by the browser
+  });
+});
+
+describe('turnstile (TURNSTILE_SECRET set)', () => {
+  // dedicated black-box server + an offline stand-in for Cloudflare's
+  // siteverify: response=good-token → success, anything else → failure.
+  // TURNSTILE_VERIFY_URL env (test-only knob) points the server at the mock so
+  // the suite never leaves localhost.
+  let tsrv: TestServer;
+  let mock: Server;
+  let lastVerify: URLSearchParams | null = null;
+
+  const regBody = async (nick: string, turnstile_token?: string) => {
+    const salt = newKdfSaltHex();
+    const { authMaterial, kek } = await deriveKeys('pw-' + nick, salt);
+    const id = generateIdentity();
+    const body = {
+      nick,
+      kdf_salt: salt,
+      auth_material: b64(authMaterial),
+      public_key: b64(id.publicKey),
+      key_blob: sealIdentityBlob(id.privateKey, kek),
+      ...(turnstile_token === undefined ? {} : { turnstile_token }),
+    };
+    return { body, salt };
+  };
+
+  beforeAll(async () => {
+    mock = createServer((req, res) => {
+      let body = '';
+      req.on('data', (c: Buffer) => {
+        body += c.toString();
+      });
+      req.on('end', () => {
+        lastVerify = new URLSearchParams(body);
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ success: lastVerify.get('response') === 'good-token' }));
+      });
+    });
+    await new Promise<void>((resolve) => mock.listen(0, '127.0.0.1', resolve));
+    const mockPort = (mock.address() as AddressInfo).port;
+
+    // same boot shape as helpers.startServer, plus the Turnstile env
+    const port = 20_000 + Math.floor(Math.random() * 20_000);
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pgv-ts-'));
+    const proc = spawn(
+      process.execPath,
+      ['--import', 'tsx', path.resolve(__dirname, '../src/index.ts')],
+      {
+        env: {
+          ...process.env,
+          PORT: String(port),
+          DATA_DIR: dataDir,
+          LIVEKIT_SECRET: 'vitest-secret-0123456789abcdef-vitest-secret-98765',
+          LIVEKIT_API_KEY: 'testkey',
+          REGISTER_RATE_PER_HOUR: '5000',
+          TURNSTILE_SECRET: 'cf-test-secret',
+          TURNSTILE_VERIFY_URL: `http://127.0.0.1:${mockPort}/siteverify`,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    const baseUrl = `http://127.0.0.1:${port}/api`;
+    for (let i = 0; i < 100; i++) {
+      try {
+        const r = await fetch(`${baseUrl}/health`);
+        if (r.ok) break;
+      } catch {
+        if (proc.exitCode !== null) throw new Error('turnstile test server died at boot');
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    tsrv = {
+      baseUrl,
+      stop: () =>
+        new Promise((resolve) => {
+          proc.once('exit', () => {
+            fs.rmSync(dataDir, { recursive: true, force: true });
+            resolve();
+          });
+          proc.kill('SIGKILL');
+        }),
+    };
+  });
+
+  afterAll(async () => {
+    await tsrv.stop();
+    await new Promise<void>((resolve) => mock.close(() => resolve()));
+  });
+
+  it('register without a token → 400', async () => {
+    const { body } = await regBody('tsn' + Math.floor(Math.random() * 1e9).toString(36));
+    const r = await fetch(`${tsrv.baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.40.0.1' },
+      body: JSON.stringify(body),
+    });
+    expect(r.status).toBe(400);
+    expect((await r.json() as { error: string }).error).toBe('insan doğrulaması başarısız');
+  });
+
+  it('register with a garbage token → 400 (siteverify success:false)', async () => {
+    const { body } = await regBody('tsg' + Math.floor(Math.random() * 1e9).toString(36), 'garbage-token');
+    const r = await fetch(`${tsrv.baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.40.0.2' },
+      body: JSON.stringify(body),
+    });
+    expect(r.status).toBe(400);
+    expect(lastVerify?.get('response')).toBe('garbage-token'); // verify really ran
+  });
+
+  it('register with a valid token → 201; secret/response/remoteip reached siteverify', async () => {
+    const ip = '10.40.0.3';
+    const { body } = await regBody('tsv' + Math.floor(Math.random() * 1e9).toString(36), 'good-token');
+    const r = await fetch(`${tsrv.baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': ip },
+      body: JSON.stringify(body),
+    });
+    expect(r.status).toBe(201);
+    expect(lastVerify?.get('secret')).toBe('cf-test-secret');
+    expect(lastVerify?.get('response')).toBe('good-token');
+    expect(lastVerify?.get('remoteip')).toBe(ip); // trustProxy resolves XFF
+  });
+
+  it('login gated the same way: no token → 400, valid token → 200', async () => {
+    const nick = 'tsl' + Math.floor(Math.random() * 1e9).toString(36);
+    const { body, salt } = await regBody(nick, 'good-token');
+    const reg = await fetch(`${tsrv.baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.40.1.1' },
+      body: JSON.stringify(body),
+    });
+    expect(reg.status).toBe(201);
+    const { authMaterial } = await deriveKeys('pw-' + nick, salt);
+    const login = (turnstile_token?: string) =>
+      fetch(`${tsrv.baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.40.1.2' },
+        body: JSON.stringify({
+          nick,
+          auth_material: b64(authMaterial),
+          ...(turnstile_token === undefined ? {} : { turnstile_token }),
+        }),
+      });
+    expect((await login()).status).toBe(400); // no token — gated before the lookup
+    expect((await login('stale-token')).status).toBe(400);
+    expect((await login('good-token')).status).toBe(200);
+  });
+});
+
+describe('rolling session refresh (touchSession)', () => {
+  it('aged sessions roll to a full TTL; young ones are left untouched', async () => {
+    // config reads env at import time — the strong-secret guard would exit the
+    // test process otherwise, and DATA_DIR keeps this off the repo's real DB
+    process.env.LIVEKIT_SECRET = 'vitest-secret-0123456789abcdef-vitest-secret-98765';
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pgv-touch-'));
+    process.env.DATA_DIR = dataDir;
+    const { db } = await import('../src/db.js');
+    const { config } = await import('../src/config.js');
+    const { issueSession, verifySession, touchSession, sha256 } = await import(
+      '../src/auth/sessions.js'
+    );
+
+    db.prepare(
+      'INSERT INTO users(id, nick, kdf_salt, verifier, public_key, key_blob, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run('u-touch', 'touch', 'a'.repeat(32), 'v', 'p', 'k', Date.now());
+    const token = issueSession('u-touch');
+    const hash = sha256(token);
+    const expiresAt = () =>
+      (db.prepare('SELECT expires_at AS e FROM sessions WHERE token_hash = ?').get(hash) as { e: number }).e;
+
+    // verifySession surfaces expires_at — the values the request hook feeds back
+    const fresh = expiresAt();
+    expect(verifySession(token)).toMatchObject({ id: 'u-touch', expires_at: fresh });
+
+    // young session (> half TTL remaining): no write
+    touchSession(hash, fresh);
+    expect(expiresAt()).toBe(fresh);
+
+    // aged session (< half TTL remaining): rolled forward to ≈ now + TTL
+    const aged = Date.now() + 60_000; // one minute left of the TTL
+    db.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').run(aged, hash);
+    touchSession(hash, aged);
+    const rolled = expiresAt();
+    expect(rolled).toBeGreaterThan(Date.now() + config.sessionTtlDays * 86_400_000 - 5_000);
+
+    fs.rmSync(dataDir, { recursive: true, force: true });
   });
 });

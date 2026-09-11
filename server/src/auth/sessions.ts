@@ -5,12 +5,14 @@ import { db } from '../db.js';
 export interface SessionUser {
   id: string;
   nick: string;
+  /** ms epoch — surfaced to the request hook so it can roll the session forward */
+  expires_at: number;
 }
 
 /** name of the httpOnly session cookie set on login */
 export const SESSION_COOKIE = 'pgv_session';
 
-const sha256 = (token: string): string =>
+export const sha256 = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
 
 export function issueSession(userId: string): string {
@@ -36,7 +38,7 @@ export function verifySession(token: string): SessionUser | null {
     db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash);
     return null;
   }
-  return { id: row.id, nick: row.nick };
+  return { id: row.id, nick: row.nick, expires_at: row.expires_at };
 }
 
 export function revokeSession(token: string): void {
@@ -47,6 +49,20 @@ export function revokeSession(token: string): void {
  *  token cannot outlive the credential rotation */
 export function revokeAllSessions(userId: string): void {
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+}
+
+/** rolling refresh — called from the onRequest hook with the values
+ *  verifySession already loaded: only when less than half the TTL remains is
+ *  the row extended to now + TTL (one indexed UPDATE). Young sessions skip the
+ *  write entirely, so per-request SQLite load stays at zero extra statements.
+ *  Result: active users never see their session expire; abandoned ones do. */
+export function touchSession(tokenHash: string, expiresAt: number): void {
+  const ttlMs = config.sessionTtlDays * 86_400_000;
+  if (expiresAt - Date.now() >= ttlMs / 2) return;
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').run(
+    Date.now() + ttlMs,
+    tokenHash,
+  );
 }
 
 /** janitor: expired rows are only deleted on use otherwise — without this the
