@@ -62,7 +62,7 @@
 <div class="wrap">
 
   <h1>POSTACIM <span>·</span> GÜVENLİK MİMARİSİ</h1>
-  <p class="sub">uçtan uca şifreli mesajlaşma · sunucu kör relay · her iddia kodla doğrulanabilir · 11 Eylül 2026</p>
+  <p class="sub">uçtan uca şifreli mesajlaşma · sunucu kör relay · her iddia kodla doğrulanabilir · 12 Eylül 2026</p>
 
   <h2>1 · Anahtar yaşam döngüsü</h2>
   <div class="lanes">
@@ -91,6 +91,7 @@
       <div class="card srv"><b>Argon2id verifier</b><small>authMaterial'in hash'i — düz malzeme değil</small></div>
       <div class="card srv"><b>Session: SHA-256(token)</b><small>7 gün · rolling refresh · httpOnly+Strict cookie · login backoff</small></div>
       <div class="card srv"><b>SQLite: mesajlar</b><small>yalnız nonce + ciphertext + metadata — okunabilir içerik yok</small></div>
+      <div class="card srv"><b>Anahtar defteri — key_log</b><small>public key'ler append-only hash zincirinde · istemci boot'ta zinciri doğrular, kendi kaydını kontrol eder · UPDATE/DELETE yolu yok</small></div>
       <div class="card srv"><b>LiveKit SFU (self-hosted)</b><small>SFrame E2EE relay — ses/görüntü içerik kapalı</small></div>
       <div class="card srv"><b>CSP + Trusted Types + log hijyeni</b><small>query'siz log, IP'siz uygulama logu, WS auth timeout</small></div>
     </div>
@@ -135,7 +136,7 @@
   <div class="trio">
     <div class="card"><b>🗑️ Silme</b><small>herkes için: gönderen tombstone, nonce+ciphertext NULL · benim için: localStorage · hesap silme: kimlik+mesajlar+DM'ler+gruplar, tek transaction, geri alınamaz</small></div>
     <div class="card"><b>⚖️ Hukuki talep</b><small>verilebilir: nick, argon2 verifier, zaman damgaları, loglar · verilemez: içerik — çözme anahtarı hiçbir koşulda elimizde değil</small></div>
-    <div class="card"><b>⚠️ Web sınırı</b><small>istemci JS'i sunucudan dağıtılır — operatör değiştirilmiş kod servise edebilir (her web E2EE'nin sınırı). Çözüm: güvenlik numarası (TOFU pinning + parmak izi karşılaştırması)</small></div>
+    <div class="card"><b>⚠️ Web sınırı</b><small>istemci JS'i sunucudan dağıtılır — operatör değiştirilmiş kod servise edebilir (her web E2EE'nin sınırı). Savunma katmanları: güvenlik numarası + TOFU pinning + anahtar defteri (append-only zincir; head damgası iki cihaz arasında bant dışı karşılaştırılınca view-splitting yakalanır)</small></div>
   </div>
 
   <footer>
