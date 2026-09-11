@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuthStore } from '../state/authStore';
 import { processAvatarFile, invalidateAvatar } from '../lib/avatar';
+import { deviceUnlockSupported, hasDeviceUnlock } from '../crypto/devicekey';
 import Avatar from './Avatar';
 import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
@@ -12,6 +13,8 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
   const setAvatar = useAuthStore((s) => s.setAvatar);
   const clearAvatar = useAuthStore((s) => s.clearAvatar);
   const logout = useAuthStore((s) => s.logout);
+  const enrollDeviceUnlock = useAuthStore((s) => s.enrollDeviceUnlock);
+  const removeDeviceUnlock = useAuthStore((s) => s.removeDeviceUnlock);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +22,37 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
   const [previewBytes, setPreviewBytes] = useState<number>(0);
   const [hasAvatar, setHasAvatar] = useState<boolean>(user?.avatar_updated_at != null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // cihaz kilidi: destek yoksa bölüm hiç render edilmez
+  const [deviceSupported, setDeviceSupported] = useState(false);
+  const [deviceActive, setDeviceActive] = useState<boolean | null>(null);
+  const [deviceBusy, setDeviceBusy] = useState(false);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      if (!(await deviceUnlockSupported())) return;
+      if (!alive) return;
+      setDeviceSupported(true);
+      setDeviceActive(await hasDeviceUnlock());
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const onDeviceToggle = async (): Promise<void> => {
+    setDeviceBusy(true);
+    setDeviceError(null);
+    try {
+      if (deviceActive) await removeDeviceUnlock();
+      else await enrollDeviceUnlock();
+      setDeviceActive(!deviceActive);
+    } catch (err) {
+      setDeviceError(err instanceof Error ? err.message : 'işlem başarısız');
+    } finally {
+      setDeviceBusy(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -159,6 +193,29 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
         <p className="text-[11px] text-paper-500">
           resim seç veya yapıştır (Cmd/Ctrl+V) · 64×64 küçük JPEG olarak kaydedilir (~3-8KB)
         </p>
+
+        {deviceSupported && deviceActive !== null && (
+          <div className="mt-2 border-t border-night-700 pt-3">
+            <button
+              type="button"
+              onClick={() => void onDeviceToggle()}
+              disabled={deviceBusy}
+              className={
+                deviceActive
+                  ? 'w-full rounded border border-stamp-500/60 px-3 py-1.5 text-xs text-stamp-400 transition-colors hover:bg-stamp-100'
+                  : 'w-full rounded border border-lamp-600/50 bg-lamp-100/60 px-3 py-1.5 text-xs text-lamp-300 transition-colors hover:bg-lamp-100'
+              }
+            >
+              {deviceBusy ? 'işlem sürüyor…' : deviceActive ? 'cihaz kilidini kaldır' : 'bu cihazda hatırla (passkey)'}
+            </button>
+            <p className="mt-1 text-[11px] text-paper-500">
+              {deviceActive
+                ? 'kaldırınca sayfa yenilenince yine şifre sorulur'
+                : "kayıtlıysan sayfa yenilenince şifre yerine passkey ile dönersin"}
+            </p>
+            {deviceError && <p className="mt-1 text-xs text-stamp-400">{deviceError}</p>}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setConfirmDelete(true)}

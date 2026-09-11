@@ -18,6 +18,8 @@ import Modal from './Modal';
 import { PigeonMark } from './Brand';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
+import DeviceLockModal from './DeviceLockModal';
+import { deviceOfferDeclined, deviceUnlockSupported, hasDeviceUnlock } from '../crypto/devicekey';
 import { generateMnemonic, quizPositions } from '../crypto/bip39';
 import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
@@ -84,6 +86,7 @@ export default function Shell() {
   const [pwModal, setPwModal] = useState(false);
   const [recModal, setRecModal] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
+  const [deviceOffer, setDeviceOffer] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const loaded = useAppStore((s) => s.loaded);
   const loadBootstrap = useAppStore((s) => s.loadBootstrap);
@@ -105,6 +108,25 @@ export default function Shell() {
   useEffect(() => {
     document.title = dmUnreadTotal > 0 ? `(${dmUnreadTotal}) postacim` : 'postacim';
   }, [dmUnreadTotal]);
+
+  // "bu cihazda hatırla" teklifi — bir kez: desteklenen cihazda, kayıt yoksa ve
+  // daha önce reddedilmemişse çıkar. Destek yoksa hiç görünmez.
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        if (!(await deviceUnlockSupported())) return;
+        if (deviceOfferDeclined()) return;
+        if (await hasDeviceUnlock()) return;
+        if (alive) setDeviceOffer(true);
+      } catch {
+        /* destek algısı başarısız → teklif yok, her şey eskisi gibi */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     wireEvents();
@@ -245,6 +267,7 @@ export default function Shell() {
       {pwModal && <PasswordModal onClose={() => setPwModal(false)} />}
       {recModal && <RecoveryModal onClose={() => setRecModal(false)} />}
       {profileModal && <ProfileModal onClose={() => setProfileModal(false)} />}
+      {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
       {isDmCall && !pip && <CallView />}
       {isDmCall && pip && <PiPWidget />}
       <IncomingCall />

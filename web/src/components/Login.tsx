@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { EyeOff, KeyRound, ServerOff, ShieldCheck } from 'lucide-react';
+import { EyeOff, Fingerprint, KeyRound, ServerOff, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '../state/authStore';
 import { generateMnemonic, quizPositions, validateMnemonic } from '../crypto/bip39';
+import { hasDeviceUnlock } from '../crypto/devicekey';
 import PasswordInput, { passwordScore } from './PasswordInput';
 import Turnstile, { turnstileEnabled } from './Turnstile';
 import { PigeonMark, Postmark, SealMark } from './Brand';
@@ -28,6 +29,27 @@ export default function Login() {
   const sessionNick = useAuthStore((s) => s.user?.nick ?? '');
   const login = useAuthStore((s) => s.login);
   const register = useAuthStore((s) => s.register);
+  const unlockWithDevice = useAuthStore((s) => s.unlockWithDevice);
+  // cihaz kilidi kaydı varsa nick/şifre yerine passkey ile açma butonu görünür
+  const [pkAvailable, setPkAvailable] = useState(false);
+  useEffect(() => {
+    void hasDeviceUnlock().then(setPkAvailable);
+  }, []);
+
+  const passkeyLogin = async (): Promise<void> => {
+    setError(null);
+    setBusy(true);
+    try {
+      const ok = await unlockWithDevice(tsToken ?? undefined);
+      if (!ok) throw new Error('passkey açılamadı — şifrenle girebilirsin');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'bir hata oluştu');
+      setTsToken(null); // token tek kullanımlık — yeniden bas
+      setTsAttempt((a) => a + 1);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!ack) return;
@@ -197,6 +219,20 @@ export default function Login() {
                     : 'kurtarma ifadesine geç →'}
               </button>
 
+              {step === 'login' && pkAvailable && (
+                <button
+                  type="button"
+                  onClick={() => void passkeyLogin()}
+                  disabled={busy || tsNeeded}
+                  className="btn-ghost w-full"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Fingerprint size={14} />
+                    passkey ile aç
+                  </span>
+                </button>
+              )}
+
               <div className="flex items-center justify-between text-sm">
                 <button
                   type="button"
@@ -236,9 +272,29 @@ export default function Login() {
 function ReauthStep({ nick }: { nick: string }) {
   const reauthenticate = useAuthStore((s) => s.reauthenticate);
   const logout = useAuthStore((s) => s.logout);
+  const unlockWithDevice = useAuthStore((s) => s.unlockWithDevice);
   const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // restore zaten otomatik passkey dener; buradaki buton vazgeçme /
+  // tarayıcının jest şartı gibi durumlarda tekrar denemek için
+  const [pkAvailable, setPkAvailable] = useState(false);
+  useEffect(() => {
+    void hasDeviceUnlock().then(setPkAvailable);
+  }, []);
+
+  const passkeyRetry = async (): Promise<void> => {
+    setError(null);
+    setBusy(true);
+    try {
+      const ok = await unlockWithDevice();
+      if (!ok) setError('passkey açılamadı — şifrenle girebilirsin');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'bir hata oluştu');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
@@ -295,6 +351,14 @@ function ReauthStep({ nick }: { nick: string }) {
           <button type="submit" disabled={busy || !password} className="btn-lamp w-full">
             {busy ? 'anahtar türetiliyor…' : 'giriş yap'}
           </button>
+          {pkAvailable && (
+            <button type="button" onClick={() => void passkeyRetry()} disabled={busy} className="btn-ghost w-full">
+              <span className="flex items-center justify-center gap-1.5">
+                <Fingerprint size={14} />
+                passkey ile aç
+              </span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void logout()}

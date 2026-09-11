@@ -5,11 +5,20 @@ import { b64, unb64 } from '../crypto/bytes';
 import { deriveKeys, newKdfSaltHex } from '../crypto/argon2';
 import { deriveRecoveryKeys } from '../crypto/recovery';
 import { generateIdentity, openIdentityBlob, sealIdentityBlob } from '../crypto/identity';
+import {
+  browserWebAuthn,
+  declineDeviceOffer,
+  enrollDeviceUnlock as enrollDeviceUnlockRecord,
+  refreshDeviceUnlockAm,
+  removeDeviceUnlockRecord,
+  unlockWithPasskey,
+  type DeviceUnlock,
+} from '../crypto/devicekey';
 import { sodiumReady } from '../crypto/sodium';
 
 // shared tail of login / reauthenticate / restore: unwrap key_blob under the
 // fresh KEK. A wrong password throws here, before any authed state is set.
-function authedPatch(user: AuthedUser, kek: Uint8Array) {
+function authedPatch(user: AuthedUser, kek: Uint8Array, am: Uint8Array | null) {
   const publicKey = unb64(user.public_key);
   let privateKey: Uint8Array;
   try {
@@ -27,6 +36,25 @@ function authedPatch(user: AuthedUser, kek: Uint8Array) {
     publicKey,
     privateKey,
     kek,
+    authMaterial: am,
+  };
+}
+
+// passkey açılışının ortak kuyruğu — private key cihaz blob'undan gelir.
+// kek null: şifre değiştirme / kurtarma şifreden yeniden türettiği için
+// bu akış KEK'siz de çalışır; KEK'i RAM'de tutmama kararımız da bozulmaz.
+function deviceAuthedPatch(user: AuthedUser, u: DeviceUnlock) {
+  return {
+    status: 'authed' as const,
+    user: {
+      id: user.id,
+      nick: user.nick,
+      avatar_updated_at: user.avatar_updated_at ?? null,
+    },
+    publicKey: unb64(user.public_key),
+    privateKey: u.privateKey,
+    kek: null,
+    authMaterial: unb64(u.authMaterial),
   };
 }
 
@@ -37,6 +65,9 @@ interface AuthState {
   publicKey: Uint8Array | null;
   privateKey: Uint8Array | null;
   kek: Uint8Array | null;
+  // şifre türevi auth material — RAM'de, kek ile aynı ömür. Cihaz kilidi
+  // kurulurken blob'a sarılmak için lazım; asla plaintext persist edilmez.
+  authMaterial: Uint8Array | null;
   register: (
     nick: string,
     password: string,
@@ -44,6 +75,12 @@ interface AuthState {
     turnstileToken?: string,
   ) => Promise<void>;
   login: (nick: string, password: string, turnstileToken?: string) => Promise<void>;
+  /** login ekranındaki "passkey ile aç" butonu — başarısızsa false, hata gösterilmez */
+  unlockWithDevice: (turnstileToken?: string) => Promise<boolean>;
+  /** "bu cihazda hatırla" — passkey üret + kimliği cihaz KEK'i ile sar */
+  enrollDeviceUnlock: () => Promise<void>;
+  /** profil: cihaz kilidini kaldır — teklif de bir daha çıkmaz */
+  removeDeviceUnlock: () => Promise<void>;
   reauthenticate: (password: string) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   setupRecovery: (recoveryWords: string[]) => Promise<void>;
@@ -61,6 +98,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   publicKey: null,
   privateKey: null,
   kek: null,
+  authMaterial: null,
 
   register: async (nick, password, recoveryWords, turnstileToken) => {
     await sodiumReady;
@@ -100,6 +138,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       publicKey: identity.publicKey,
       privateKey: identity.privateKey,
       kek,
+      authMaterial,
     });
   },
 
@@ -117,7 +156,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
       },
     });
-    set(authedPatch(res.user, kek));
+    set(authedPatch(res.user, kek, authMaterial));
+  },
+
+  // passkey ile aç (login ekranı butonu). Cihaz blob'u çözülünce iki yol:
+  // cookie canlıysa (needs_password) /auth/me + kayıttaki private key; cookie
+  // ölüyse kayıttaki auth_material ile /auth/login. Başarısızlıkta false —
+  // kullanıcı şifresiyle her zaman girebilir, hata gösterilmez.
+  unlockWithDevice: async (turnstileToken) => {
+    await sodiumReady;
+    const u = await unlockWithPasskey();
+    if (!u) return false;
+    if (get().status === 'needs_password') {
+      const me = await api<{ user: AuthedUser }>('/auth/me');
+      set(deviceAuthedPatch(me.user, u));
+      return true;
+    }
+    const res = await api<{ token: string; user: AuthedUser }>('/auth/login', {
+      method: 'POST',
+      body: {
+        nick: u.nick,
+        auth_material: u.authMaterial,
+        ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
+      },
+    });
+    set(deviceAuthedPatch(res.user, u));
+    return true;
+  },
+
+  enrollDeviceUnlock: async () => {
+    await sodiumReady;
+    const { user, privateKey, authMaterial } = get();
+    if (!user || !privateKey || !authMaterial) throw new Error('giriş yapılmamış');
+    await enrollDeviceUnlockRecord(browserWebAuthn, user, authMaterial, privateKey);
+  },
+
+  removeDeviceUnlock: async () => {
+    await removeDeviceUnlockRecord();
+    // kullanıcı bilinçli kaldırdı — tekrar teklif etme
+    declineDeviceOffer();
   },
 
   // needs_password path: the cookie session is still valid, only this tab's
@@ -130,9 +207,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const params = await api<{ kdf_salt: string }>(
       `/auth/kdf-params?nick=${encodeURIComponent(nick)}`,
     );
-    const { kek } = await deriveKeys(password, params.kdf_salt);
+    const { kek, authMaterial } = await deriveKeys(password, params.kdf_salt);
     const me = await api<{ user: AuthedUser }>('/auth/me');
-    set(authedPatch(me.user, kek));
+    set(authedPatch(me.user, kek, authMaterial));
   },
 
   // Password change re-wraps the identity blob under the new KEK. Channel keys
@@ -157,7 +234,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         new_key_blob: sealIdentityBlob(privateKey, next.kek),
       },
     });
-    set({ kek: next.kek });
+    set({ kek: next.kek, authMaterial: next.authMaterial });
+    // cihaz kilidi kaydındaki eski auth_material ölür — varsa yeniden sar
+    await refreshDeviceUnlockAm(browserWebAuthn, b64(next.authMaterial));
   },
 
   // attach a recovery phrase to a logged-in account (old accounts)
@@ -216,12 +295,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       publicKey: unb64(res.user.public_key),
       privateKey,
       kek: next.kek,
+      authMaterial: next.authMaterial,
     });
+    // şifre sıfırlandı: cihaz kilidi kaydındaki eski auth_material ölür
+    await refreshDeviceUnlockAm(browserWebAuthn, b64(next.authMaterial));
   },
 
   logout: async () => {
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
-    set({ status: 'anonymous', user: null, publicKey: null, privateKey: null, kek: null });
+    // cihaz kilidi kaydı bilinçli olarak kalır — login ekranındaki passkey
+    // butonu ona bağlı; RAM'deki anahtarlar temizlenir
+    set({ status: 'anonymous', user: null, publicKey: null, privateKey: null, kek: null, authMaterial: null });
   },
 
   // The KEK never persists — a JS-readable copy would let a single XSS unwrap
@@ -236,10 +320,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ status: 'anonymous' });
       return;
     }
-    const { kek } = get();
+    const { kek, authMaterial } = get();
     if (kek) {
       await sodiumReady;
-      set(authedPatch(me.user, kek));
+      set(authedPatch(me.user, kek, authMaterial));
+      return;
+    }
+    // cihaz kilidi: kayıt VARSA passkey promptu çıkar — şifre SORULMAZ.
+    // Passkey silinmişse / kullanıcı vazgeçmişse / PRF yoksa null döner
+    // ve mevcut şifre akışı (needs_password) devralır, hata gösterilmez.
+    await sodiumReady;
+    const u = await unlockWithPasskey();
+    if (u) {
+      set(deviceAuthedPatch(me.user, u));
       return;
     }
     set({
