@@ -1,14 +1,17 @@
-import { useState } from 'react';
-import { Ban, Crown, Star, UserPlus, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Ban, Crown, Key, Star, UserPlus, X } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
+import { ensurePinned } from '../lib/keypins';
 import ConfirmDialog from './ConfirmDialog';
+import KeyFingerprintModal from './KeyFingerprintModal';
 import Modal from './Modal';
 import { toast } from './Toast';
 import Avatar from './Avatar';
 
 export default function MemberList() {
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
+  const publicKeys = useAppStore((s) => s.publicKeys);
   const addMember = useAppStore((s) => s.addMember);
   const removeMember = useAppStore((s) => s.removeMember);
   const banMember = useAppStore((s) => s.banMember);
@@ -20,6 +23,19 @@ export default function MemberList() {
   const [error, setError] = useState<string | null>(null);
   // hooks stay above the early return — community can disappear mid-session
   const [pendingAct, setPendingAct] = useState<{ fn: () => Promise<void>; text: string } | null>(null);
+  const [fingerprint, setFingerprint] = useState<{ id: string; nick: string; keyB64?: string } | null>(null);
+  const [keyFlagged, setKeyFlagged] = useState<Set<string>>(new Set());
+
+  // TOFU sweep over member keys; bootstrap feeds publicKeys for every member
+  useEffect(() => {
+    if (!community) return;
+    const flagged = new Set<string>();
+    for (const m of community.members) {
+      const pk = publicKeys[m.id];
+      if (pk && ensurePinned(m.id, pk) === 'changed') flagged.add(m.id);
+    }
+    setKeyFlagged(flagged);
+  }, [community, publicKeys]);
 
   if (!community) return <div className="w-56 shrink-0 border-l border-night-700 bg-night-900/50" />;
 
@@ -85,6 +101,22 @@ export default function MemberList() {
               </span>
               {m.role === 'owner' && <Crown size={12} className="shrink-0 text-lamp-500" aria-label="sahip" />}
               {m.role === 'admin' && <Star size={11} className="shrink-0 text-brass-400" aria-label="admin" />}
+              {m.id !== me?.id && (
+                <button
+                  onClick={() => setFingerprint({ id: m.id, nick: m.nick, keyB64: publicKeys[m.id] })}
+                  className="relative rounded p-0.5 text-paper-700 transition-colors hover:text-paper-100"
+                  title="parmak izi"
+                  aria-label={`${m.nick} parmak izi`}
+                >
+                  <Key size={11} />
+                  {keyFlagged.has(m.id) && (
+                    <span
+                      className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-stamp-500"
+                      aria-label="anahtar değişti"
+                    />
+                  )}
+                </button>
+              )}
               {canActOn && (
                 <div className="hidden items-center gap-0.5 group-hover:flex">
                   {isOwner && (
@@ -138,6 +170,22 @@ export default function MemberList() {
             </button>
           </div>
         </Modal>
+      )}
+      {fingerprint && (
+        <KeyFingerprintModal
+          peerId={fingerprint.id}
+          peerNick={fingerprint.nick}
+          peerPublicKeyB64={fingerprint.keyB64}
+          onTrust={() =>
+            setKeyFlagged((prev) => {
+              if (!prev.has(fingerprint.id)) return prev;
+              const next = new Set(prev);
+              next.delete(fingerprint.id);
+              return next;
+            })
+          }
+          onClose={() => setFingerprint(null)}
+        />
       )}
       {pendingAct && (
         <ConfirmDialog

@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { Check, Plus, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, Key, Plus, X } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import { formatTime } from '../lib/format';
+import { ensurePinned } from '../lib/keypins';
 import ConfirmDialog from './ConfirmDialog';
+import KeyFingerprintModal from './KeyFingerprintModal';
 import Modal from './Modal';
 import Avatar from './Avatar';
 
@@ -78,6 +80,7 @@ export default function DmHome() {
   const outgoing = useAppStore((s) => s.friendOutgoing);
   const dms = useAppStore((s) => s.dms);
   const gdms = useAppStore((s) => s.gdms);
+  const publicKeys = useAppStore((s) => s.publicKeys);
   const activeDmId = useAppStore((s) => s.activeDmId);
   const openDm = useAppStore((s) => s.openDm);
   const openDmChat = useAppStore((s) => s.openDmChat);
@@ -93,6 +96,61 @@ export default function DmHome() {
   const [busy, setBusy] = useState(false);
   const [newGroup, setNewGroup] = useState(false);
   const [unfriendNick, setUnfriendNick] = useState<string | null>(null);
+  // TOFU key pinning: peer keys fetched for plain DMs kept after unfriend
+  const [fetchedPeerKeys, setFetchedPeerKeys] = useState<Record<string, string>>({});
+  const [keyFlagged, setKeyFlagged] = useState<Record<string, boolean>>({});
+  const [fingerprint, setFingerprint] = useState<{ id: string; nick: string; keyB64?: string } | null>(null);
+
+  // a peer's key, wherever it is already available client-side
+  const knownKey = (id: string): string | undefined =>
+    friends.find((f) => f.id === id)?.public_key ?? publicKeys[id] ?? fetchedPeerKeys[id];
+
+  const openFingerprint = (id: string, nick: string): void =>
+    setFingerprint({ id, nick, keyB64: knownKey(id) });
+
+  // TOFU sweep: pin every key visible client-side; flag mismatches for the banner
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const known = new Map<string, string>();
+      for (const f of friends) known.set(f.id, f.public_key);
+      for (const g of gdms) for (const m of g.members) known.set(m.id, m.public_key);
+      // DM peers are normally friends; a DM kept after unfriend needs the pubkey endpoint
+      const fetched: Record<string, string> = {};
+      for (const d of dms) {
+        if (known.has(d.peer.id)) continue;
+        try {
+          const res = await fetch(`/api/users/${d.peer.id}/pubkey`, { credentials: 'same-origin' });
+          if (!res.ok) continue;
+          const { public_key } = (await res.json()) as { public_key: string };
+          fetched[d.peer.id] = public_key;
+          known.set(d.peer.id, public_key);
+        } catch {
+          // network failure — this peer just skips the check this round
+        }
+      }
+      const flagged: Record<string, boolean> = {};
+      for (const [id, key] of known) {
+        if (ensurePinned(id, key) === 'changed') flagged[id] = true;
+      }
+      if (!alive) return;
+      if (Object.keys(fetched).length > 0) setFetchedPeerKeys((prev) => ({ ...prev, ...fetched }));
+      setKeyFlagged(flagged);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [friends, gdms, dms]);
+
+  // flagged peers for the persistent warning banner, deduped by id
+  const flaggedPeers = (() => {
+    const byId = new Map<string, string>();
+    for (const f of friends) if (keyFlagged[f.id]) byId.set(f.id, f.nick);
+    for (const d of dms) if (keyFlagged[d.peer.id]) byId.set(d.peer.id, d.peer.nick);
+    for (const g of gdms)
+      for (const m of g.members) if (keyFlagged[m.id] && !byId.has(m.id)) byId.set(m.id, `${m.nick} (${g.name})`);
+    return [...byId].map(([id, nick]) => ({ id, nick }));
+  })();
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -122,6 +180,25 @@ export default function DmHome() {
             DM'ler yalnız arkadaşlarınla — uçtan uca mühürlü, sunucu göremez
           </p>
         </div>
+
+        {flaggedPeers.length > 0 && (
+          <div className="rounded border border-stamp-500/70 bg-night-950/70 p-3">
+            <p className="text-sm font-semibold text-stamp-400">
+              Şu kişilerin anahtarı değişti — hesap ele geçirme olabilir:
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {flaggedPeers.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => openFingerprint(p.id, p.nick)}
+                  className="btn-ghost !py-0.5 !text-xs hover:!border-stamp-500/70 hover:!text-stamp-400"
+                >
+                  {p.nick} — doğrula
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <section>
           <h2 className="plate mb-2">ARKADAŞ EKLE</h2>
@@ -220,11 +297,20 @@ export default function DmHome() {
           })}
           {dms.map((d) => {
             const unread = unreadCount(d.id, dmMessages[d.id]);
+            // div instead of button — the row contains the key-icon button (no nested buttons)
             return (
-              <button
+              <div
                 key={d.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => openDmChat(d.id)}
-                className={`flex w-full items-center gap-2 rounded px-1 py-1.5 text-left transition-colors hover:bg-night-800 ${
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openDmChat(d.id);
+                  }
+                }}
+                className={`flex w-full cursor-pointer items-center gap-2 rounded px-1 py-1.5 text-left transition-colors hover:bg-night-800 ${
                   d.id === activeDmId ? 'bg-night-800' : ''
                 }`}
               >
@@ -240,7 +326,24 @@ export default function DmHome() {
                     {unread > 99 ? '99+' : unread}
                   </span>
                 )}
-              </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openFingerprint(d.peer.id, d.peer.nick);
+                  }}
+                  className="relative rounded p-1 text-paper-700 transition-colors hover:text-paper-100"
+                  title="parmak izi"
+                  aria-label={`${d.peer.nick} parmak izi`}
+                >
+                  <Key size={13} />
+                  {keyFlagged[d.peer.id] && (
+                    <span
+                      className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-stamp-500"
+                      aria-label="anahtar değişti"
+                    />
+                  )}
+                </button>
+              </div>
             );
           })}
         </section>
@@ -252,6 +355,20 @@ export default function DmHome() {
             <div key={f.id} className="group flex items-center gap-2 rounded px-1 py-1.5 hover:bg-night-800">
               {avatar(f.nick, f.id)}
               <span className="flex-1 truncate text-sm text-paper-300">{f.nick}</span>
+              <button
+                onClick={() => openFingerprint(f.id, f.nick)}
+                className="relative rounded p-1 text-paper-700 transition-colors hover:text-paper-100"
+                title="parmak izi"
+                aria-label={`${f.nick} parmak izi`}
+              >
+                <Key size={13} />
+                {keyFlagged[f.id] && (
+                  <span
+                    className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-stamp-500"
+                    aria-label="anahtar değişti"
+                  />
+                )}
+              </button>
               <button
                 onClick={() => void openDm(f.id)}
                 className="btn-ghost !py-0.5 !text-xs opacity-0 transition-opacity group-hover:opacity-100"
@@ -272,6 +389,22 @@ export default function DmHome() {
       </div>
 
       {newGroup && <NewGroupModal onClose={() => setNewGroup(false)} />}
+      {fingerprint && (
+        <KeyFingerprintModal
+          peerId={fingerprint.id}
+          peerNick={fingerprint.nick}
+          peerPublicKeyB64={fingerprint.keyB64}
+          onTrust={() =>
+            setKeyFlagged((prev) => {
+              if (!(fingerprint.id in prev)) return prev;
+              const next = { ...prev };
+              delete next[fingerprint.id];
+              return next;
+            })
+          }
+          onClose={() => setFingerprint(null)}
+        />
+      )}
       {unfriendNick && (
         <ConfirmDialog
           title="Arkadaşlıktan çıkar"
