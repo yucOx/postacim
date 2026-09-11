@@ -9,6 +9,7 @@ import MemberList from './MemberList';
 import ChatView from './ChatView';
 import VoiceRoom from './VoiceRoom';
 import DmHome from './DmHome';
+import DmSidebar from './DmSidebar';
 import DmChat from './DmChat';
 import IncomingCall from './IncomingCall';
 import CallView from './CallView';
@@ -177,6 +178,7 @@ export default function Shell() {
         <div className="hidden lg:flex">
           <ServerRail />
           {view === 'community' && <ChannelSidebar />}
+          {view === 'dm' && <DmSidebar />}
         </div>
 
         {view === 'dm' ? (
@@ -214,6 +216,7 @@ export default function Shell() {
           <div className="absolute inset-y-0 left-0 flex animate-seal-in border-r border-brass-700/70 bg-night-900 shadow-[0_0_60px_rgba(0,0,0,0.7)]">
             <ServerRail onNavigate={closeNav} />
             {view === 'community' && <ChannelSidebar onNavigate={closeNav} />}
+            {view === 'dm' && <DmSidebar onNavigate={closeNav} />}
           </div>
         </div>
       )}
