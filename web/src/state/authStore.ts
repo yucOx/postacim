@@ -37,8 +37,13 @@ interface AuthState {
   publicKey: Uint8Array | null;
   privateKey: Uint8Array | null;
   kek: Uint8Array | null;
-  register: (nick: string, password: string, recoveryWords?: string[]) => Promise<void>;
-  login: (nick: string, password: string) => Promise<void>;
+  register: (
+    nick: string,
+    password: string,
+    recoveryWords?: string[],
+    turnstileToken?: string,
+  ) => Promise<void>;
+  login: (nick: string, password: string, turnstileToken?: string) => Promise<void>;
   reauthenticate: (password: string) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   setupRecovery: (recoveryWords: string[]) => Promise<void>;
@@ -57,7 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   privateKey: null,
   kek: null,
 
-  register: async (nick, password, recoveryWords) => {
+  register: async (nick, password, recoveryWords, turnstileToken) => {
     await sodiumReady;
     const kdfSalt = newKdfSaltHex();
     const { authMaterial, kek } = await deriveKeys(password, kdfSalt);
@@ -85,6 +90,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           public_key: b64(identity.publicKey),
           key_blob: sealIdentityBlob(identity.privateKey, kek),
           ...(recovery ? { recovery } : {}),
+          ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
         },
       },
     );
@@ -97,7 +103,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  login: async (nick, password) => {
+  login: async (nick, password, turnstileToken) => {
     await sodiumReady;
     const params = await api<{ kdf_salt: string }>(
       `/auth/kdf-params?nick=${encodeURIComponent(nick)}`,
@@ -105,7 +111,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { authMaterial, kek } = await deriveKeys(password, params.kdf_salt);
     const res = await api<{ token: string; user: AuthedUser }>('/auth/login', {
       method: 'POST',
-      body: { nick, auth_material: b64(authMaterial) },
+      body: {
+        nick,
+        auth_material: b64(authMaterial),
+        ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
+      },
     });
     set(authedPatch(res.user, kek));
   },

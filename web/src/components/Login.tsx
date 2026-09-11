@@ -4,6 +4,7 @@ import { EyeOff, KeyRound, ServerOff, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '../state/authStore';
 import { generateMnemonic, quizPositions, validateMnemonic } from '../crypto/bip39';
 import PasswordInput, { passwordScore } from './PasswordInput';
+import Turnstile, { turnstileEnabled } from './Turnstile';
 import { PigeonMark, Postmark, SealMark } from './Brand';
 
 type Step = 'login' | 'register' | 'phrase' | 'forgot';
@@ -17,6 +18,11 @@ export default function Login() {
   const [ackReady, setAckReady] = useState(false); // 3s anti-reflex timer
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Turnstile tokens are single-use: a failed attempt burns the token, so the
+  // widget is remounted (key=attempt) to mint a fresh one for the next try.
+  const [tsToken, setTsToken] = useState<string | null>(null);
+  const [tsAttempt, setTsAttempt] = useState(0);
+  const tsNeeded = turnstileEnabled() && !tsToken;
   const status = useAuthStore((s) => s.status);
   const sessionNick = useAuthStore((s) => s.user?.nick ?? '');
   const login = useAuthStore((s) => s.login);
@@ -46,10 +52,12 @@ export default function Login() {
     setError(null);
     setBusy(true);
     try {
-      if (step === 'login') await login(nick.trim(), password);
+      if (step === 'login') await login(nick.trim(), password, tsToken ?? undefined);
       else setStep('phrase'); // phrase screen finishes registration
     } catch (err) {
       setError(err instanceof Error ? err.message : 'bir hata oluştu');
+      setTsToken(null); // token consumed server-side — force a fresh challenge
+      setTsAttempt((a) => a + 1);
     } finally {
       setBusy(false);
     }
@@ -58,7 +66,13 @@ export default function Login() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-10 bg-night-950 px-4 py-10 text-paper-100 lg:flex-row lg:gap-20">
       {step === 'phrase' ? (
-        <PhraseStep nick={nick.trim()} password={password} onBack={() => setStep('register')} />
+        <PhraseStep
+          nick={nick.trim()}
+          password={password}
+          tsToken={tsToken}
+          clearTsToken={() => setTsToken(null)}
+          onBack={() => setStep('register')}
+        />
       ) : step === 'forgot' ? (
         <ForgotStep onBack={() => setStep('login')} />
       ) : (
@@ -165,9 +179,11 @@ export default function Login() {
                 <p className="rounded-md border border-stamp-500/60 bg-stamp-100 px-3 py-2 text-sm text-stamp-400">{error}</p>
               )}
 
+              {turnstileEnabled() && <Turnstile key={tsAttempt} onToken={setTsToken} />}
+
               <button
                 type="submit"
-                disabled={busy || (step === 'register' && !canRegister)}
+                disabled={busy || tsNeeded || (step === 'register' && !canRegister)}
                 className="btn-lamp w-full"
               >
                 {busy
@@ -280,7 +296,19 @@ function ReauthStep({ nick }: { nick: string }) {
 
 // --- registration step 2: the recovery phrase ritual ---
 
-function PhraseStep({ nick, password, onBack }: { nick: string; password: string; onBack: () => void }) {
+function PhraseStep({
+  nick,
+  password,
+  tsToken,
+  clearTsToken,
+  onBack,
+}: {
+  nick: string;
+  password: string;
+  tsToken: string | null;
+  clearTsToken: () => void;
+  onBack: () => void;
+}) {
   const register = useAuthStore((s) => s.register);
   const [phase, setPhase] = useState<'show' | 'quiz' | 'saved'>('show');
   // generated once, lives only in memory — the phrase never regenerates mid-ritual
@@ -321,9 +349,11 @@ function PhraseStep({ nick, password, onBack }: { nick: string; password: string
     try {
       const ok = await validateMnemonic(words);
       if (!ok) throw new Error('ifade doğrulanamadı — tekrar dene');
-      await register(nick, password, words);
+      await register(nick, password, words, tsToken ?? undefined);
     } catch (err) {
+      // a burned Turnstile token (or any failure) → main form remints one
       setError(err instanceof Error ? err.message : 'kayıt başarısız');
+      clearTsToken();
     } finally {
       setBusy(false);
     }
