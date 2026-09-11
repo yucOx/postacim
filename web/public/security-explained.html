@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>postacim — Güvenlik Nasıl Çalışır?</title>
+<style>
+  :root{
+    --bg:#0a0c10; --bg2:#10131a; --card:#141822; --line:#2a2f3d;
+    --tx:#e8e4d8; --tx2:#98a0b0; --green:#4ade80; --green-bg:#12251a;
+    --red:#f87171; --red-bg:#2a1414; --brass:#b08d4f; --lamp:#7dd3a0;
+    --yellow:#facc15; --yellow-bg:#2a260f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.65 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:48px 24px 90px}
+  h1{font-size:30px;letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px}
+  h1 span{color:var(--brass)}
+  .sub{color:var(--tx2);font-size:15px;margin-bottom:8px}
+  h2{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);border-bottom:1px solid var(--line);padding-bottom:8px;margin:52px 0 20px}
+  h2 small{display:block;text-transform:none;letter-spacing:0;font-size:14px;color:var(--tx2);font-weight:400;margin-top:4px}
+  p{margin:0 0 14px}
+  .lead{font-size:17px;color:var(--tx)}
+  .lead-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:24px 0}
+  .lead-3 .card{margin:0}
+  .card{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:16px 18px;margin-bottom:12px;font-size:15px}
+  .card b{color:var(--tx)}
+  .card .why{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);color:var(--tx2);font-size:13.5px}
+  .card .tech{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);color:var(--tx2);font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .key{border-color:#1f4a2e;background:var(--green-bg)}
+  .warn{border-color:#4a3d1f;background:var(--yellow-bg)}
+  .srv{border-color:#4a2020;background:var(--red-bg)}
+  .anl{background:var(--bg2);border-left:3px solid var(--brass);border-radius:0 10px 10px 0;padding:12px 16px;margin:18px 0;font-size:15px;color:var(--tx2)}
+  .anl b{color:var(--brass)}
+  /* story steps */
+  .story{counter-reset:st;margin:20px 0}
+  .st{display:grid;grid-template-columns:44px 1fr;gap:14px;margin-bottom:16px}
+  .st:before{counter-increment:st;content:counter(st);width:34px;height:34px;border-radius:50%;background:var(--bg2);border:1px solid var(--brass);color:var(--brass);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;margin-top:2px}
+  .st .t b{color:var(--tx);font-size:15.5px}
+  .st p{margin:2px 0 0;color:var(--tx2);font-size:14px}
+  .st .t{margin-top:6px;color:var(--lamp);font-size:12.5px;font-family:ui-monospace,monospace}
+  /* duo */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .duo .col{border-radius:12px;padding:18px;font-size:14.5px}
+  .duo .see{background:var(--red-bg);border:1px solid #4a2020}
+  .duo .blind{background:var(--green-bg);border:1px solid #1f4a2e}
+  .duo h3{margin:0 0 12px;font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+  .duo .see h3{color:var(--red)} .duo .blind h3{color:var(--green)}
+  .duo ul{margin:0;padding-left:20px} .duo li{margin-bottom:7px}
+  code{background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:13px;color:var(--yellow);font-family:ui-monospace,monospace}
+  footer{margin-top:56px;border-top:1px solid var(--line);padding-top:16px;color:var(--tx2);font-size:13px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  a{color:var(--lamp);text-decoration:none} a:hover{text-decoration:underline}
+  @media print{ body{background:#fff;color:#111} .card,.lane,.duo .col,.step{background:#fff} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>POSTACIM <span>·</span> GÜVENLİK NASIL ÇALIŞIR?</h1>
+  <p class="sub">koda dayalı, jargonsuz açıklama · açık kaynak okuyucuları için · 11 Eylül 2026</p>
+
+  <p class="lead">postacim, mesajlarını <b>senin cihazında</b> mühürler ve sunucuya yalnızca <b>kapağı açılamayan zarf</b> verir. Sunucu mektubu alır, taşır, teslim eder — ama <b>içinde ne yazdığını hiçbir zaman göremez</b>. Bu sayfa, bu mühürlerin tam olarak nasıl yapıldığını, kimin ne görebildiğini ve sınırların nerede olduğunu anlatır.</p>
+
+  <div class="lead-3">
+    <div class="card key"><b>30 saniyelik özet</b><small>Şifren tarayıcından çıkmaz. Mesajın cihazında şifrelenir. Sunucu yalnız şifreli zarf taşır ve saklar — içerik okuyamaz. Okundu bilgisi bile cihazında kalır.</small></div>
+    <div class="card key"><b>Kim neyi bilir</b><small>Kimse: e-postan, telefonun, rehberin, analitik verin. Sunucu: sadece kullanıcı adın ve "kim kiminle konuşuyor" (metadata).</small></div>
+    <div class="card warn"><b>En önemli bilgi</b><small>Şifreni unutursan hesabını yalnız <b>12 kelimelik kurtarma ifaden</b> geri getirir. İkisini de kaybedersen hiçbir şey — ne operatör ne devlet — geri getiremez. Bu bir hata değil, tasarım.</small></div>
+  </div>
+
+  <h2>Analoji: kilitli kutu, kurye, ve kördüğüm <small>zihinsel modelin tamamı bu</small></h2>
+  <div class="anl">
+    <b>Posta güvercini analogisi:</b> Herkesin kendine özel bir <b>mühür makinesi</b> (şifreleme) var. Mesajını yazar, makineye koyarsın, mühürlü zarf çıkar. Zarf <b>kuryeye</b> (sunucu) verilir — kurye zarfı alır, adres satırına bakar, alıcıya taşır. Kurye mührü kıramaz; kıramazsa okuyamaz. Alıcının makinesi aynı mührü açar çünkü iki taraf da <b>aynı gizli kalıbı</b> (kanal anahtarını) paylaşır. Kuryenin görebildiği tek şey: kimi kimden, ne zaman, zarfın <b>kaç sayfa</b> olduğunu. Hatta biz sayfaları standart boyutlarda yuvarlarız ki kurye "bunun içinde uzun mektup var" bile diyemesin.
+  </div>
+
+  <h2>Hikâye 1 · Kayıt olurken ne oluyor <small>şifren neden hiç gitmez</small></h2>
+  <div class="story">
+    <div class="st"><div><b>Kullanıcı adını ve şifreni girersin.</b><p>Başka hiçbir şey istenmez — e-posta yok, telefon yok, rehber erişimi yok. Hesabın bu iki bilgiyle kurulur.</p></div></div>
+    <div><div class="st"><div><b>Şifren cihazında bir "çelik kapı" haline gelir.</b><p>Şifre, cihazında Argon2 adı verilen yavaş bir çekiçle 64 MB bellek harcayarak yoğrulur ve ikiye bölünür: bir yarı giriş için sunucuya gider, diğer yarı (KEK) cihazında kalır.</p><p class="t">argon2id · 64 MiB · 3 iterasyon → authMaterial (sunucuya) + KEK (sadece bellek)</p></div></div></div>
+    <div><div class="st"><div><b>Kimlik anahtarların doğar.</b><p>Bir çift şifreleme anahtarı cihazında üretilir: genel anahtar (kartvizit gibi, herkes görebilir) ve özel anahtar (imzan, kimse görememeli).</p></div></div></div>
+    <div><div class="st"><div><b>Özel anahtarın mühürlenir.</b><p>KEK ile mühürlenir ve bu mühürlü paket sunucuda saklanır. Sunucu paketi saklar ama açamaz — çünkü açan kalıp senin şifrenden gelir, sunucuda o yoktur.</p></div></div></div>
+    <div><div class="st"><div><b>Sunucuya ne gider?</b><p>Sadece: kullanıcı adın, giriş türevinin hash'i (Argon2id — düz metin değil), genel anahtarın, mühürlü paket. Yani şifreni bilmese bile kimse sunucudan şifreni geri çıkaramaz.</p></div></div></div>
+  </div>
+  <div class="card warn"><b>Neden "şifremi unuttum" e-postası yok?</b><small>Çünkü kurtarmayı yapan e-posta değil, <b>12 kelimelik kurtarma ifaden</b> (kayıt sırasında verildi, saniyeler içinde kaydetmen istendi). İfade şifreni yeniden kurar. Hem şifreyi hem ifadeyi kaybettiysen hesap geri gelmez — çünkü açacak anahtar dünyada hiçbir yerde yok.</small></div>
+
+  <h2>Hikâye 2 · Mesaj yazarken ne oluyor? <small>en kritik kısım</small></h2>
+  <div class="story">
+    <div><div class="st"><div><b>Sohbetin anahtarı cihazınla üretilir.</b><p>Kanal, DM ya da grup açtığında o sohbetin gizli anahtarı senin cihazında doğar. Katılımcılara <b>mühürlü zarfla</b> dağıtılır: herkesin genel anahtarına özel sarılır — yalnız o kişi kendi özel anahtarıyla açabilir. Sunucu anahtarın yalnız mühürlü kopyasını saklar.</p></div></div></div>
+    <div><div class="st"><div><b>Mesajın mühürlenir.</b><p>İçerik, sohbet anahtarının türeviyle şifrelenir. Şifrelemeye mesajın "kimliğini bağlayan bir etiket" (AAD) girer: hangi sohbet, hangi anahtar sürümü, hangi zincir index'i — böylece bir mesaj başka sohbete taşınıp oynatılamaz.</p><p class="t">XChaCha20-Poly1305 · AAD: scope:kanal:epoch:i:clientId</p></div></div></div>
+    <div><div class="st"><div><b>Boyutun "fazla gürültü yapmaması" için yuvarlanır.</b><p>Şifreli mesajın boyutu 4 KB'lik adımlara doldurulur. Sunucu "bu mesaj kısa mı uzun mu" diye bakarsa yalnız bucket'ı görür — gerçek uzunluğu değil.</p></div></div></div>
+    <div><div class="st"><div><b>Sunucu taşır ve saklar.</b><p>Sunucu şifreli zarfı alır, sohbet üyelerine dağıtır ve geçmiş için saklar. Sakladığı şey okunamayan zarftır — sunucu korsan tarafından sökülsa bile içerik içindekiler gibidir.</p></div></div></div>
+    <div><div class="st"><div><b>Alıcı aynı anahtarın türeviyle açar.</b><p>Aynı sohbet anahtarından aynı türev zinciri cihazında yeniden hesaplanır ve mesaj açılır. Zincir her mesajda bir adım ilerler (hash-ratchet): anahtarın bir kopyası sızsa bile <b>geçmiş mesajların anahtarı artık o kopyadan çıkamaz</b> — geriye doğru kilitlenir.</p></div></div></div>
+  </div>
+
+  <h2>Hikâye 3 · Şifremi unuttum / başka cihaza geçtim</h2>
+  <div class="story">
+    <div><div class="st"><div><b>Oturumun cihazında kalır, anahtarın kalıcı değil.</b><p>Tarayıcı sekmeyi kapatsa bile sunucudaki oturumun geçerli kalabilir — ama şifreleme anahtarın bellekte yaşadığı için F5'te sadece <b>şifreni tekrar girmen</b> istenir (ya da "bu cihazda hatırla"yı açtıysan bir passkey/dokunuşla geçersin). Bu, çıkış yapmak değildir; anahtarın yeniden türetilmesidir.</p></div></div></div>
+    <div><div class="st"><div><b>Kurtarma ifadesi tek geri dönüş yoludur.</b><p>12 kelime, özel anahtarının ikinci bir mühürlü kopyasını açar. İfadeyi hiçbir sunucu görmez — yalnızca mühürlü paketi saklar.</p></div></div></div>
+  </div>
+
+  <h2>Hikâye 4 · Ses ve görüntü araması</h2>
+  <div class="card">
+    Görüntülü aramada ses ve kamera verisi önce <b>cihazında şifrelenir</b> (SFrame), sonra kendi sunucumuzda çalışan medya aktarıcısına (LiveKit) gelir. Medya sunucusu paketleri <b>körlemesine yönlendirir</b> — telefon görüntüsünü "izleyemez". Kim katıldı, ne kadar kaldı gibi <b>katılım bilgisi</b> görülür (metadata). Bunun anlamı: aramayı sunucudan kaydetme diye bir şey mümkün değildir; sadece katılımcılar ekran kaydı alabilir.
+  </div>
+
+  <h2>Sunucu neyi görür, neyi göremez? <small>en çok sorulan soru</small></h2>
+  <div class="duo">
+    <div class="col see">
+      <h3>👁️ Görebilir (metadata)</h3>
+      <ul>
+        <li>kullanıcı adın, hesap açılış tarihin, son aktiviten</li>
+        <li>kim kiminle konuşuyor (arkadaş, DM, üyelik) — sosyal grafın</li>
+        <li>mesajların ne zaman yazıldığı ve kaç KB'lik bucket'ta olduğu</li>
+        <li>kanal/grup adları, avatar (bilerek şifresiz — herkese açık profil parçası)</li>
+        <li>ne zaman çevrimiçi olduğun, kiminle aramada olduğun</li>
+      </ul>
+    </div>
+    <div class="col blind">
+      <h3>🔒 Göremez (kripto)</h3>
+      <ul>
+        <li>mesajlarının içeriği — hiçbir koşulda</li>
+        <li>şifren, özel anahtarın, kurtarma ifaden</li>
+        <li>sohbet anahtarlarının açık halleri</li>
+        <li>aramaların sesi/görüntüsü</li>
+        <li>hangi mesajı okuduğun (okundu bilgisi cihazında)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>"Neden?" — en çok sorulan sorular</h2>
+  <div class="card"><b>❓ Sunucu şifreli de saklıyor, madem güvenli neden saklıyor?</b><small>Geçmişini kaybetmeyesin diye: kapattığın cihazdan döndüğünde konuşmaları görebilmen için şifreli zarflar saklanıyor. Sunucu korsana girdiğinde ele geçiren, mühürlü zarfların yığını alır — açamaz.</small></div>
+  <div class="card"><b>❓ Peki sunucu bana virüslü uygulama gönderirse?</b><small>Bu, <b>her web tabanlı şifreli uygulamanın</b> (Signal web hariç) ortak sınırıdır: istemci kodunu sunucu dağıtır. Bu riski azaltmak için <b>güvenlik numarası</b> var: profilden sohbet ettiğin kişinin parmak izini görürsün, karşı tarafinkini sesli/yüz yüze karşılaştırırsın; sunucu anahtar çalıp değiştirirse yanında <b>kırmızı uyarı</b> belirir.</small></div>
+  <div class="card"><b>❓ Reklam, analitik, takipçi var mı?</b><small>Yok. Hiçbir üçüncü tarafa veri gitmez (operatör Cloudflare captcha'yı açmadıysa — açtığıysa doğrulama isteği Cloudflare'e gider, sayfada açıkça yazar). Tek çerez: giriş oturumu.</small></div>
+  <div class="card"><b>❓ Mesajımı sildim, gerçekten gitti mi?</b><small>"Herkes için sil" dediğinde sunucudaki şifreli kopya yok edilir — geri alınması mümkün değil. Ama dürüst not: karşı taraf daha önce <b>okuduysa</b> ya da ekran görüntüsü aldıysa, bunu hiçbir uygulama geri alamaz.</small></div>
+  <div class="card"><b>❓ Hesabımı silersem?</b><small>Tek tıkla: yazdığın tüm mesajlar, DM'ler, kurduğun gruplar ve topluluklar, anahtarların, avatarın anında kalıcı silinir. Kurtarma ifaden bile silinmiş hesabı geri getiremez.</small></div>
+  <div class="card"><b>❓ Devlet/hukuk mesajlarımı verir mi?</b><small>Verilecek içerik yok: elimizde kullanıcı adı, hash'lenmiş giriş malzemesi, zaman damgaları ve loglar olur; mesaj içeriğini çözmeye imkân veren bir anahtar hiçbir yerde saklanmadı. Ayrıntı: <a href="/PRIVACY.md">gizlilik politikası</a>.</small></div>
+
+  <footer>
+    <span>postacim · <a href="https://yuxor.dev">yuxor.dev</a> sponsorluğunda · <a href="https://yubra.tech">yubra.tech</a> ile geliştirildi</span>
+    <span><a href="/PRIVACY.md">gizlilik politikası</a> · <a href="/ARCHITECTURE.md">teknik mimari</a> · <a href="/security-diagram.html">teknik şema</a></span>
+  </footer>
+</div>
+</body>
+</html>
