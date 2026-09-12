@@ -159,6 +159,15 @@ export default function ChatView({ channelId, channelName }: { channelId: string
                     onToggleReaction={(emoji, mine) =>
                       void toggleReaction(channelId, m.id, emoji, mine).catch(() => {})
                     }
+                    canDeleteAll={amSender(m) || isStaff}
+                    onReply={() => setReply({ id: m.id, nick: m.nick, body: m.body })}
+                    onReact={(emoji) =>
+                      void toggleReaction(channelId, m.id, emoji, !!m.reactions.find((r) => r.emoji === emoji)?.me).catch(
+                        () => {},
+                      )
+                    }
+                    onDeleteForMe={() => hideForMe(channelId, m.id)}
+                    onDeleteAll={() => void deleteForEveryone(channelId, m.id).catch(() => {})}
                   />
                   <HoverActions
                     canDeleteAll={amSender(m) || isStaff}

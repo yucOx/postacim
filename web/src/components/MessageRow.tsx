@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DisplayMessage } from '../state/chatStore';
 import { useChatStore } from '../state/chatStore';
 import { formatTime, nickColor, sameDay } from '../lib/format';
 import { amSender } from '../state/chatStore';
 import { useAuthStore } from '../state/authStore';
-import { CornerDownRight } from 'lucide-react';
+import { QUICK_EMOJIS } from '../lib/reactions';
+import { CornerDownRight, Copy, EyeOff, Reply, Smile, Trash2 } from 'lucide-react';
 import Avatar from './Avatar';
 import UserCard from './UserCard';
 import { Postmark } from './Brand';
@@ -24,19 +25,22 @@ function renderBodyWithMentions(body: string, nick: string): React.ReactNode[] {
   );
 }
 
-export default function MessageRow({
-  m,
-  prev,
-  replyBody,
-  onToggleReaction,
-}: {
+interface Props {
   m: DisplayMessage;
   prev: DisplayMessage | null;
   /** snippet of the replied-to message (same channel, same list) */
   replyBody?: string | null;
   /** undefined in contexts without reaction rights (none today) */
   onToggleReaction?: (emoji: string, mine: boolean) => void;
-}) {
+  /** right-click menu actions — menu renders only when these are provided */
+  onReply?: () => void;
+  onReact?: (emoji: string) => void;
+  canDeleteAll?: boolean;
+  onDeleteForMe?: () => void;
+  onDeleteAll?: () => void;
+}
+
+export default function MessageRow({ m, prev, replyBody, onToggleReaction, onReply, onReact, canDeleteAll, onDeleteForMe, onDeleteAll }: Props) {
   const sealAt = useChatStore((s) => s.sealAt[m.id]);
   const grouped =
     prev !== null && prev.senderId === m.senderId && m.sentAt - prev.sentAt < 5 * 60_000 && sameDay(prev.sentAt, m.sentAt);
@@ -47,9 +51,58 @@ export default function MessageRow({
   const myNick = useAuthStore((s) => s.user?.nick);
   const mentioned = !!myNick && m.body !== null && m.body.toLowerCase().includes(myNick.toLowerCase());
   const [userCard, setUserCard] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // sağ tık menüsü: dış tık, ESC, kaydırma ile kapanır — kullanım sırasında
+  // imleç satırdan çıksa bile açık kalır
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const onDown = (e: PointerEvent): void => {
+      if (!menuRef.current?.contains(e.target as Node)) setCtxMenu(null);
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setCtxMenu(null);
+    };
+    const onScroll = (): void => setCtxMenu(null);
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('scroll', onScroll, true);
+    };
+  }, [ctxMenu]);
+
+  // sağ tık: tarayıcı menüsü yerine mesaj menüsü — UserCard/modal içindeyse
+  // karışmayalım (kendi native menüsü kalsın)
+  const openMenu = (e: React.MouseEvent): void => {
+    if ((e.target as HTMLElement).closest('[role="dialog"]')) return;
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const item = (label: string, icon: React.ReactNode, danger: boolean, fn: () => void): React.ReactNode => (
+    <button
+      type="button"
+      onClick={() => {
+        setCtxMenu(null);
+        fn();
+      }}
+      className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
+        danger ? 'text-stamp-400 hover:bg-stamp-500 hover:text-white' : 'text-paper-300 hover:bg-night-700 hover:text-paper-50'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+
+  const readable = !m.deleted && m.body !== null;
 
   return (
-    <div className={`group flex gap-3 px-4 ${grouped ? 'py-0.5' : 'pt-3 pb-0.5'}`}>
+    <div className={`group flex gap-3 px-4 ${grouped ? 'py-0.5' : 'pt-3 pb-0.5'}`} onContextMenu={openMenu}>
       <div className="w-9 shrink-0">
         {!grouped && (
           <button
@@ -125,6 +178,49 @@ export default function MessageRow({
           </div>
         )}
       </div>
+      {ctxMenu && (
+        <div
+          ref={menuRef}
+          className="animate-seal-in fixed z-50 w-52 rounded-md border border-night-700 bg-night-900 p-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)]"
+          style={{
+            left: Math.min(ctxMenu.x, (window.innerWidth ?? 0) - 224),
+            top: Math.min(ctxMenu.y, (window.innerHeight ?? 0) - 264),
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {onReply && item('Yanıtla', <Reply size={13} />, false, onReply)}
+          {onReact && readable && (
+            <div className="flex gap-0.5 rounded px-2 py-1">
+              {QUICK_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => {
+                    setCtxMenu(null);
+                    onReact(emoji);
+                  }}
+                  className="rounded p-0.5 text-sm transition-transform hover:scale-125"
+                  aria-label={`tepki: ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+          {readable &&
+            item('Mesajı kopyala', <Copy size={13} />, false, () => {
+              try {
+                void navigator.clipboard.writeText(m.body!);
+              } catch {
+                // http (localhost dışı) gibi güvenli olmayan bağlamda yok
+              }
+            })}
+          <div className="my-1 h-px bg-night-700" aria-hidden />
+          {onDeleteForMe && item('Benim için sil', <EyeOff size={13} />, true, onDeleteForMe)}
+          {canDeleteAll && onDeleteAll && item('Herkes için sil', <Trash2 size={13} />, true, onDeleteAll)}
+        </div>
+      )}
       {userCard && <UserCard userId={m.senderId} nick={m.nick} onClose={() => setUserCard(false)} />}
     </div>
   );

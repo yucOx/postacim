@@ -245,6 +245,15 @@ export default function DmChat({ dmId }: { dmId: string }) {
                     prev={prev}
                     replyBody={m.replyTo ? (visible.find((x) => x.id === m.replyTo!.id)?.body ?? null) : undefined}
                     onToggleReaction={(emoji, mine) => void toggleReaction(dmId, m.id, emoji, mine).catch(() => {})}
+                    canDeleteAll={amSender(m) || (!dm && gdm?.creator_id === useAuthStore.getState().user?.id)}
+                    onReply={() => setReply({ id: m.id, nick: m.nick, body: m.body })}
+                    onReact={(emoji) =>
+                      void toggleReaction(dmId, m.id, emoji, !!m.reactions.find((r) => r.emoji === emoji)?.me).catch(
+                        () => {},
+                      )
+                    }
+                    onDeleteForMe={() => hideForMe(dmId, m.id)}
+                    onDeleteAll={() => void deleteForEveryone(dmId, m.id).catch(() => {})}
                   />
                   <HoverActions
                     // delete-for-everyone is the sender's call (dm + gdm same
