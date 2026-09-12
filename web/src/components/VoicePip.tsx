@@ -63,7 +63,7 @@ function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | nul
     <div ref={wrapRef} className="relative h-32 overflow-hidden bg-night-850">
       <ParticipantTile
         trackRef={pick}
-        className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+        className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover [&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden"
       />
       <span className="pointer-events-none absolute bottom-1 left-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50">
         {pick.participant.isLocal ? 'sen' : nickFor(pick.participant.identity)}
