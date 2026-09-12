@@ -7,6 +7,8 @@ import path from 'node:path';
 
 export interface TestServer {
   baseUrl: string;
+  /** throwaway DB dir — tests may open posta.db directly for row-level checks */
+  dataDir: string;
   stop: () => Promise<void>;
 }
 
@@ -53,6 +55,7 @@ export async function startServer(
   }
   return {
     baseUrl,
+    dataDir,
     stop: () =>
       new Promise((resolve) => {
         proc.once('exit', () => {

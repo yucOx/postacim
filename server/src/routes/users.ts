@@ -66,6 +66,19 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         // messages, bans, invites and all wrapped/join keys cascade)
         db.prepare('DELETE FROM communities WHERE owner_id = ?').run(uid);
 
+        // tepkiler message_id FK'suz (scope'lu id'ler tablolar arası çakışır) —
+        // yukarıda hard-silinen mesajlara takılı kalan yetim satırları süpür.
+        // Kullanıcının kendi tepkileri user_id FK cascade'i ile zaten gider.
+        db.prepare(
+          "DELETE FROM reactions WHERE scope = 'channel' AND message_id NOT IN (SELECT id FROM messages)",
+        ).run();
+        db.prepare(
+          "DELETE FROM reactions WHERE scope = 'dm' AND message_id NOT IN (SELECT id FROM dm_messages)",
+        ).run();
+        db.prepare(
+          "DELETE FROM reactions WHERE scope = 'gdm' AND message_id NOT IN (SELECT id FROM gdm_messages)",
+        ).run();
+
         // identity, keys, avatar, sessions (friend/friend-request/membership/
         // ban/join-request/session rows cascade from here)
         revokeAllSessions(uid);

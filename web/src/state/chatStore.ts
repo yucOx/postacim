@@ -6,6 +6,7 @@ import { useAuthStore } from './authStore';
 import { decryptText, encryptText, nextSendIndex } from '../crypto/message';
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
+import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
 import { onServerEvent } from '../ws/socket';
 
 // server replay sightings for this session; channel ids never collide with dmChatStore's
@@ -24,6 +25,10 @@ export interface DisplayMessage {
   body: string | null;
   /** tombstone: deleted for everyone — body is always null */
   deleted?: boolean;
+  /** reply target in the same channel; nick = target sender's nick */
+  replyTo?: { id: number; nick: string } | null;
+  /** grouped reaction chips as served by history / kept live by reaction:update */
+  reactions: Reaction[];
 }
 
 interface ChatState {
@@ -34,11 +39,22 @@ interface ChatState {
   sealAt: Record<number, number>;
   loadHistory: (channelId: string) => Promise<void>;
   loadOlder: (channelId: string) => Promise<void>;
-  send: (channelId: string, body: string) => Promise<void>;
+  send: (channelId: string, body: string, replyTo?: number) => Promise<void>;
+  /** optimistic own reaction toggle; server errors revert it */
+  toggleReaction: (channelId: string, messageId: number, emoji: string, mine: boolean) => Promise<void>;
   wire: () => void;
 }
 
+// reply/reactions metadata shared by every display shape
+function metaOf(raw: ChatMessage): Pick<DisplayMessage, 'replyTo' | 'reactions'> {
+  return {
+    replyTo: raw.reply_to ? { id: raw.reply_to, nick: raw.reply_nick ?? '' } : null,
+    reactions: (raw.reactions ?? []).map((r) => ({ ...r })),
+  };
+}
+
 function toDisplay(raw: ChatMessage): DisplayMessage {
+  const meta = metaOf(raw);
   // tombstone row: the server kept the placeholder and wiped the content
   if (raw.deleted) {
     return {
@@ -51,6 +67,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
       deleted: true,
+      ...meta,
     };
   }
   const app = useAppStore.getState();
@@ -71,6 +88,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
+      ...meta,
     };
   try {
     return {
@@ -82,6 +100,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
       body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, 'ch', bind, raw.sender_id).body,
+      ...meta,
     };
   } catch {
     return {
@@ -93,6 +112,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
+      ...meta,
     };
   }
 }
@@ -155,7 +175,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
-  send: async (channelId, body) => {
+  send: async (channelId, body, replyTo) => {
     const app = useAppStore.getState();
     const ch = app.communities.flatMap((c) => c.channels).find((c) => c.id === channelId);
     if (!ch) throw new Error('kanal bulunamadı');
@@ -187,7 +207,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         try {
           await api(`/channels/${channelId}/messages`, {
             method: 'POST',
-            body: { key_version: version, ...enc, client_id: clientId, sent_at_client: clientSentAt },
+            body: {
+              key_version: version,
+              ...enc,
+              client_id: clientId,
+              sent_at_client: clientSentAt,
+              ...(replyTo ? { reply_to: replyTo } : {}),
+            },
           });
           return;
         } catch (err) {
@@ -208,8 +234,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  // optimistic own toggle; a server rejection (rate limit, rights) reverts it
+  toggleReaction: async (channelId, messageId, emoji, mine) => {
+    const list = get().messages[channelId];
+    if (!list?.some((m) => m.id === messageId)) return;
+    const reactionsOf = (l: DisplayMessage[]): Reaction[] =>
+      l.find((m) => m.id === messageId)?.reactions ?? [];
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [channelId]: withReactions(s.messages[channelId] ?? [], messageId, toggleMine(reactionsOf(s.messages[channelId] ?? []), emoji)),
+      },
+    }));
+    try {
+      if (mine) {
+        await api(`/channels/${channelId}/messages/${messageId}/reactions?emoji=${encodeURIComponent(emoji)}`, {
+          method: 'DELETE',
+        });
+      } else {
+        await api(`/channels/${channelId}/messages/${messageId}/reactions`, { method: 'POST', body: { emoji } });
+      }
+    } catch {
+      // rare (rate limit, rights) — double-toggle is an involution: restores
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [channelId]: withReactions(
+            s.messages[channelId] ?? [],
+            messageId,
+            toggleMine(reactionsOf(s.messages[channelId] ?? []), emoji),
+          ),
+        },
+      }));
+    }
+  },
+
   wire: () => {
     onServerEvent((e) => {
+      const me = useAuthStore.getState().user?.id;
       // dm_/gdm_ channel ids belong to dmChatStore (its wire handles those)
       if (e.type === 'message:deleted') {
         const d = e as unknown as { channel_id: string; id: number };
@@ -218,6 +280,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const cur = s.messages[d.channel_id];
           if (!cur) return s; // channel not loaded — history fetch shows the tombstone
           return { messages: { ...s.messages, [d.channel_id]: markDeleted(cur, d.id) } };
+        });
+        return;
+      }
+      // live reaction chips from others (own toggles applied optimistically)
+      if (e.type === 'reaction:update') {
+        const ru = e as unknown as {
+          scope: string;
+          channel_id: string;
+          message_id: number;
+          emoji: string;
+          action: 'add' | 'remove';
+          user_id: string;
+        };
+        if (ru.scope !== 'channel') return;
+        if (ru.user_id === me) return; // own toggle: optimistic already applied
+        set((s) => {
+          const cur = s.messages[ru.channel_id];
+          if (!cur) return s;
+          return {
+            messages: {
+              ...s.messages,
+              [ru.channel_id]: withReactions(
+                cur,
+                ru.message_id,
+                applyRemote(cur.find((m) => m.id === ru.message_id)?.reactions ?? [], ru.emoji, ru.action),
+              ),
+            },
+          };
         });
         return;
       }
@@ -240,11 +330,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const com = app.communities.find((c) => c.channels.some((ch) => ch.id === raw.channel_id));
         const chName = com?.channels.find((ch) => ch.id === raw.channel_id)?.name;
         if (com && chName) {
+          // mention flag: decrypted body names us (case-insensitive) — louder chime
+          const myNick = useAuthStore.getState().user?.nick;
+          const mention =
+            !!myNick && display.body !== null && display.body.toLowerCase().includes(myNick.toLowerCase());
           notifyIncomingMessage({
             channelId: raw.channel_id,
             communityId: com.id,
             title: `${com.name} · #${chName}`,
             nick: display.nick,
+            mention,
           });
         }
       }

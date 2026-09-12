@@ -304,7 +304,19 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     }
     const members = communityMembers(id);
     const voiceChannels = communityChannels(id).filter((c) => c.type === 'voice').map((c) => c.id);
-    db.prepare('DELETE FROM communities WHERE id = ?').run(id);
+    // kanal mesajları cascade ile gider ama tepkiler message_id FK'suz —
+    // bu topluluğun mesajlarına takılı tepkileri açıkça temizle
+    const tx = db.transaction(() => {
+      db.prepare(
+        `DELETE FROM reactions WHERE scope = 'channel'
+         AND message_id IN (
+           SELECT m.id FROM messages m
+           JOIN channels c ON c.id = m.channel_id
+           WHERE c.community_id = ?)`,
+      ).run(id);
+      db.prepare('DELETE FROM communities WHERE id = ?').run(id);
+    });
+    tx();
     // sockets still sit in the room: they get the notice, then we part them
     hub.broadcast(id, { type: 'community:deleted', community_id: id });
     for (const m of members) {

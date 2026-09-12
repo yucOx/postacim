@@ -39,6 +39,11 @@ export interface ChatMessage {
   sent_at_client?: number | null;
   /** tombstone: deleted for everyone — server sends 1/0, nonce/ciphertext are null */
   deleted?: boolean | number;
+  /** reply target (same channel); reply_nick = target sender's nick (plaintext metadata) */
+  reply_to?: number | null;
+  reply_nick?: string | null;
+  /** grouped reactions as served by history GET; [] when none */
+  reactions?: { emoji: string; count: number; me: boolean }[];
 }
 
 export interface VoiceTokenResponse {

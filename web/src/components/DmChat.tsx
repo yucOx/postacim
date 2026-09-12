@@ -12,6 +12,7 @@ import { wsSend } from '../ws/socket';
 import ConfirmDialog from './ConfirmDialog';
 import MessageRow from './MessageRow';
 import TypingLine from './TypingLine';
+import ReplyBar from './ReplyBar';
 import { deleteForEveryone, DeletedRow, HoverActions } from './MsgDelete';
 import Composer from './Composer';
 import Modal from './Modal';
@@ -73,6 +74,9 @@ export default function DmChat({ dmId }: { dmId: string }) {
   const loadOlder = useDmChatStore((s) => s.loadOlder);
   const sending = useDmChatStore((s) => s.sending);
   const send = useDmChatStore((s) => s.send);
+  const toggleReaction = useDmChatStore((s) => s.toggleReaction);
+  // reply target while composing — snippet lives here, cleared on send/cancel
+  const [reply, setReply] = useState<{ id: number; nick: string; body: string | null } | null>(null);
   const startDmCall = useVoiceStore((s) => s.startDmCall);
   const callPhase = useVoiceStore((s) => s.callState?.phase ?? null);
   const callChannelId = useVoiceStore((s) => s.callState?.channelId ?? null);
@@ -236,11 +240,22 @@ export default function DmChat({ dmId }: { dmId: string }) {
                 <DeletedRow nick={m.nick} sentAt={m.sentAt} />
               ) : (
                 <div className="group relative">
-                  <MessageRow m={m} prev={prev} />
+                  <MessageRow
+                    m={m}
+                    prev={prev}
+                    replyBody={m.replyTo ? (visible.find((x) => x.id === m.replyTo!.id)?.body ?? null) : undefined}
+                    onToggleReaction={(emoji, mine) => void toggleReaction(dmId, m.id, emoji, mine).catch(() => {})}
+                  />
                   <HoverActions
                     // delete-for-everyone is the sender's call (dm + gdm same
                     // rule; gdm creator may also moderate)
                     canDeleteAll={amSender(m) || (!dm && gdm?.creator_id === useAuthStore.getState().user?.id)}
+                    onReply={() => setReply({ id: m.id, nick: m.nick, body: m.body })}
+                    onReact={(emoji) =>
+                      void toggleReaction(dmId, m.id, emoji, !!m.reactions.find((r) => r.emoji === emoji)?.me).catch(
+                        () => {},
+                      )
+                    }
                     onDeleteAll={() => void deleteForEveryone(dmId, m.id).catch(() => {})}
                     onDeleteForMe={() => hideForMe(dmId, m.id)}
                   />
@@ -251,12 +266,23 @@ export default function DmChat({ dmId }: { dmId: string }) {
         })}
         <div ref={bottomRef} />
       </div>
+      {reply && <ReplyBar nick={reply.nick} body={reply.body} onCancel={() => setReply(null)} />}
       <TypingLine channelId={dmId} />
       <Composer
-        send={(body) => send(dmId, body)}
+        send={(body) => {
+          const target = reply;
+          setReply(null);
+          return send(dmId, body, target?.id);
+        }}
         sending={sending}
         onTyping={() => wsSend({ type: 'typing', channel_id: dmId })}
-        placeholder={dm ? `@${dm.peer.nick} — şifreli mesaj…  (Enter: gönder)` : `${gdm!.name} — şifreli mesaj…  (Enter: gönder)`}
+        placeholder={
+          reply
+            ? `${reply.nick} kişisine yanıt yaz…  (Enter: gönder)`
+            : dm
+              ? `@${dm.peer.nick} — şifreli mesaj…  (Enter: gönder)`
+              : `${gdm!.name} — şifreli mesaj…  (Enter: gönder)`
+        }
       />
       {adding && gdm && <AddMemberModal gdmId={gdm.id} onClose={() => setAdding(false)} />}
       {safety && dm && (

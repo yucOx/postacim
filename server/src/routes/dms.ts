@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { db } from '../db.js';
 import { areFriends, findDmByPair, getDm, newDmChannelId } from '../lib/social.js';
+import { reactionsFor } from '../lib/reactions.js';
 import { hub } from '../ws/hub.js';
 import { mintVoiceToken } from '../livekit.js';
 
@@ -123,12 +124,17 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 100);
     const rows = db
       .prepare(
-        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client, m.deleted
-         FROM dm_messages m JOIN users u ON u.id = m.sender_id
+        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client, m.deleted, m.reply_to, ru.nick AS reply_nick
+         FROM dm_messages m
+         JOIN users u ON u.id = m.sender_id
+         LEFT JOIN dm_messages r ON r.id = m.reply_to
+         LEFT JOIN users ru ON ru.id = r.sender_id
          WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`,
       )
-      .all(id, before, limit);
-    return { messages: rows.reverse(), has_more: rows.length === limit };
+      .all(id, before, limit) as { id: number }[];
+    const rx = reactionsFor('dm', rows.map((m) => m.id), req.user.id);
+    const messages = rows.reverse().map((m) => ({ ...m, reactions: rx.get(m.id) ?? [] }));
+    return { messages, has_more: rows.length === limit };
   });
 
   app.post(
@@ -147,6 +153,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         ciphertext?: string;
         client_id?: string;
         sent_at_client?: number;
+        reply_to?: number;
       };
       const nonceOk =
         typeof body.nonce === 'string' && body.nonce.length === 32 && B64_RE.test(body.nonce);
@@ -162,14 +169,32 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       if (hasBinding && !validBinding(body.client_id, body.sent_at_client)) {
         return reply.code(400).send({ error: 'geçersiz mesaj verisi' });
       }
+      // cevap hedefi aynı DM'de olmalı — id tablolar arasında çakışabildiği
+      // için DM dışından gelen id reddedilir (tombstone hedef olabilir)
+      let replyTo: number | null = null;
+      let replyNick: string | null = null;
+      if (body.reply_to !== undefined) {
+        const rt = body.reply_to;
+        if (!Number.isInteger(rt)) {
+          return reply.code(400).send({ error: 'geçersiz cevap hedefi' });
+        }
+        const target = db
+          .prepare(
+            'SELECT u.nick FROM dm_messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ? AND m.channel_id = ?',
+          )
+          .get(rt, id) as { nick: string } | undefined;
+        if (!target) return reply.code(400).send({ error: 'geçersiz cevap hedefi' });
+        replyTo = rt;
+        replyNick = target.nick;
+      }
       const clientId = hasBinding ? body.client_id ?? null : null;
       const sentAtClient = hasBinding ? body.sent_at_client ?? null : null;
       const now = Date.now();
       const info = db
         .prepare(
-          'INSERT INTO dm_messages(channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO dm_messages(channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client, reply_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         )
-        .run(id, req.user.id, body.key_version, body.nonce, body.ciphertext, now, clientId, sentAtClient);
+        .run(id, req.user.id, body.key_version, body.nonce, body.ciphertext, now, clientId, sentAtClient, replyTo);
       const message = {
         id: Number(info.lastInsertRowid),
         channel_id: id,
@@ -181,6 +206,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         sent_at: now,
         client_id: clientId,
         sent_at_client: sentAtClient,
+        reply_to: replyTo,
+        reply_nick: replyNick,
+        reactions: [],
       };
       hub.sendToUsers([dm.user_a, dm.user_b], { type: 'dm:message', message });
       return reply.code(201).send({ id: message.id, sent_at: now });

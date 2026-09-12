@@ -5,6 +5,7 @@ import { useAuthStore } from '../state/authStore';
 import { ensurePinned } from '../lib/keypins';
 import ConfirmDialog from './ConfirmDialog';
 import KeyFingerprintModal from './KeyFingerprintModal';
+import UserCard from './UserCard';
 import Modal from './Modal';
 import { toast } from './Toast';
 import Avatar from './Avatar';
@@ -24,6 +25,7 @@ export default function MemberList() {
   // hooks stay above the early return — community can disappear mid-session
   const [pendingAct, setPendingAct] = useState<{ fn: () => Promise<void>; text: string } | null>(null);
   const [fingerprint, setFingerprint] = useState<{ id: string; nick: string; keyB64?: string } | null>(null);
+  const [card, setCard] = useState<{ id: string; nick: string } | null>(null);
   const [keyFlagged, setKeyFlagged] = useState<Set<string>>(new Set());
 
   // TOFU sweep over member keys; bootstrap feeds publicKeys for every member
@@ -95,7 +97,14 @@ export default function MemberList() {
             isStaff && m.id !== me?.id && m.role !== 'owner' && !(myRole === 'admin' && m.role === 'admin');
           return (
             <div key={m.id} className="group flex items-center gap-2 rounded px-2 py-1.5 hover:bg-night-800">
-              <Avatar userId={m.id} label={m.nick} size={28} />
+              <button
+                onClick={() => setCard({ id: m.id, nick: m.nick })}
+                className="shrink-0 rounded-sm transition-transform hover:scale-105"
+                title={`${m.nick} — üye kartı`}
+                aria-label={`${m.nick} üye kartı`}
+              >
+                <Avatar userId={m.id} label={m.nick} size={28} />
+              </button>
               <span className={`flex-1 truncate text-sm ${m.id === me?.id ? 'text-paper-100' : 'text-paper-300'}`}>
                 {m.nick}
               </span>
@@ -197,6 +206,7 @@ export default function MemberList() {
           onCancel={() => setPendingAct(null)}
         />
       )}
+      {card && <UserCard userId={card.id} nick={card.nick} onClose={() => setCard(null)} />}
     </div>
   );
 }

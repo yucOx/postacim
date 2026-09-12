@@ -6,6 +6,7 @@ import { useAuthStore } from './authStore';
 import { decryptText, encryptText, nextSendIndex, type MsgScope } from '../crypto/message';
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
+import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
 import { onServerEvent } from '../ws/socket';
 
 // dm_/gdm_ ids never collide with chatStore's channel ids — separate filter is safe
@@ -37,6 +38,10 @@ export interface DmDisplayMessage {
   body: string | null;
   /** tombstone: deleted for everyone — body is always null */
   deleted?: boolean;
+  /** reply target (same DM/GDM); nick = target sender's nick */
+  replyTo?: { id: number; nick: string } | null;
+  /** grouped reaction chips as served by history / kept live by reaction:update */
+  reactions: Reaction[];
 }
 
 interface DmChatState {
@@ -45,11 +50,22 @@ interface DmChatState {
   sending: boolean;
   loadHistory: (dmId: string) => Promise<void>;
   loadOlder: (dmId: string) => Promise<void>;
-  send: (dmId: string, body: string) => Promise<void>;
+  send: (dmId: string, body: string, replyTo?: number) => Promise<void>;
+  /** optimistic own reaction toggle; server errors revert it */
+  toggleReaction: (dmId: string, messageId: number, emoji: string, mine: boolean) => Promise<void>;
   wire: () => void;
 }
 
+// reply/reactions metadata shared by every display shape
+function metaOf(raw: ChatMessage): Pick<DmDisplayMessage, 'replyTo' | 'reactions'> {
+  return {
+    replyTo: raw.reply_to ? { id: raw.reply_to, nick: raw.reply_nick ?? '' } : null,
+    reactions: (raw.reactions ?? []).map((r) => ({ ...r })),
+  };
+}
+
 function toDisplay(raw: ChatMessage): DmDisplayMessage {
+  const meta = metaOf(raw);
   // tombstone row: the server kept the placeholder and wiped the content
   if (raw.deleted) {
     return {
@@ -62,6 +78,7 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
       deleted: true,
+      ...meta,
     };
   }
   const kind = kindOf(raw.channel_id);
@@ -82,6 +99,7 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
+      ...meta,
     };
   }
   try {
@@ -94,6 +112,7 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
       body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, kind, bind, raw.sender_id).body,
+      ...meta,
     };
   } catch {
     return {
@@ -105,6 +124,7 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
+      ...meta,
     };
   }
 }
@@ -164,7 +184,7 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
     }));
   },
 
-  send: async (dmId, body) => {
+  send: async (dmId, body, replyTo) => {
     let keyInfo = keyFor(dmId);
     if (!keyInfo) {
       // refetch bootstrap (peer may have opened/rekeyed first) then retry once
@@ -185,10 +205,51 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
     try {
       await api(`${baseOf(dmId)}/${dmId}/messages`, {
         method: 'POST',
-        body: { key_version: keyInfo.version, ...enc, client_id: clientId, sent_at_client: clientSentAt },
+        body: {
+          key_version: keyInfo.version,
+          ...enc,
+          client_id: clientId,
+          sent_at_client: clientSentAt,
+          ...(replyTo ? { reply_to: replyTo } : {}),
+        },
       });
     } finally {
       set({ sending: false });
+    }
+  },
+
+  // optimistic own toggle; a server rejection (rate limit, rights) reverts it
+  toggleReaction: async (dmId, messageId, emoji, mine) => {
+    const list = get().messages[dmId];
+    if (!list?.some((m) => m.id === messageId)) return;
+    const reactionsOf = (l: DmDisplayMessage[]): Reaction[] =>
+      l.find((m) => m.id === messageId)?.reactions ?? [];
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [dmId]: withReactions(s.messages[dmId] ?? [], messageId, toggleMine(reactionsOf(s.messages[dmId] ?? []), emoji)),
+      },
+    }));
+    try {
+      if (mine) {
+        await api(`${baseOf(dmId)}/${dmId}/messages/${messageId}/reactions?emoji=${encodeURIComponent(emoji)}`, {
+          method: 'DELETE',
+        });
+      } else {
+        await api(`${baseOf(dmId)}/${dmId}/messages/${messageId}/reactions`, { method: 'POST', body: { emoji } });
+      }
+    } catch {
+      // rare (rate limit, rights) — double-toggle is an involution: restores
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [dmId]: withReactions(
+            s.messages[dmId] ?? [],
+            messageId,
+            toggleMine(reactionsOf(s.messages[dmId] ?? []), emoji),
+          ),
+        },
+      }));
     }
   },
 
@@ -210,12 +271,44 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
           app.dms.find((d) => d.id === raw.channel_id)?.peer.nick ??
           app.gdms.find((g) => g.id === raw.channel_id)?.name ??
           'özel mesaj';
-        notifyIncomingMessage({ channelId: raw.channel_id, title, nick: display.nick });
+        // mention flag: decrypted body names us (case-insensitive) — louder chime
+        const myNick = useAuthStore.getState().user?.nick;
+        const mention =
+          !!myNick && display.body !== null && display.body.toLowerCase().includes(myNick.toLowerCase());
+        notifyIncomingMessage({ channelId: raw.channel_id, title, nick: display.nick, mention });
       }
     };
     onServerEvent((e) => {
+      const me = useAuthStore.getState().user?.id;
       if (e.type === 'dm:message') onMsg(e.message as ChatMessage);
       else if (e.type === 'gdm:message') onMsg(e.message as ChatMessage);
+      // live reaction chips from others (own toggles applied optimistically)
+      else if (e.type === 'reaction:update') {
+        const ru = e as unknown as {
+          scope: string;
+          channel_id: string;
+          message_id: number;
+          emoji: string;
+          action: 'add' | 'remove';
+          user_id: string;
+        };
+        if (ru.scope !== 'dm' && ru.scope !== 'gdm') return;
+        if (ru.user_id === me) return; // own toggle: optimistic already applied
+        set((s) => {
+          const cur = s.messages[ru.channel_id];
+          if (!cur) return s;
+          return {
+            messages: {
+              ...s.messages,
+              [ru.channel_id]: withReactions(
+                cur,
+                ru.message_id,
+                applyRemote(cur.find((m) => m.id === ru.message_id)?.reactions ?? [], ru.emoji, ru.action),
+              ),
+            },
+          };
+        });
+      }
       // community-channel ids belong to chatStore (its wire handles those)
       else if (e.type === 'message:deleted') {
         const d = e as unknown as { channel_id: string; id: number };

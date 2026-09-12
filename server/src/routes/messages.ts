@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db.js';
 import { getChannel, memberRole } from '../lib/access.js';
+import { reactionsFor } from '../lib/reactions.js';
 import { hub } from '../ws/hub.js';
 
 interface PostBody {
@@ -9,6 +10,7 @@ interface PostBody {
   ciphertext?: string;
   client_id?: string;
   sent_at_client?: number;
+  reply_to?: number;
 }
 
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -40,13 +42,18 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 100);
     const rows = db
       .prepare(
-        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client, m.deleted
-         FROM messages m JOIN users u ON u.id = m.sender_id
+        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client, m.deleted, m.reply_to, ru.nick AS reply_nick
+         FROM messages m
+         JOIN users u ON u.id = m.sender_id
+         LEFT JOIN messages r ON r.id = m.reply_to
+         LEFT JOIN users ru ON ru.id = r.sender_id
          WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`,
       )
-      .all(id, before, limit) as unknown[];
+      .all(id, before, limit) as { id: number }[];
+    const rx = reactionsFor('channel', rows.map((m) => m.id), req.user.id);
+    const messages = rows.reverse().map((m) => ({ ...m, reactions: rx.get(m.id) ?? [] }));
     const hasMore = rows.length === limit;
-    return { messages: rows.reverse(), has_more: hasMore };
+    return { messages, has_more: hasMore };
   });
 
   app.post(
@@ -82,14 +89,33 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       if (hasBinding && !validBinding(body.client_id, body.sent_at_client)) {
         return reply.code(400).send({ error: 'geçersiz mesaj verisi' });
       }
+      // cevap hedefi aynı kanalda olmalı — id tablolar arasında çakışabildiği
+      // için kanal dışından gelen id reddedilir (tombstone hedef olabilir,
+      // sorun değil)
+      let replyTo: number | null = null;
+      let replyNick: string | null = null;
+      if (body.reply_to !== undefined) {
+        const rt = body.reply_to;
+        if (!Number.isInteger(rt)) {
+          return reply.code(400).send({ error: 'geçersiz cevap hedefi' });
+        }
+        const target = db
+          .prepare(
+            'SELECT u.nick FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ? AND m.channel_id = ?',
+          )
+          .get(rt, id) as { nick: string } | undefined;
+        if (!target) return reply.code(400).send({ error: 'geçersiz cevap hedefi' });
+        replyTo = rt;
+        replyNick = target.nick;
+      }
       const clientId = hasBinding ? body.client_id ?? null : null;
       const sentAtClient = hasBinding ? body.sent_at_client ?? null : null;
       const now = Date.now();
       const info = db
         .prepare(
-          'INSERT INTO messages(channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO messages(channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client, reply_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         )
-        .run(id, req.user.id, body.key_version, body.nonce, body.ciphertext, now, clientId, sentAtClient);
+        .run(id, req.user.id, body.key_version, body.nonce, body.ciphertext, now, clientId, sentAtClient, replyTo);
       const message = {
         id: Number(info.lastInsertRowid),
         channel_id: id,
@@ -101,6 +127,9 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
         sent_at: now,
         client_id: clientId,
         sent_at_client: sentAtClient,
+        reply_to: replyTo,
+        reply_nick: replyNick,
+        reactions: [],
       };
       hub.broadcast(channel.community_id, { type: 'message:new', channel_id: id, message });
       return reply.code(201).send({ id: message.id, sent_at: now });

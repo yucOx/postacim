@@ -8,6 +8,7 @@ import { wsSend } from '../ws/socket';
 import { AlertTriangle, Lock, ShieldCheck } from 'lucide-react';
 import MessageRow from './MessageRow';
 import TypingLine from './TypingLine';
+import ReplyBar from './ReplyBar';
 import { deleteForEveryone, DeletedRow, HoverActions } from './MsgDelete';
 import Composer from './Composer';
 
@@ -31,7 +32,10 @@ export default function ChatView({ channelId, channelName }: { channelId: string
   const isStaff =
     useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId)?.role) !== 'member';
   const rekeyAffected = useAppStore((s) => s.rekeyAffected);
+  const toggleReaction = useChatStore((s) => s.toggleReaction);
   const [rekeying, setRekeying] = useState(false);
+  // reply target while composing — snippet lives here, cleared on send/cancel
+  const [reply, setReply] = useState<{ id: number; nick: string; body: string | null } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -148,9 +152,18 @@ export default function ChatView({ channelId, channelName }: { channelId: string
                 <DeletedRow nick={m.nick} sentAt={m.sentAt} />
               ) : (
                 <div className="group relative">
-                  <MessageRow m={m} prev={prev} />
+                  <MessageRow
+                    m={m}
+                    prev={prev}
+                    replyBody={m.replyTo ? (visible.find((x) => x.id === m.replyTo!.id)?.body ?? null) : undefined}
+                    onToggleReaction={(emoji, mine) =>
+                      void toggleReaction(channelId, m.id, emoji, mine).catch(() => {})
+                    }
+                  />
                   <HoverActions
                     canDeleteAll={amSender(m) || isStaff}
+                    onReply={() => setReply({ id: m.id, nick: m.nick, body: m.body })}
+                    onReact={(emoji) => void toggleReaction(channelId, m.id, emoji, !!m.reactions.find((r) => r.emoji === emoji)?.me).catch(() => {})}
                     onDeleteAll={() => void deleteForEveryone(channelId, m.id).catch(() => {})}
                     onDeleteForMe={() => hideForMe(channelId, m.id)}
                   />
@@ -161,16 +174,23 @@ export default function ChatView({ channelId, channelName }: { channelId: string
         })}
         <div ref={bottomRef} />
       </div>
+      {reply && <ReplyBar nick={reply.nick} body={reply.body} onCancel={() => setReply(null)} />}
       <TypingLine channelId={channelId} />
       <Composer
-        send={(body) => send(channelId, body)}
+        send={(body) => {
+          const target = reply;
+          setReply(null);
+          return send(channelId, body, target?.id);
+        }}
         sending={sending}
         disabled={needsRekey}
         onTyping={() => wsSend({ type: 'typing', channel_id: channelId })}
         placeholder={
           needsRekey
             ? 'kanal yeniden anahtarlanana kadar kilitli…'
-            : 'şifreli mesaj yaz…  (Enter: gönder, Shift+Enter: satır)'
+            : reply
+              ? `${reply.nick} kişisine yanıt yaz…  (Enter: gönder)`
+              : 'şifreli mesaj yaz…  (Enter: gönder, Shift+Enter: satır)'
         }
       />
     </div>

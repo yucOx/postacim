@@ -2,7 +2,7 @@
 // notification while the tab is hidden. The message body never leaves the app
 // — the OS toast only names the sender and the room (E2EE privacy: plaintext
 // in a system-level notification tray is a different threat surface).
-import { playChime } from './sound';
+import { playChime, playMention } from './sound';
 import { useSettingsStore } from '../state/settingsStore';
 import { useAppStore } from '../state/appStore';
 
@@ -25,12 +25,14 @@ export interface IncomingMessage {
   /** e.g. "topluluk · #genel" or the peer nick */
   title: string;
   nick: string;
+  /** body names the current user — plays the louder mention chime */
+  mention?: boolean;
 }
 
 export function notifyIncomingMessage(m: IncomingMessage): void {
   const s = useSettingsStore.getState();
   const muted = !!m.communityId && s.mutedCommunities.includes(m.communityId);
-  if (s.soundOn && !muted) playChime();
+  if (s.soundOn && !muted) m.mention ? playMention() : playChime();
 
   if (
     s.desktopOn &&
@@ -39,7 +41,10 @@ export function notifyIncomingMessage(m: IncomingMessage): void {
     Notification.permission === 'granted'
   ) {
     try {
-      const n = new Notification(m.title, { body: `${m.nick}: yeni mesaj`, tag: m.channelId });
+      const n = new Notification(m.title, {
+        body: `${m.nick}: ${m.mention ? 'seni andı: yeni mesaj' : 'yeni mesaj'}`,
+        tag: m.channelId,
+      });
       n.onclick = (): void => {
         window.focus();
         openChannel(m.channelId);

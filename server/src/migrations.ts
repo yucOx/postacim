@@ -309,4 +309,25 @@ CREATE TABLE key_log(
 );
 CREATE INDEX idx_key_log_user ON key_log(user_id);
 `,
+  // v14 — tepkiler + cevaplar. Mesaj id'leri tablo başına AUTOINCREMENT
+  // olduğundan üç tabloda çakışabilir; bu yüzden tepkiler tek tablada scope
+  // ile ayrıştırılır. message_id bilinçli olarak FK değil (cross-table FK
+  // olamaz); mesaj satırı hard-silinen yerlerde (topluluk silme, hesap silme,
+  // boş GDM) tepkiler rota katmanında açıkça temizlenir — tombstone satırı
+  // tuttuğu için tepki kalır, sorun değil. reply_to hedef mesajın id'si;
+  // reply_nick istemciye JOIN ile verilir.
+  `
+CREATE TABLE reactions(
+  scope TEXT NOT NULL CHECK(scope IN('channel','dm','gdm')),
+  message_id INTEGER NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  emoji TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(scope, message_id, user_id, emoji)
+);
+CREATE INDEX idx_reactions_user ON reactions(user_id);
+ALTER TABLE messages ADD COLUMN reply_to INTEGER;
+ALTER TABLE dm_messages ADD COLUMN reply_to INTEGER;
+ALTER TABLE gdm_messages ADD COLUMN reply_to INTEGER;
+`,
 ];

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowUpRight, Plus } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppStore } from '../state/appStore';
@@ -7,6 +7,17 @@ import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import Modal from './Modal';
 import { PigeonMark } from './Brand';
 import { parseInviteLink } from '../crypto/invite';
+
+// server rail order — client-side only, the server never learns it
+const ORDER_KEY = 'pgv_com_order';
+const loadOrder = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(ORDER_KEY) ?? '[]') as unknown;
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+};
 
 export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) {
   const communities = useAppStore((s) => s.communities);
@@ -27,6 +38,25 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
   const [inviteLink, setInviteLink] = useState('');
   const [applyName, setApplyName] = useState('');
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
+  // sürükle-bırak sıralama — bilinmeyenler (yeni katılan) en sona düşer
+  const [order, setOrder] = useState<string[]>(loadOrder);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const sorted = useMemo(() => {
+    const idx = (id: string): number => {
+      const i = order.indexOf(id);
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return [...communities].sort((a, b) => idx(a.id) - idx(b.id));
+  }, [communities, order]);
+
+  const persistOrder = (next: string[]): void => {
+    setOrder(next);
+    try {
+      localStorage.setItem(ORDER_KEY, JSON.stringify(next));
+    } catch {
+      // private mode — session-only
+    }
+  };
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -69,7 +99,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
         )}
       </button>
       <div className="perf w-8" aria-hidden />
-      {communities.map((c) => {
+      {sorted.map((c) => {
         const active = c.id === activeId && view === 'community';
         return (
           <button
@@ -79,7 +109,26 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
               onNavigate?.();
             }}
             title={c.name}
-            className={tag(active)}
+            draggable
+            onDragStart={(e) => {
+              setDragId(c.id);
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragEnd={() => setDragId(null)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const from = dragId;
+              setDragId(null);
+              if (!from || from === c.id) return;
+              const ids = sorted.map((s) => s.id);
+              const fromI = ids.indexOf(from);
+              const toI = ids.indexOf(c.id);
+              if (fromI < 0 || toI < 0) return;
+              ids.splice(toI, 0, ids.splice(fromI, 1)[0]!);
+              persistOrder(ids);
+            }}
+            className={tag(active) + (dragId === c.id ? ' opacity-40' : '')}
           >
             {/* eyelet — the hole the tag hangs from */}
             {!active && (
