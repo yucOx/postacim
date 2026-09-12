@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Mic, MicOff, PhoneOff, PictureInPicture2, Pin, PinOff, Users, Video, VideoOff } from 'lucide-react';
 import { ParticipantTile, RoomContext, useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
@@ -10,6 +10,18 @@ import { toast } from './Toast';
 
 const NO_PARTICIPANTS: { user_id: string; nick: string }[] = [];
 
+// hangi akış büyük gösterilsin: otomatik (ekran önce) / ekran / kamera
+type VidPref = 'auto' | 'screen' | 'camera';
+const VID_PREF_KEY = 'postacim.pipVideo';
+function loadVidPref(): VidPref {
+  try {
+    const v = localStorage.getItem(VID_PREF_KEY);
+    return v === 'screen' || v === 'camera' ? v : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
 /** minimized community video call: video stage (screen share first, then
  *  cameras), compact controls and a real browser Picture-in-Picture escape
  *  hatch so the call can float over other windows */
@@ -20,7 +32,25 @@ function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | nul
   const live = (t: TrackReference): boolean => !!t.publication && !t.publication.isMuted;
   const screens = tracks.filter((t) => t.source === Track.Source.ScreenShare && live(t));
   const cams = tracks.filter((t) => t.source === Track.Source.Camera && live(t));
-  const pick = screens[0] ?? cams.find((t) => !t.participant.isLocal) ?? cams[0];
+  // hangisi büyük gösterilsin: otomatik → ekran önce; kullanıcı ekrandan
+  // kamera/oto arasında döngüyle seçebilir (Discord odak akışı gibi)
+  const [pref, setPref] = useState<VidPref>(loadVidPref);
+  const remoteCam = cams.find((t) => !t.participant.isLocal) ?? null;
+  const pick =
+    pref === 'screen'
+      ? (screens[0] ?? remoteCam ?? cams[0] ?? null)
+      : pref === 'camera'
+        ? (remoteCam ?? cams[0] ?? screens[0] ?? null)
+        : (screens[0] ?? remoteCam ?? cams[0] ?? null);
+  const cycle = (): void => {
+    const next: VidPref = pref === 'auto' ? 'screen' : pref === 'screen' ? 'camera' : 'auto';
+    setPref(next);
+    try {
+      localStorage.setItem(VID_PREF_KEY, next);
+    } catch {
+      // private mode — session-only
+    }
+  };
   if (!pick) {
     return (
       <div className="flex h-32 flex-col items-center justify-center bg-night-850 text-paper-500">
@@ -38,6 +68,16 @@ function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | nul
       <span className="pointer-events-none absolute bottom-1 left-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50">
         {pick.participant.isLocal ? 'sen' : nickFor(pick.participant.identity)}
       </span>
+      {screens.length > 0 && cams.length > 0 && (
+        <button
+          type="button"
+          onClick={cycle}
+          className="absolute bottom-1 right-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50 transition-colors hover:border-lamp-500/70 hover:text-lamp-400"
+          title="büyük gösterilecek akışı değiştir (oto → ekran → kamera)"
+        >
+          {pref === 'auto' ? 'oto' : pref === 'screen' ? 'ekran' : 'kamera'}
+        </button>
+      )}
     </div>
   );
 }
