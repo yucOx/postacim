@@ -161,21 +161,27 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const stripTile = (p: Participant): React.ReactNode => {
     const cam = camByIdentity.get(p.identity);
     const focused = p.identity === spotlight;
+    const border = focused ? 'border-lamp-500/80' : 'border-brass-700/50';
     return cam ? (
-      <VideoTile
+      <div
         key={slotKey(p.identity)}
-        trackRef={cam}
-        active={focused}
         onClick={() => toggleSpotlight(p.identity)}
-      />
+        title={focused ? 'büyütmeden çıkar' : 'büyüt'}
+        className={`relative aspect-video h-full shrink-0 cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${border} ${TILE_HIDE}`}
+      >
+        <ParticipantTile trackRef={cam} className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
+        <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+      </div>
     ) : (
-      <PlaceholderTile
+      <div
         key={slotKey(p.identity)}
-        identity={p.identity}
-        isLocal={p.isLocal}
-        active={focused}
         onClick={() => toggleSpotlight(p.identity)}
-      />
+        title={focused ? 'büyütmeden çıkar' : 'büyüt'}
+        className={`flex aspect-video h-full shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850 transition-colors ${border}`}
+      >
+        <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
+        <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+      </div>
     );
   };
 
