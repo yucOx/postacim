@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EyeOff, Reply, Smile, Trash2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatTime } from '../lib/format';
@@ -52,33 +52,71 @@ export function HoverActions({
   onDeleteForMe: () => void;
 }) {
   const [picking, setPicking] = useState(false);
-  const cls =
-    'rounded border border-night-700 bg-night-900 p-1 text-paper-500 transition-colors hover:border-stamp-500/70 hover:text-stamp-400';
+  const [up, setUp] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // the picker must survive the pointer leaving the row — otherwise it closes
+  // the instant the mouse moves away and is unusable. While open: the toolbar
+  // stays visible, an outside click or Escape closes it.
+  useEffect(() => {
+    if (!picking) return;
+    const onDown = (e: PointerEvent): void => {
+      if (!wrapRef.current?.contains(e.target as Node)) setPicking(false);
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setPicking(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [picking]);
+
+  const cls = (active: boolean): string =>
+    `rounded border p-1 text-paper-500 transition-colors ${
+      active
+        ? 'border-brass-500/70 bg-night-800 text-lamp-400'
+        : 'border-night-700 bg-night-900 hover:border-stamp-500/70 hover:text-stamp-400'
+    }`;
   return (
-    <div className="absolute right-4 top-1 z-10 hidden items-center gap-1 group-hover:flex">
-      <button type="button" onClick={onReply} title="yanıtla" aria-label="yanıtla" className={cls}>
+    <div
+      ref={wrapRef}
+      className={`absolute right-4 top-1 z-10 items-center gap-1 ${picking ? 'flex' : 'hidden group-hover:flex'}`}
+    >
+      <button type="button" onClick={onReply} title="yanıtla" aria-label="yanıtla" className={cls(false)}>
         <Reply size={12} />
       </button>
       <button
         type="button"
-        onClick={() => setPicking((v) => !v)}
+        onClick={() => {
+          // viewport'te alta sığmayacaksa seçici yukarı açılır
+          const r = wrapRef.current?.getBoundingClientRect();
+          setUp(!!r && r.bottom + 180 > window.innerHeight);
+          setPicking((v) => !v);
+        }}
         title="tepki ver"
         aria-label="tepki ver"
         aria-expanded={picking}
-        className={cls}
+        className={cls(picking)}
       >
         <Smile size={12} />
       </button>
       {canDeleteAll && (
-        <button type="button" onClick={onDeleteAll} title="herkes için sil" aria-label="herkes için sil" className={cls}>
+        <button type="button" onClick={onDeleteAll} title="herkes için sil" aria-label="herkes için sil" className={cls(false)}>
           <Trash2 size={12} />
         </button>
       )}
-      <button type="button" onClick={onDeleteForMe} title="benim için sil" aria-label="benim için sil" className={cls}>
+      <button type="button" onClick={onDeleteForMe} title="benim için sil" aria-label="benim için sil" className={cls(false)}>
         <EyeOff size={12} />
       </button>
       {picking && (
-        <div className="absolute right-0 top-full z-20 mt-1 flex gap-0.5 rounded-md border border-night-700 bg-night-900 p-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)]">
+        <div
+          className={`animate-seal-in absolute right-0 z-20 flex gap-0.5 rounded-md border border-night-700 bg-night-900 p-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] ${
+            up ? 'bottom-full mb-1' : 'top-full mt-1'
+          }`}
+        >
           {QUICK_EMOJIS.map((emoji) => (
             <button
               key={emoji}
