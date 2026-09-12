@@ -216,10 +216,20 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     })),
   ];
 
-  if (spotlight && (spotId ? participants.some((p) => p.identity === spotId) : false)) {
-    const focusedVideo = allVideos.find((v) => v.key === spotlight) ?? null;
-    const spotPerson = spotId ? participants.find((p) => p.identity === spotId) ?? null : null;
-    const restVideos = allVideos.filter((v) => v.key !== spotlight);
+  // ekran paylaşimi ya da manuel odak varken: TEK video-bazlı odak düzeni.
+  // Manuel odak yoksa varsayılan odak ekran paylaşımıdır — kişi düzeniyle
+  // aynı mantık: şeritteki her akışa tıklayınca odak ona geçer, büyük videoya
+  // tıklayınca (manuel odakta) otomatik düzene (varsayılan ekrana) düşer.
+  const autoFocusVideo = spotlight ? null : (allVideos.find((v) => v.isScreen) ?? null);
+  const focusedKey = spotlight ?? (autoFocusVideo?.key ?? null);
+  const focusedVideo = focusedKey ? (allVideos.find((v) => v.key === focusedKey) ?? null) : null;
+  const focusId = focusedKey?.split(':')[1] ?? null;
+  const focusPerson = focusId ? participants.find((p) => p.identity === focusId) ?? null : null;
+  // manuel odak hedefi odadan ayrıldıysa otomatik düzenlere düş
+  const showFocus = focusedKey !== null && (focusedVideo !== null || focusPerson !== null || !spotlight);
+
+  if (showFocus && focusedKey) {
+    const restVideos = allVideos.filter((v) => v.key !== focusedKey);
     const restIdentities = new Set(restVideos.map((v) => v.identity));
     return (
       <>
@@ -231,20 +241,22 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 key={focusedVideo.key}
                 trackRef={focusedVideo.trackRef}
                 isScreen={focusedVideo.isScreen}
-                isFocus
+                isFocus={!!spotlight}
                 fill
-                onClick={() => setSpotlight(null)}
+                onClick={() => {
+                  if (spotlight) setSpotlight(null);
+                }}
               />
             ) : (
-              spotPerson && (
+              focusPerson && (
                 <div
-                  key={spotlight + '-ph'}
+                  key={focusedKey + '-ph'}
                   onClick={() => setSpotlight(null)}
                   title="büyütmeden çıkar"
                   className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
                 >
-                  <Avatar userId={spotId!} label={nickFor(spotId!)} size={96} srcOverride={null} />
-                  <NamePlate identity={spotId!} isLocal={spotPerson.isLocal} isScreen={false} isFocus />
+                  <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
+                  <NamePlate identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
                 </div>
               )
             )}
@@ -255,7 +267,9 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 key={v.key}
                 onClick={() => setSpotlight(v.key)}
                 title="büyüt"
-                className={`relative aspect-video h-full shrink-0 cursor-pointer overflow-hidden rounded-md border border-brass-700/50 bg-night-850 transition-colors hover:border-brass-500 ${TILE_HIDE}`}
+                className={`relative aspect-video h-full shrink-0 cursor-pointer overflow-hidden rounded-md border ${
+                  spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
+                } bg-night-850 transition-colors ${TILE_HIDE}`}
               >
                 <ParticipantTile
                   trackRef={v.trackRef}
@@ -265,7 +279,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               </div>
             ))}
             {participants
-              .filter((p) => !restIdentities.has(p.identity) && p.identity !== spotId)
+              .filter((p) => !restIdentities.has(p.identity) && p.identity !== focusId)
               .map((p) => (
                 <div
                   key={slotKey(p.identity)}
@@ -278,31 +292,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 </div>
               ))}
           </div>
-        </div>
-      </>
-    );
-  }
-
-  if (screens.length > 0) {
-    return (
-      <>
-        <RemoteAudio />
-        <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-          {/* primary stage — the share owns the full area, sized by the flex
-              container (definite height, no aspect/percentage sizing cycles) */}
-          <div className="flex min-h-0 flex-1 gap-2">
-            {screens.map((t) => (
-              <VideoTile
-                key={slotKey(t.participant.identity) + '-screen'}
-                trackRef={t}
-                isScreen
-                fill
-                onClick={() => toggleSpotlight('screen', t.participant.identity)}
-              />
-            ))}
-          </div>
-          {/* every participant gets a strip slot — clicking enlarges (spotlight) */}
-          <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">{participants.map(stripTile)}</div>
         </div>
       </>
     );
