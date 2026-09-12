@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Mic, MicOff, PhoneOff, PictureInPicture2, Users, Video, VideoOff } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, PictureInPicture2, Pin, PinOff, Users, Video, VideoOff } from 'lucide-react';
 import { ParticipantTile, RoomContext, useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
@@ -53,6 +53,8 @@ export default function VoicePip(): React.ReactNode {
   const toggleMic = useVoiceStore((s) => s.toggleMic);
   const toggleCam = useVoiceStore((s) => s.toggleCam);
   const leave = useVoiceStore((s) => s.leave);
+  const pipPinned = useVoiceStore((s) => s.pipPinned);
+  const setPipPinned = useVoiceStore((s) => s.setPipPinned);
   const selectChannel = useAppStore((s) => s.selectChannel);
   const channel = useAppStore((s) => s.communities.flatMap((c) => c.channels).find((ch) => ch.id === channelId));
   const videoWrapRef = useRef<HTMLDivElement>(null);
@@ -78,12 +80,36 @@ export default function VoicePip(): React.ReactNode {
   if (!channelId) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-72 rounded-lg border border-brass-600/70 bg-night-900 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]">
+    <div
+      className={`fixed bottom-4 right-4 w-72 rounded-lg border border-brass-600/70 bg-night-900 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)] ${
+        pipPinned ? 'z-[60]' : 'z-40'
+      }`}
+    >
       <div className="flex items-center gap-2 px-3 py-2">
         <Users size={14} className="shrink-0 text-lamp-500" aria-hidden />
-        <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50">
+        <button
+          type="button"
+          onClick={() => {
+            selectChannel(channelId);
+            useAppStore.setState({ view: 'community', activeDmId: null });
+          }}
+          className="min-w-0 flex-1 truncate text-left font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50 transition-colors hover:text-lamp-400"
+          title="sesli odaya dön"
+        >
           {channel?.name ?? 'sesli oda'}
-        </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setPipPinned(!pipPinned)}
+          className={`shrink-0 rounded p-1 transition-colors ${
+            pipPinned ? 'text-lamp-400 hover:text-lamp-300' : 'text-paper-500 hover:text-paper-100'
+          }`}
+          title={pipPinned ? 'pinlemeyi kaldır' : 'en üstte sabitle'}
+          aria-label={pipPinned ? 'pinlemeyi kaldır' : 'en üstte sabitle'}
+          aria-pressed={pipPinned}
+        >
+          {pipPinned ? <Pin size={13} /> : <PinOff size={13} />}
+        </button>
       </div>
       {room ? (
         <RoomContext.Provider value={room}>
@@ -123,17 +149,7 @@ export default function VoicePip(): React.ReactNode {
         >
           {camOn ? <Video size={14} /> : <VideoOff size={14} />}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            selectChannel(channelId);
-            useAppStore.setState({ view: 'community', activeDmId: null });
-          }}
-          className="btn-ghost flex-1 !py-1 !text-xs"
-          title="sesli odaya dön"
-        >
-          odaya dön
-        </button>
+        <span className="flex-1" aria-hidden />
         <button
           type="button"
           onClick={() => void enterBrowserPip()}

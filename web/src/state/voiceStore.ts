@@ -49,6 +49,9 @@ interface VoiceState {
   /** PiP corner position, in px from top-left. Persisted so it sticks next time. */
   pipPos: { x: number; y: number };
   setPipPos: (p: { x: number; y: number }) => void;
+  /** pinned = the mini call widget floats above modals/menus too. Persisted. */
+  pipPinned: boolean;
+  setPipPinned: (v: boolean) => void;
   join: (channelId: string) => Promise<void>;
   leave: () => Promise<void>;
   toggleMic: () => Promise<void>;
@@ -76,6 +79,16 @@ function loadPipPos(): { x: number; y: number } {
     // ignore — fall through
   }
   return { x: PIP_DEFAULT.x, y: PIP_DEFAULT.y };
+}
+
+const PIP_PINNED_KEY = 'postacim.voicePipPinned';
+
+function loadPipPinned(): boolean {
+  try {
+    return localStorage.getItem(PIP_PINNED_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 export type CallQuality = 'hizli' | 'dengeli' | 'yuksek';
@@ -194,6 +207,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   isDmCall: false,
   pip: false,
   pipPos: loadPipPos(),
+  pipPinned: loadPipPinned(),
 
   setQuality: (q) => {
     try {
@@ -212,6 +226,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       // private mode / quota — ignore, still update state
     }
     set({ pipPos: p });
+  },
+
+  setPipPinned: (v) => {
+    try {
+      localStorage.setItem(PIP_PINNED_KEY, v ? '1' : '0');
+    } catch {
+      // private mode / quota — ignore, still update state
+    }
+    set({ pipPinned: v });
   },
 
   join: async (channelId) => {
