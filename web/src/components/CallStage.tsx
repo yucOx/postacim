@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ParticipantTile, useParticipants, useTracks, AudioTrack } from '@livekit/components-react';
 import { Track } from 'livekit-client';
+import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
 import { nickFor } from '../lib/nick';
 import Avatar from './Avatar';
@@ -46,7 +47,13 @@ function NamePlate({
 
 // livekit's ParticipantTile renders its own (unstyled) nameplate + mute badges
 // which overlap ours — hide them wherever we draw our own plate
-const TILE_HIDE = '[&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden';
+const TILE_HIDE =
+  ' [&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden';
+
+// ekran paylaşımı asla kırpılmaz (contain — okunabilirlik); kameralar
+// alanı doldurur (cover — Discord davranışı)
+const fit = (isScreen: boolean): string =>
+  isScreen ? '[&_video]:object-contain' : '[&_video]:object-cover';
 
 interface TileProps {
   trackRef: TrackReference;
@@ -58,7 +65,7 @@ interface TileProps {
   fill?: boolean;
 }
 
-function CamTile({ trackRef, onClick, active, isScreen, isFocus, fill }: TileProps): React.ReactNode {
+function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill }: TileProps): React.ReactNode {
   return (
     <div
       onClick={onClick}
@@ -67,25 +74,20 @@ function CamTile({ trackRef, onClick, active, isScreen, isFocus, fill }: TilePro
         fill ? 'min-h-0 min-w-0 flex-1' : 'aspect-video w-full'
       } ${
         active ? 'border-lamp-500/80 ring-1 ring-lamp-500/50' : 'border-brass-700/50 hover:border-brass-500'
-      } ${onClick ? '' : 'cursor-default'}`}
+      } ${fit(isScreen)}${TILE_HIDE}`}
     >
-      {/* object-cover: the video FILLS the tile (contain letterboxes it small);
-          screen shares stay contain for readability, cams crop to fill */}
-      <ParticipantTile
-        trackRef={trackRef}
-        className={`h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover ${TILE_HIDE}`}
-      />
+      <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
       <NamePlate
         identity={trackRef.participant.identity}
         isLocal={trackRef.participant.isLocal}
-        isScreen={isScreen === true}
-        isFocus={isFocus === true}
+        isScreen={isScreen}
+        isFocus={isFocus}
       />
     </div>
   );
 }
 
-function CamPlaceholder({
+function PlaceholderTile({
   identity,
   isLocal,
   onClick,
@@ -117,7 +119,7 @@ function CamPlaceholder({
  *  a camera strip below (Discord style); otherwise cameras fill the area.
  *  Discord-style spotlight: clicking any tile enlarges that participant (their
  *  screen share if they have one, else camera); clicking again returns to the
- *  automatic layout. */
+ *  automatic layout. Screen shares are never cropped — they letterbox. */
 export default function CallStage({ emptyLabel }: { emptyLabel?: string }): React.ReactNode {
   const participants = useParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
@@ -156,19 +158,18 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   }
 
   const slotKey = (identity: string): string => identity;
-  const stripTile = (p: (typeof participants)[number]): React.ReactNode => {
+  const stripTile = (p: Participant): React.ReactNode => {
     const cam = camByIdentity.get(p.identity);
     const focused = p.identity === spotlight;
     return cam ? (
-      <CamTile
+      <VideoTile
         key={slotKey(p.identity)}
         trackRef={cam}
         active={focused}
-        isScreen={false}
         onClick={() => toggleSpotlight(p.identity)}
       />
     ) : (
-      <CamPlaceholder
+      <PlaceholderTile
         key={slotKey(p.identity)}
         identity={p.identity}
         isLocal={p.isLocal}
@@ -178,41 +179,45 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     );
   };
 
-  if (spotlight && spotlit) {
-    // dominant: the spotlit participant — their screen share if any, else cam
-    const spotScreen = screens.find((t) => t.participant.identity === spotlight);
-    const spotCam = camByIdentity.get(spotlight);
+  // odaklı kişinin dominant tile'ı: ekran paylaşımı varsa contain (asla
+  // kırpılmaz), yoksa kamerası cover
+  const dominant = (p: Participant): React.ReactNode => {
+    const screen = screens.find((t) => t.participant.identity === p.identity);
+    const cam = camByIdentity.get(p.identity);
+    return screen ? (
+      <VideoTile
+        key={slotKey(p.identity) + '-dominant-screen'}
+        trackRef={screen}
+        isScreen
+        isFocus
+        fill
+        onClick={() => toggleSpotlight(p.identity)}
+      />
+    ) : cam ? (
+      <VideoTile
+        key={slotKey(p.identity) + '-dominant-cam'}
+        trackRef={cam}
+        isFocus
+        fill
+        onClick={() => toggleSpotlight(p.identity)}
+      />
+    ) : (
+      <div
+        key={slotKey(p.identity) + '-dominant-ph'}
+        className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
+      >
+        <Avatar userId={p.identity} label={nickFor(p.identity)} size={96} srcOverride={null} />
+        <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus />
+      </div>
+    );
+  };
+
+  if (spotlit) {
     return (
       <>
         <RemoteAudio />
         <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-          <div className="flex min-h-0 flex-1 gap-2">
-            {spotScreen ? (
-              <CamTile
-                key={spotlight + '-spot-screen'}
-                trackRef={spotScreen}
-                isScreen
-                isFocus
-                active
-                fill
-                onClick={() => setSpotlight(null)}
-              />
-            ) : spotCam ? (
-              <CamTile key={spotlight + '-spot'} trackRef={spotCam} isFocus active fill onClick={() => setSpotlight(null)} />
-            ) : (
-              <div
-                key={spotlight + '-spot-ph'}
-                onClick={() => setSpotlight(null)}
-                title="büyütmeden çıkar"
-                className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
-              >
-                <div className="h-full max-h-64">
-                  <CamPlaceholder identity={spotlight} isLocal={spotlit.isLocal} active />
-                </div>
-              </div>
-            )}
-          </div>
-          {/* everyone else in the strip — clicking swaps the spotlight */}
+          <div className="flex min-h-0 flex-1 gap-2">{dominant(spotlit)}</div>
           <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">
             {participants.filter((p) => p.identity !== spotlight).map(stripTile)}
           </div>
@@ -230,7 +235,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               container (definite height, no aspect/percentage sizing cycles) */}
           <div className="flex min-h-0 flex-1 gap-2">
             {screens.map((t) => (
-              <CamTile
+              <VideoTile
                 key={slotKey(t.participant.identity) + '-screen'}
                 trackRef={t}
                 isScreen
@@ -240,9 +245,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
             ))}
           </div>
           {/* every participant gets a strip slot — clicking enlarges (spotlight) */}
-          <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">
-            {participants.map(stripTile)}
-          </div>
+          <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">{participants.map(stripTile)}</div>
         </div>
       </>
     );
@@ -262,23 +265,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
         style={{ gridTemplateColumns: cols, justifyItems: count <= 2 ? 'center' : 'stretch' }}
       >
-        {participants.map((p) => {
-          const cam = camByIdentity.get(p.identity);
-          return cam ? (
-            <CamTile
-              key={slotKey(p.identity)}
-              trackRef={cam}
-              onClick={() => toggleSpotlight(p.identity)}
-            />
-          ) : (
-            <CamPlaceholder
-              key={slotKey(p.identity)}
-              identity={p.identity}
-              isLocal={p.isLocal}
-              onClick={() => toggleSpotlight(p.identity)}
-            />
-          );
-        })}
+        {participants.map((p) => stripTile(p))}
       </div>
     </>
   );
