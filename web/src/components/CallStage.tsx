@@ -137,12 +137,18 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       camByIdentity.set(t.participant.identity, t);
     }
   }
-  // manual spotlight (identity) — user override over the automatic layout
+  // manual spotlight — tracks the exact video clicked ("screen:<id>" /
+  // "cam:<id>"), Discord-style: clicking a camera focuses the camera even if
+  // that person also shares their screen
   const [spotlight, setSpotlight] = useState<string | null>(null);
-  const spotlit = spotlight ? participants.find((p) => p.identity === spotlight) ?? null : null;
+  const spotKind: 'screen' | 'cam' = spotlight?.startsWith('screen:') ? 'screen' : 'cam';
+  const spotId = spotlight?.split(':')[1] ?? null;
+  const spotlit = spotId ? participants.find((p) => p.identity === spotId) ?? null : null;
 
-  const toggleSpotlight = (identity: string): void =>
-    setSpotlight((cur) => (cur === identity ? null : identity));
+  const toggleSpotlight = (kind: 'screen' | 'cam', identity: string): void => {
+    const key = `${kind}:${identity}`;
+    setSpotlight((cur) => (cur === key ? null : key));
+  };
 
   if (participants.length === 0) {
     return (
@@ -160,12 +166,12 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const slotKey = (identity: string): string => identity;
   const stripTile = (p: Participant): React.ReactNode => {
     const cam = camByIdentity.get(p.identity);
-    const focused = p.identity === spotlight;
+    const focused = spotlight === `cam:${p.identity}`;
     const border = focused ? 'border-lamp-500/80' : 'border-brass-700/50';
     return cam ? (
       <div
         key={slotKey(p.identity)}
-        onClick={() => toggleSpotlight(p.identity)}
+        onClick={() => toggleSpotlight('cam', p.identity)}
         title={focused ? 'büyütmeden çıkar' : 'büyüt'}
         className={`relative aspect-video h-full shrink-0 cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${border} ${TILE_HIDE}`}
       >
@@ -175,7 +181,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     ) : (
       <div
         key={slotKey(p.identity)}
-        onClick={() => toggleSpotlight(p.identity)}
+        onClick={() => toggleSpotlight('cam', p.identity)}
         title={focused ? 'büyütmeden çıkar' : 'büyüt'}
         className={`flex aspect-video h-full shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850 transition-colors ${border}`}
       >
@@ -185,36 +191,33 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     );
   };
 
-  // odaklı kişinin dominant tile'ı: ekran paylaşımı varsa contain (asla
-  // kırpılmaz), yoksa kamerası cover
+  // odaklı kişinin dominant tile'ı: kullanıcının tıkladığı akış önce
+  // (ekran contain — asla kırpılmaz; kamera cover); kaybolursa diğer akışına düşer
   const dominant = (p: Participant): React.ReactNode => {
     const screen = screens.find((t) => t.participant.identity === p.identity);
     const cam = camByIdentity.get(p.identity);
-    return screen ? (
+    const track = spotKind === 'screen' ? (screen ?? cam) : (cam ?? screen);
+    if (!track) {
+      return (
+        <div
+          key={slotKey(p.identity) + '-dominant-ph'}
+          className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
+        >
+          <Avatar userId={p.identity} label={nickFor(p.identity)} size={96} srcOverride={null} />
+          <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus />
+        </div>
+      );
+    }
+    const isScreen = track.source === Track.Source.ScreenShare;
+    return (
       <VideoTile
-        key={slotKey(p.identity) + '-dominant-screen'}
-        trackRef={screen}
-        isScreen
+        key={slotKey(p.identity) + '-dominant'}
+        trackRef={track}
+        isScreen={isScreen}
         isFocus
         fill
-        onClick={() => toggleSpotlight(p.identity)}
+        onClick={() => setSpotlight(null)}
       />
-    ) : cam ? (
-      <VideoTile
-        key={slotKey(p.identity) + '-dominant-cam'}
-        trackRef={cam}
-        isFocus
-        fill
-        onClick={() => toggleSpotlight(p.identity)}
-      />
-    ) : (
-      <div
-        key={slotKey(p.identity) + '-dominant-ph'}
-        className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
-      >
-        <Avatar userId={p.identity} label={nickFor(p.identity)} size={96} srcOverride={null} />
-        <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus />
-      </div>
     );
   };
 
@@ -246,7 +249,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 trackRef={t}
                 isScreen
                 fill
-                onClick={() => toggleSpotlight(t.participant.identity)}
+                onClick={() => toggleSpotlight('screen', t.participant.identity)}
               />
             ))}
           </div>

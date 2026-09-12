@@ -10,13 +10,13 @@ import { toast } from './Toast';
 
 const NO_PARTICIPANTS: { user_id: string; nick: string }[] = [];
 
-// hangi akış büyük gösterilsin: otomatik (ekran önce) / ekran / kamera
-type VidPref = 'auto' | 'screen' | 'camera';
+// hangi akış büyük gösterilsin: otomatik (ekran önce) / ekran / kamera / sen
+type VidPref = 'auto' | 'screen' | 'camera' | 'self';
 const VID_PREF_KEY = 'postacim.pipVideo';
 function loadVidPref(): VidPref {
   try {
     const v = localStorage.getItem(VID_PREF_KEY);
-    return v === 'screen' || v === 'camera' ? v : 'auto';
+    return v === 'screen' || v === 'camera' || v === 'self' ? v : 'auto';
   } catch {
     return 'auto';
   }
@@ -36,14 +36,18 @@ function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | nul
   // kamera/oto arasında döngüyle seçebilir (Discord odak akışı gibi)
   const [pref, setPref] = useState<VidPref>(loadVidPref);
   const remoteCam = cams.find((t) => !t.participant.isLocal) ?? null;
+  const selfCam = cams.find((t) => t.participant.isLocal) ?? null;
   const pick =
     pref === 'screen'
-      ? (screens[0] ?? remoteCam ?? cams[0] ?? null)
+      ? (screens[0] ?? remoteCam ?? selfCam ?? null)
       : pref === 'camera'
-        ? (remoteCam ?? cams[0] ?? screens[0] ?? null)
-        : (screens[0] ?? remoteCam ?? cams[0] ?? null);
+        ? (remoteCam ?? selfCam ?? screens[0] ?? null)
+        : pref === 'self'
+          ? (selfCam ?? remoteCam ?? screens[0] ?? null)
+          : (screens[0] ?? remoteCam ?? selfCam ?? null);
   const cycle = (): void => {
-    const next: VidPref = pref === 'auto' ? 'screen' : pref === 'screen' ? 'camera' : 'auto';
+    const next: VidPref =
+      pref === 'auto' ? 'screen' : pref === 'screen' ? 'camera' : pref === 'camera' ? 'self' : 'auto';
     setPref(next);
     try {
       localStorage.setItem(VID_PREF_KEY, next);
@@ -73,9 +77,9 @@ function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | nul
           type="button"
           onClick={cycle}
           className="absolute bottom-1 right-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50 transition-colors hover:border-lamp-500/70 hover:text-lamp-400"
-          title="büyük gösterilecek akışı değiştir (oto → ekran → kamera)"
+          title="büyük gösterilecek akışı değiştir (oto → ekran → kamera → sen)"
         >
-          {pref === 'auto' ? 'oto' : pref === 'screen' ? 'ekran' : 'kamera'}
+          {pref === 'auto' ? 'oto' : pref === 'screen' ? 'ekran' : pref === 'camera' ? 'kamera' : 'sen'}
         </button>
       )}
     </div>
