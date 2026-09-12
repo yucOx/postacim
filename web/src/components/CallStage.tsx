@@ -4,6 +4,7 @@ import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
 import { nickFor } from '../lib/nick';
+import { useVoiceStore } from '../state/voiceStore';
 import Avatar from './Avatar';
 
 /** Remote mic audio — invisible <audio> elements. Without this nothing in the
@@ -63,9 +64,11 @@ interface TileProps {
   isFocus?: boolean;
   /** fill the flex container (dominant tile) instead of aspect-video (strip/grid) */
   fill?: boolean;
+  /** absolute overlay inside the tile (e.g. the sharer's stop button) */
+  overlay?: React.ReactNode;
 }
 
-function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill }: TileProps): React.ReactNode {
+function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill, overlay }: TileProps): React.ReactNode {
   return (
     <div
       onClick={onClick}
@@ -83,6 +86,7 @@ function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocu
         isScreen={isScreen}
         isFocus={isFocus}
       />
+      {overlay}
     </div>
   );
 }
@@ -143,6 +147,10 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const [spotlight, setSpotlight] = useState<string | null>(null);
   const spotKind: 'screen' | 'cam' = spotlight?.startsWith('screen:') ? 'screen' : 'cam';
   const spotId = spotlight?.split(':')[1] ?? null;
+
+  const toggleScreen = useVoiceStore((s) => s.toggleScreen);
+  // paylaşım görünümü yerleşimi: odak (büyük + sağ şerit) / yan yana eşit bölmeler
+  const [shareLayout, setShareLayout] = useState<'focus' | 'side'>('focus');
 
   const toggleSpotlight = (kind: 'screen' | 'cam', identity: string): void => {
     const key = `${kind}:${identity}`;
@@ -216,84 +224,74 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     })),
   ];
 
-  // ekran paylaşımı ya da manuel odak varken: Discord paylaşım görünümü —
-  // odak video solda büyük, sağ dikey şeritte TÜM katılımcıların slotu
-  // (akışı olanın tile'ı, olmayanın avatarı) — kimse kaybolmaz
+  // ekran paylaşımı varken iki yerleşim: 'focus' (odak solda büyük + sağ
+  // dikey şerit) ve 'side' (tüm akışlar normal aramadaki gibi yan yana eşit
+  // bölmeler). Yayına tıklamak ikisi arasında geçer. Paylaşan kişi kendi
+  // yayınında 'paylaşımı durdur' butonunu görür.
+  const stopBtn = (small = false): React.ReactNode => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        void toggleScreen();
+      }}
+      className={`absolute right-2 top-2 z-10 rounded-md border border-stamp-500/70 bg-night-950/85 font-semibold text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white ${
+        small ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'
+      }`}
+    >
+      paylaşımı durdur
+    </button>
+  );
+
   const autoFocusVideo = spotlight ? null : (allVideos.find((v) => v.isScreen) ?? null);
   const focusedKey = spotlight ?? (autoFocusVideo?.key ?? null);
   const focusedVideo = focusedKey ? (allVideos.find((v) => v.key === focusedKey) ?? null) : null;
   const focusId = focusedKey?.split(':')[1] ?? null;
   const focusPerson = focusId ? participants.find((p) => p.identity === focusId) ?? null : null;
 
-  if (focusedKey && (focusedVideo || focusPerson)) {
-    const slotFor = (p: Participant): React.ReactNode => {
-      const pVideos = allVideos.filter((v) => v.identity === p.identity && v.key !== focusedKey);
-      if (pVideos.length > 0) {
-        return pVideos.map((v) => (
-          <div
-            key={v.key}
-            onClick={() => setSpotlight(v.key)}
-            title="büyüt"
-            className={`relative aspect-video w-full shrink-0 cursor-pointer overflow-hidden rounded-md border ${
-              spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
-            } bg-night-850 transition-colors ${TILE_HIDE}`}
-          >
-            <ParticipantTile
-              trackRef={v.trackRef}
-              className={`h-full w-full [&_video]:h-full [&_video]:w-full ${fit(v.isScreen)}`}
-            />
-            <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
-          </div>
-        ));
-      }
+  // yan yana mod: ekran paylaşımı + tüm akışlar/avatarlar eşit bölmeler
+  if (screens.length > 0 && shareLayout === 'side') {
+    const paneFor = (v: { key: string; trackRef: TrackReference; isScreen: boolean; identity: string }): React.ReactNode => {
+      const own = v.trackRef.participant.isLocal && v.isScreen;
       return (
         <div
-          key={slotKey(p.identity) + '-slot'}
-          onClick={p.identity === focusId ? undefined : () => setSpotlight(`cam:${p.identity}`)}
-          title={p.identity === focusId ? undefined : 'büyüt'}
-          className="relative flex aspect-video w-full shrink-0 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
+          key={v.key}
+          onClick={() => (v.isScreen ? setShareLayout('focus') : setSpotlight(`cam:${v.identity}`))}
+          title={v.isScreen ? 'odak görünümüne dön' : 'büyüt'}
+          className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border ${
+            spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
+          } bg-night-850 transition-colors ${TILE_HIDE}`}
         >
-          <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
-          <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+          <ParticipantTile
+            trackRef={v.trackRef}
+            className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+          />
+          <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
+          {own && stopBtn(true)}
         </div>
       );
     };
+    const videoIds = new Set(allVideos.map((v) => v.identity));
     return (
       <>
         <RemoteAudio />
         <div className="flex min-h-0 flex-1 gap-2 p-3">
-          <div className="flex min-h-0 min-w-0 flex-1">
-            {focusedVideo ? (
-              <VideoTile
-                key={focusedVideo.key}
-                trackRef={focusedVideo.trackRef}
-                isScreen={focusedVideo.isScreen}
-                isFocus={!!spotlight}
-                fill
-                onClick={() => {
-                  if (spotlight) setSpotlight(null);
-                }}
-              />
-            ) : (
-              focusPerson && (
-                <div
-                  key={focusedKey + '-ph'}
-                  onClick={() => setSpotlight(null)}
-                  title="büyütmeden çıkar"
-                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
-                >
-                  <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
-                  <NamePlate identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
-                </div>
-              )
-            )}
-          </div>
-          <div className="flex w-44 shrink-0 flex-col gap-2 overflow-y-auto">{participants.map(slotFor)}</div>
+          {allVideos.map(paneFor)}
+          {participants
+            .filter((p) => !videoIds.has(p.identity))
+            .map((p) => (
+              <div
+                key={slotKey(p.identity)}
+                className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
+              >
+                <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
+                <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+              </div>
+            ))}
         </div>
       </>
     );
   }
-
   const count = participants.length;
 
   // 1-2 kişide Discord gibi: bölmeler sahnenin tüm yüksekliğini doldurur,
