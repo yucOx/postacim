@@ -78,7 +78,7 @@ function CamTile({ trackRef, onClick, active, isScreen, isFocus, fill }: TilePro
       <NamePlate
         identity={trackRef.participant.identity}
         isLocal={trackRef.participant.isLocal}
-        isScreen={isScreen}
+        isScreen={isScreen === true}
         isFocus={isFocus === true}
       />
     </div>
