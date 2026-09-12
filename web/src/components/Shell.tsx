@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { KeyRound, LogOut, Menu, ShieldCheck } from 'lucide-react';
+import { Bell, KeyRound, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
 import { wsConnect, wsDisconnect, onWsStatus, type WsStatus } from '../ws/socket';
@@ -14,6 +14,8 @@ import DmChat from './DmChat';
 import IncomingCall from './IncomingCall';
 import CallView from './CallView';
 import PiPWidget from './PiPWidget';
+import VoicePip from './VoicePip';
+import SettingsModal from './SettingsModal';
 import Modal from './Modal';
 import { PigeonMark } from './Brand';
 import Avatar from './Avatar';
@@ -87,6 +89,7 @@ export default function Shell() {
   const [pwModal, setPwModal] = useState(false);
   const [recModal, setRecModal] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
+  const [notifModal, setNotifModal] = useState(false);
   const [deviceOffer, setDeviceOffer] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const loaded = useAppStore((s) => s.loaded);
@@ -94,8 +97,10 @@ export default function Shell() {
   const wireEvents = useAppStore((s) => s.wireEvents);
   const channel = useAppStore((s) => s.activeChannel());
   const view = useAppStore((s) => s.view);
+  const activeChannelId = useAppStore((s) => s.activeChannelId);
   const activeDm = useAppStore((s) => (s.activeDmId ? s.dms.find((d) => d.id === s.activeDmId) ?? null : null));
   const isDmCall = useVoiceStore((s) => s.isDmCall);
+  const joinedVoiceChannel = useVoiceStore((s) => s.joinedChannelId);
   const pip = useVoiceStore((s) => s.pip);
   const dms = useAppStore((s) => s.dms);
   const gdms = useAppStore((s) => s.gdms);
@@ -207,6 +212,13 @@ export default function Shell() {
             <span className="hidden sm:inline">{user?.nick}</span>
           </button>
           <button
+            onClick={() => setNotifModal(true)}
+            className="btn-ghost !px-2 !py-1 !text-xs"
+            title="bildirim ayarları"
+          >
+            <Bell size={13} />
+          </button>
+          <button
             onClick={() => setRecModal(true)}
             className="btn-ghost !px-2 !py-1 !text-xs"
             title="kurtarma ifadesi"
@@ -287,9 +299,14 @@ export default function Shell() {
       {pwModal && <PasswordModal onClose={() => setPwModal(false)} />}
       {recModal && <RecoveryModal onClose={() => setRecModal(false)} />}
       {profileModal && <ProfileModal onClose={() => setProfileModal(false)} />}
+      {notifModal && <SettingsModal onClose={() => setNotifModal(false)} />}
       {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
       {isDmCall && !pip && <CallView />}
       {isDmCall && pip && <PiPWidget />}
+      {/* ongoing community call, minimized while browsing other rooms */}
+      {!isDmCall && joinedVoiceChannel && !(view === 'community' && channel?.type === 'voice' && activeChannelId === joinedVoiceChannel) && (
+        <VoicePip />
+      )}
       <IncomingCall />
     </div>
   );

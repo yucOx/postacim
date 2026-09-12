@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Hash, Lock, MoreVertical, Plus, Settings, Volume2 } from 'lucide-react';
+import { Bell, BellOff, Hash, Lock, MoreVertical, Plus, Settings, Volume2 } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useChatStore } from '../state/chatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
+import { useSettingsStore } from '../state/settingsStore';
 import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
 import CommunitySettings from './CommunitySettings';
@@ -22,6 +23,8 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
   const [confirm, setConfirm] = useState<'leave' | 'delete' | null>(null);
   const leaveCommunity = useAppStore((s) => s.leaveCommunity);
   const deleteCommunity = useAppStore((s) => s.deleteCommunity);
+  const muted = useSettingsStore((s) => !!community && s.mutedCommunities.includes(community.id));
+  const toggleCommunityMute = useSettingsStore((s) => s.toggleCommunityMute);
   const [modalType, setModalType] = useState<'text' | 'voice' | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -92,6 +95,7 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
         <span className="truncate font-display text-base font-semibold uppercase tracking-[0.12em] text-paper-100">
           {community.name}
         </span>
+        {muted && <BellOff size={13} className="ml-1 shrink-0 text-paper-500" aria-label="bildirimler susturulmuş" />}
         <button
           onClick={() => setMenu(true)}
           className="relative ml-2 shrink-0 rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
@@ -195,6 +199,14 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
                 ayarlar
               </button>
             )}
+            <button
+              onClick={() => toggleCommunityMute(community.id)}
+              className="btn-ghost"
+              title="bu sunucunun bildirim sesini kapat/aç (okunmadı göstergeleri kalır)"
+            >
+              {muted ? <BellOff size={14} /> : <Bell size={14} />}
+              {muted ? 'bildirimleri aç' : 'bildirimleri sustur'}
+            </button>
             {isOwner ? (
               <button onClick={() => setConfirm('delete')} className="btn-stamp">
                 topluluğu sil

@@ -5,6 +5,7 @@ import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
 import { decryptText, encryptText, nextSendIndex } from '../crypto/message';
 import { ReplayFilter } from '../lib/replay';
+import { notifyIncomingMessage } from '../lib/notify';
 import { onServerEvent } from '../ws/socket';
 
 // server replay sightings for this session; channel ids never collide with dmChatStore's
@@ -233,6 +234,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const app = useAppStore.getState();
       if (display.body === null && !app.channelKeys[raw.channel_id]?.[raw.key_version]) {
         void app.loadBootstrap();
+      }
+      // chime + OS toast for messages in rooms we're not looking at
+      if (!amSender(display) && !(app.view === 'community' && app.activeChannelId === raw.channel_id)) {
+        const com = app.communities.find((c) => c.channels.some((ch) => ch.id === raw.channel_id));
+        const chName = com?.channels.find((ch) => ch.id === raw.channel_id)?.name;
+        if (com && chName) {
+          notifyIncomingMessage({
+            channelId: raw.channel_id,
+            communityId: com.id,
+            title: `${com.name} · #${chName}`,
+            nick: display.nick,
+          });
+        }
       }
     });
   },

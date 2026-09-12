@@ -1,23 +1,30 @@
-// Short notification blip — WebAudio, no asset files.
+// Notification chime — WebAudio, no asset files. Two soft sine notes
+// (E5 → A5, a gentle "ding-dong") with a bell-like fast attack and decay.
 let ctx: AudioContext | null = null;
 
-export function playPop(): void {
+export function playChime(): void {
   try {
     ctx ??= new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(660, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08);
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.3);
+    const t0 = ctx.currentTime;
+    const notes: [number, number][] = [
+      [659.25, 0], // E5
+      [880, 0.1], // A5
+    ];
+    for (const [freq, at] of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0 + at);
+      gain.gain.exponentialRampToValueAtTime(0.12, t0 + at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0 + at);
+      osc.stop(t0 + at + 0.4);
+    }
   } catch {
-    // audio blocked until first user gesture — fine, title badge still shows
+    // audio blocked until first user gesture — fine, the title badge still shows
   }
 }

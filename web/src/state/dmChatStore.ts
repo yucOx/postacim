@@ -5,7 +5,7 @@ import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
 import { decryptText, encryptText, nextSendIndex, type MsgScope } from '../crypto/message';
 import { ReplayFilter } from '../lib/replay';
-import { playPop } from '../lib/sound';
+import { notifyIncomingMessage } from '../lib/notify';
 import { onServerEvent } from '../ws/socket';
 
 // dm_/gdm_ ids never collide with chatStore's channel ids — separate filter is safe
@@ -196,11 +196,22 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
     const onMsg = (raw: ChatMessage): void => {
       // replayed ciphertext arrives as a fresh row id with a seen client id — drop it
       if (raw.client_id && replays.check(raw.channel_id, raw.client_id)) return;
+      const display = toDisplay(raw);
       set((s) => ({
-        messages: { ...s.messages, [raw.channel_id]: insertSorted(s.messages[raw.channel_id] ?? [], toDisplay(raw)) },
+        messages: { ...s.messages, [raw.channel_id]: insertSorted(s.messages[raw.channel_id] ?? [], display) },
       }));
-      // notification for background DMs
-      if (useAppStore.getState().activeDmId !== raw.channel_id) playPop();
+      // notification for background DMs (never for own messages sent from another tab)
+      const app = useAppStore.getState();
+      if (
+        app.activeDmId !== raw.channel_id &&
+        display.senderId !== useAuthStore.getState().user?.id
+      ) {
+        const title =
+          app.dms.find((d) => d.id === raw.channel_id)?.peer.nick ??
+          app.gdms.find((g) => g.id === raw.channel_id)?.name ??
+          'özel mesaj';
+        notifyIncomingMessage({ channelId: raw.channel_id, title, nick: display.nick });
+      }
     };
     onServerEvent((e) => {
       if (e.type === 'dm:message') onMsg(e.message as ChatMessage);
