@@ -25,7 +25,9 @@ import { deviceOfferDeclined, deviceUnlockSupported, hasDeviceUnlock } from '../
 import { generateMnemonic, quizPositions } from '../crypto/bip39';
 import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
+import { useTypingStore } from '../state/typingStore';
 import { useUnreadStore, unreadCount } from '../state/unreadStore';
+import { useSettingsStore } from '../state/settingsStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { useSecurityStore } from '../state/securityStore';
 import { readRoute } from '../router';
@@ -139,6 +141,7 @@ export default function Shell() {
     wireEvents();
     useChatStore.getState().wire();
     useDmChatStore.getState().wire();
+    useTypingStore.getState().wire();
     useVoiceStore.getState().wire();
     wsConnect();
     void loadBootstrap();
@@ -155,6 +158,19 @@ export default function Shell() {
   // live connection badge — the socket retries forever; this says when it's down
   const [wsStat, setWsStat] = useState<WsStatus>('offline');
   useEffect(() => onWsStatus(setWsStat), []);
+
+  // one-time desktop-notification ask (Discord-style): only while the browser
+  // would still show its own prompt ('default'), never twice
+  const [notifPrompt, setNotifPrompt] = useState(false);
+  const [notifHint, setNotifHint] = useState<string | null>(null);
+  useEffect(() => {
+    if (!loaded || !user) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'default') return;
+    if (useSettingsStore.getState().desktopAsked) return;
+    setNotifPrompt(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   // F5 restore: once bootstrap is in, the URL slug decides where you land
   // (the re-auth card sits in front of this — after the password you're back
@@ -236,6 +252,51 @@ export default function Shell() {
           </button>
         </div>
       </header>
+
+      {/* tek seferlik masaüstü bildirim teklifi — tarayıcı kendi prompt'unu
+          gösterebileceği ('default') durumda sorulur, bir daha asla */}
+      {notifPrompt && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-brass-600/40 bg-lamp-100/70 px-3 py-2">
+          <Bell size={14} className="shrink-0 text-lamp-500" aria-hidden />
+          <span className="min-w-0 flex-1 text-sm text-lamp-300">
+            {notifHint ?? 'masaüstü bildirimleri açılsın mı? sekme arkadayken gönderen ve oda görünür — içerik asla'}
+          </span>
+          {!notifHint && (
+            <>
+              <button
+                onClick={() => {
+                  void Notification.requestPermission().then((perm) => {
+                    useSettingsStore.getState().markDesktopAsked();
+                    if (perm === 'granted') {
+                      useSettingsStore.getState().enableDesktop();
+                      setNotifPrompt(false);
+                    } else {
+                      setNotifHint('izin verilmedi — adres çubuğundaki kilitten Bildirimler iznini ver, sonra ayarlardan tekrar aç');
+                    }
+                  });
+                }}
+                className="btn-lamp !py-1 !text-xs"
+              >
+                aç
+              </button>
+              <button
+                onClick={() => {
+                  useSettingsStore.getState().markDesktopAsked();
+                  setNotifPrompt(false);
+                }}
+                className="btn-ghost !py-1 !text-xs"
+              >
+                şimdi değil
+              </button>
+            </>
+          )}
+          {notifHint && (
+            <button onClick={() => setNotifPrompt(false)} className="btn-ghost !py-1 !text-xs">
+              tamam
+            </button>
+          )}
+        </div>
+      )}
 
       {/* anahtar defteri çelişkisi — zincir kopmuş / yeniden yazılmış /
           kimliğimiz başka anahtarla yayınlanıyor: bariz kırmızı */}

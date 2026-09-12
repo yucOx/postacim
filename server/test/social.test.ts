@@ -260,3 +260,51 @@ describe('voice presence over WS', () => {
     ws.close();
   });
 });
+
+describe('typing relay over WS', () => {
+  it('member typing is relayed; non-member typing is dropped', async () => {
+    const tOwner = await makeUser(srv.baseUrl, 'ty');
+    const com = await tOwner.call('POST', '/communities', {
+      name: 'yaziyor-test',
+      channels: [{ name: 'genel', type: 'text', wrapped_key: W('T') }],
+    });
+    expect(com.status).toBe(201);
+    const comJ = (await com.json()) as { community: { id: string }; channels: { id: string }[] };
+    const textCh = comJ.channels[0]!.id;
+
+    const { WebSocket } = await import('ws');
+    const openSocket = async (u: TestUser): Promise<InstanceType<typeof WebSocket>> => {
+      const ws = new WebSocket(srv.baseUrl.replace('/api', '').replace(/^http/, 'ws') + '/ws', {});
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('ws ready timeout')), 5000);
+        ws.on('message', (d: { toString(): string }) => {
+          const e = JSON.parse(d.toString()) as { type: string };
+          if (e.type === 'ready') {
+            clearTimeout(t);
+            resolve();
+          }
+        });
+        ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: u.token })));
+        ws.on('error', reject);
+      });
+      return ws;
+    };
+
+    const ownerWs = await openSocket(tOwner);
+    const strangerWs = await openSocket(stranger);
+    const relayed: string[] = [];
+    ownerWs.on('message', (d: { toString(): string }) => {
+      const e = JSON.parse(d.toString()) as { type: string; user?: { nick: string } };
+      if (e.type === 'channel:typing' && e.user) relayed.push(e.user.nick);
+    });
+
+    ownerWs.send(JSON.stringify({ type: 'typing', channel_id: textCh }));
+    await new Promise((r) => setTimeout(r, 300));
+    strangerWs.send(JSON.stringify({ type: 'typing', channel_id: textCh }));
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(relayed).toEqual([tOwner.nick]); // own relay arrived; stranger (non-member) dropped
+    ownerWs.close();
+    strangerWs.close();
+  });
+});

@@ -23,9 +23,15 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
       setError('bu tarayıcıda masaüstü bildirimi yok — güvenli bağlantı gerekir (https veya localhost)');
       return;
     }
+    if (Notification.permission === 'denied') {
+      setError(
+        'tarayıcı izni kapalı: adres çubuğundaki kilit simgesine tıkla → Bildirimler → İzin ver, sonra buradan tekrar aç',
+      );
+      return;
+    }
     const perm = await Notification.requestPermission();
     if (perm === 'granted') useSettingsStore.getState().enableDesktop();
-    else setError('izin verilmedi — tarayıcının adres çubuğundaki kilitten izin verebilirsin');
+    else setError('izin verilmedi — adres çubuğundaki kilit simgesinden Bildirimler iznini verebilirsin');
   };
 
   return (

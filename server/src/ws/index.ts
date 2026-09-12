@@ -4,9 +4,11 @@ import { verifySession } from '../auth/sessions.js';
 import { hub } from './hub.js';
 import { db } from '../db.js';
 import { getDm } from '../lib/social.js';
+import { memberRole } from '../lib/access.js';
 
 // Auth-first-frame protocol: the first message must authenticate the socket,
-// anything else closes it. After that only voice_state is accepted.
+// anything else closes it. After that voice_state, call signaling and typing
+// relays are accepted.
 export function attachWs(app: FastifyInstance): void {
   const wss = new WebSocketServer({ server: app.server, path: '/ws', maxPayload: 1 << 20 });
 
@@ -65,6 +67,43 @@ export function attachWs(app: FastifyInstance): void {
         if (!nick) return;
         hub.setVoice(userId, nick.nick, channel.community_id, msg.channel_id, msg.state === 'joined');
         return;
+      }
+
+      // --- typing indicators: pure relay, no state, no history ---
+      // community channels reach every member of the community (every member
+      // holds every channel key anyway — channel membership is not a secret);
+      // dm/gdm reach only the other participants
+      if (msg?.type === 'typing' && typeof msg.channel_id === 'string') {
+        const community = db
+          .prepare('SELECT community_id FROM channels WHERE id = ?')
+          .get(msg.channel_id) as { community_id: string } | undefined;
+        const typer = db.prepare('SELECT nick FROM users WHERE id = ?').get(userId) as
+          | { nick: string }
+          | undefined;
+        if (!typer) return;
+        const payload = {
+          type: 'channel:typing',
+          channel_id: msg.channel_id,
+          user: { id: userId, nick: typer.nick },
+        };
+        if (community) {
+          if (!memberRole(community.community_id, userId)) return;
+          hub.broadcast(community.community_id, payload);
+          return;
+        }
+        if (msg.channel_id.startsWith('dm_')) {
+          const dm = getDm(msg.channel_id, userId);
+          if (dm) hub.sendToUser(dm.user_a === userId ? dm.user_b : dm.user_a, payload);
+          return;
+        }
+        if (msg.channel_id.startsWith('gdm_')) {
+          const members = db
+            .prepare('SELECT user_id FROM gdm_members WHERE channel_id = ?')
+            .all(msg.channel_id) as { user_id: string }[];
+          for (const m of members) {
+            if (m.user_id !== userId) hub.sendToUser(m.user_id, payload);
+          }
+        }
       }
 
       // --- 1:1 DM call signaling (caller/relayed; media goes through LiveKit) ---

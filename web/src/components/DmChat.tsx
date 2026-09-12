@@ -8,8 +8,10 @@ import { useHiddenStore, NO_HIDDEN } from '../state/hiddenStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { formatDay, sameDay } from '../lib/format';
+import { wsSend } from '../ws/socket';
 import ConfirmDialog from './ConfirmDialog';
 import MessageRow from './MessageRow';
+import TypingLine from './TypingLine';
 import { deleteForEveryone, DeletedRow, HoverActions } from './MsgDelete';
 import Composer from './Composer';
 import Modal from './Modal';
@@ -106,6 +108,13 @@ export default function DmChat({ dmId }: { dmId: string }) {
   useEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView();
   }, [visible.length]);
+
+  // unread divider anchor — read marker frozen at entry (like the community chat)
+  const [entryRead, setEntryRead] = useState(() => useUnreadStore.getState().readMap[dmId] ?? 0);
+  useEffect(() => {
+    setEntryRead(useUnreadStore.getState().readMap[dmId] ?? 0);
+  }, [dmId]);
+  const dividerId = useMemo(() => visible.find((m) => m.id > entryRead)?.id ?? null, [visible, entryRead]);
 
   const onScroll = (): void => {
     const el = scrollRef.current;
@@ -216,6 +225,13 @@ export default function DmChat({ dmId }: { dmId: string }) {
                   <div className="perf flex-1" aria-hidden />
                 </div>
               )}
+              {m.id === dividerId && (
+                <div className="my-1 flex items-center gap-2 px-4">
+                  <div className="h-px flex-1 bg-brass-500" aria-hidden />
+                  <span className="plate !text-[10px] !tracking-[0.14em] text-brass-400">YENİ</span>
+                  <div className="h-px flex-1 bg-brass-500" aria-hidden />
+                </div>
+              )}
               {m.deleted ? (
                 <DeletedRow nick={m.nick} sentAt={m.sentAt} />
               ) : (
@@ -235,9 +251,11 @@ export default function DmChat({ dmId }: { dmId: string }) {
         })}
         <div ref={bottomRef} />
       </div>
+      <TypingLine channelId={dmId} />
       <Composer
         send={(body) => send(dmId, body)}
         sending={sending}
+        onTyping={() => wsSend({ type: 'typing', channel_id: dmId })}
         placeholder={dm ? `@${dm.peer.nick} — şifreli mesaj…  (Enter: gönder)` : `${gdm!.name} — şifreli mesaj…  (Enter: gönder)`}
       />
       {adding && gdm && <AddMemberModal gdmId={gdm.id} onClose={() => setAdding(false)} />}

@@ -7,15 +7,19 @@ export default function Composer({
   sending,
   placeholder,
   disabled = false,
+  onTyping,
 }: {
   send: (body: string) => Promise<void>;
   sending: boolean;
   placeholder: string;
   disabled?: boolean;
+  /** fired (throttled) while the user types — typing indicator relay */
+  onTyping?: () => void;
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const lastTyping = useRef(0);
 
   const resize = (): void => {
     const el = areaRef.current;
@@ -55,6 +59,10 @@ export default function Composer({
           onChange={(e) => {
             setText(e.target.value);
             resize();
+            if (onTyping && e.target.value.trim() && Date.now() - lastTyping.current > 2500) {
+              lastTyping.current = Date.now();
+              onTyping();
+            }
           }}
           onKeyDown={onKey}
           rows={1}

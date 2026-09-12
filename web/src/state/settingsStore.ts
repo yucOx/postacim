@@ -6,6 +6,7 @@ import { create } from 'zustand';
 const SOUND_KEY = 'pgv_sound';
 const DESKTOP_KEY = 'pgv_desktop';
 const MUTE_KEY = 'pgv_muted_coms';
+const ASKED_KEY = 'pgv_desktop_asked';
 
 function loadBool(key: string, dflt: boolean): boolean {
   try {
@@ -31,9 +32,12 @@ interface SettingsState {
   desktopOn: boolean;
   /** per-community sound mute — the unread badges stay, only the sound stops */
   mutedCommunities: string[];
+  /** the one-time startup prompt was shown (never nag again) */
+  desktopAsked: boolean;
   toggleSound: () => void;
   enableDesktop: () => void;
   disableDesktop: () => void;
+  markDesktopAsked: () => void;
   toggleCommunityMute: (communityId: string) => void;
 }
 
@@ -41,6 +45,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   soundOn: loadBool(SOUND_KEY, true),
   desktopOn: loadBool(DESKTOP_KEY, false),
   mutedCommunities: loadMuted(),
+  desktopAsked: loadBool(ASKED_KEY, false),
 
   toggleSound: () => {
     const next = !get().soundOn;
@@ -68,6 +73,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // ignore
     }
     set({ desktopOn: false });
+  },
+
+  markDesktopAsked: () => {
+    try {
+      localStorage.setItem(ASKED_KEY, '1');
+    } catch {
+      // ignore
+    }
+    set({ desktopAsked: true });
   },
 
   toggleCommunityMute: (communityId) => {

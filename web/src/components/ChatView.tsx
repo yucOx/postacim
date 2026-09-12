@@ -4,8 +4,10 @@ import { useChatStore, type DisplayMessage, amSender } from '../state/chatStore'
 import { useHiddenStore, NO_HIDDEN } from '../state/hiddenStore';
 import { useUnreadStore } from '../state/unreadStore';
 import { formatDay, sameDay } from '../lib/format';
+import { wsSend } from '../ws/socket';
 import { AlertTriangle, Lock, ShieldCheck } from 'lucide-react';
 import MessageRow from './MessageRow';
+import TypingLine from './TypingLine';
 import { deleteForEveryone, DeletedRow, HoverActions } from './MsgDelete';
 import Composer from './Composer';
 
@@ -57,6 +59,17 @@ export default function ChatView({ channelId, channelName }: { channelId: string
   useEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView();
   }, [visible.length]);
+
+  // unread divider anchor: the read marker frozen at entry — messages that
+  // arrive while you're looking land above/below it, the line never moves
+  const [entryRead, setEntryRead] = useState(() => useUnreadStore.getState().readMap[channelId] ?? 0);
+  useEffect(() => {
+    setEntryRead(useUnreadStore.getState().readMap[channelId] ?? 0);
+  }, [channelId]);
+  const dividerId = useMemo(
+    () => visible.find((m) => m.id > entryRead)?.id ?? null,
+    [visible, entryRead],
+  );
 
   const onScroll = (): void => {
     const el = scrollRef.current;
@@ -124,6 +137,13 @@ export default function ChatView({ channelId, channelName }: { channelId: string
                   <div className="perf flex-1" aria-hidden />
                 </div>
               )}
+              {m.id === dividerId && (
+                <div className="my-1 flex items-center gap-2 px-4">
+                  <div className="h-px flex-1 bg-brass-500" aria-hidden />
+                  <span className="plate !text-[10px] !tracking-[0.14em] text-brass-400">YENİ</span>
+                  <div className="h-px flex-1 bg-brass-500" aria-hidden />
+                </div>
+              )}
               {m.deleted ? (
                 <DeletedRow nick={m.nick} sentAt={m.sentAt} />
               ) : (
@@ -141,10 +161,12 @@ export default function ChatView({ channelId, channelName }: { channelId: string
         })}
         <div ref={bottomRef} />
       </div>
+      <TypingLine channelId={channelId} />
       <Composer
         send={(body) => send(channelId, body)}
         sending={sending}
         disabled={needsRekey}
+        onTyping={() => wsSend({ type: 'typing', channel_id: channelId })}
         placeholder={
           needsRekey
             ? 'kanal yeniden anahtarlanana kadar kilitli…'
