@@ -216,26 +216,53 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     })),
   ];
 
-  // ekran paylaşimi ya da manuel odak varken: TEK video-bazlı odak düzeni.
-  // Manuel odak yoksa varsayılan odak ekran paylaşımıdır — kişi düzeniyle
-  // aynı mantık: şeritteki her akışa tıklayınca odak ona geçer, büyük videoya
-  // tıklayınca (manuel odakta) otomatik düzene (varsayılan ekrana) düşer.
+  // ekran paylaşımı ya da manuel odak varken: Discord paylaşım görünümü —
+  // odak video solda büyük, sağ dikey şeritte TÜM katılımcıların slotu
+  // (akışı olanın tile'ı, olmayanın avatarı) — kimse kaybolmaz
   const autoFocusVideo = spotlight ? null : (allVideos.find((v) => v.isScreen) ?? null);
   const focusedKey = spotlight ?? (autoFocusVideo?.key ?? null);
   const focusedVideo = focusedKey ? (allVideos.find((v) => v.key === focusedKey) ?? null) : null;
   const focusId = focusedKey?.split(':')[1] ?? null;
   const focusPerson = focusId ? participants.find((p) => p.identity === focusId) ?? null : null;
-  // manuel odak hedefi odadan ayrıldıysa otomatik düzenlere düş
-  const showFocus = focusedKey !== null && (focusedVideo !== null || focusPerson !== null || !spotlight);
 
-  if (showFocus && focusedKey) {
-    const restVideos = allVideos.filter((v) => v.key !== focusedKey);
-    const restIdentities = new Set(restVideos.map((v) => v.identity));
+  if (focusedKey && (focusedVideo || focusPerson)) {
+    const slotFor = (p: Participant): React.ReactNode => {
+      const pVideos = allVideos.filter((v) => v.identity === p.identity && v.key !== focusedKey);
+      if (pVideos.length > 0) {
+        return pVideos.map((v) => (
+          <div
+            key={v.key}
+            onClick={() => setSpotlight(v.key)}
+            title="büyüt"
+            className={`relative aspect-video w-full shrink-0 cursor-pointer overflow-hidden rounded-md border ${
+              spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
+            } bg-night-850 transition-colors ${TILE_HIDE}`}
+          >
+            <ParticipantTile
+              trackRef={v.trackRef}
+              className={`h-full w-full [&_video]:h-full [&_video]:w-full ${fit(v.isScreen)}`}
+            />
+            <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
+          </div>
+        ));
+      }
+      return (
+        <div
+          key={slotKey(p.identity) + '-slot'}
+          onClick={p.identity === focusId ? undefined : () => setSpotlight(`cam:${p.identity}`)}
+          title={p.identity === focusId ? undefined : 'büyüt'}
+          className="relative flex aspect-video w-full shrink-0 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
+        >
+          <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
+          <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+        </div>
+      );
+    };
     return (
       <>
         <RemoteAudio />
-        <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-          <div className="flex min-h-0 flex-1 gap-2">
+        <div className="flex min-h-0 flex-1 gap-2 p-3">
+          <div className="flex min-h-0 min-w-0 flex-1">
             {focusedVideo ? (
               <VideoTile
                 key={focusedVideo.key}
@@ -261,37 +288,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               )
             )}
           </div>
-          <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">
-            {restVideos.map((v) => (
-              <div
-                key={v.key}
-                onClick={() => setSpotlight(v.key)}
-                title="büyüt"
-                className={`relative aspect-video h-full shrink-0 cursor-pointer overflow-hidden rounded-md border ${
-                  spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
-                } bg-night-850 transition-colors ${TILE_HIDE}`}
-              >
-                <ParticipantTile
-                  trackRef={v.trackRef}
-                  className={`h-full w-full [&_video]:h-full [&_video]:w-full ${fit(v.isScreen)}`}
-                />
-                <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
-              </div>
-            ))}
-            {participants
-              .filter((p) => !restIdentities.has(p.identity) && p.identity !== focusId)
-              .map((p) => (
-                <div
-                  key={slotKey(p.identity)}
-                  onClick={() => setSpotlight(`cam:${p.identity}`)}
-                  title="büyüt"
-                  className="flex aspect-video h-full shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850 transition-colors hover:border-brass-500"
-                >
-                  <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
-                  <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
-                </div>
-              ))}
-          </div>
+          <div className="flex w-44 shrink-0 flex-col gap-2 overflow-y-auto">{participants.map(slotFor)}</div>
         </div>
       </>
     );
