@@ -143,7 +143,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const [spotlight, setSpotlight] = useState<string | null>(null);
   const spotKind: 'screen' | 'cam' = spotlight?.startsWith('screen:') ? 'screen' : 'cam';
   const spotId = spotlight?.split(':')[1] ?? null;
-  const spotlit = spotId ? participants.find((p) => p.identity === spotId) ?? null : null;
 
   const toggleSpotlight = (kind: 'screen' | 'cam', identity: string): void => {
     const key = `${kind}:${identity}`;
@@ -199,46 +198,85 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     );
   };
 
-  // odaklı kişinin dominant tile'ı: kullanıcının tıkladığı akış önce
-  // (ekran contain — asla kırpılmaz; kamera cover); kaybolursa diğer akışına düşer
-  const dominant = (p: Participant): React.ReactNode => {
-    const screen = screens.find((t) => t.participant.identity === p.identity);
-    const cam = camByIdentity.get(p.identity);
-    const track = spotKind === 'screen' ? (screen ?? cam) : (cam ?? screen);
-    if (!track) {
-      return (
-        <div
-          key={slotKey(p.identity) + '-dominant-ph'}
-          onClick={() => setSpotlight(null)}
-          title="büyütmeden çıkar"
-          className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
-        >
-          <Avatar userId={p.identity} label={nickFor(p.identity)} size={96} srcOverride={null} />
-          <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus />
-        </div>
-      );
-    }
-    const isScreen = track.source === Track.Source.ScreenShare;
-    return (
-      <VideoTile
-        key={slotKey(p.identity) + '-dominant'}
-        trackRef={track}
-        isScreen={isScreen}
-        isFocus
-        fill
-        onClick={() => setSpotlight(null)}
-      />
-    );
-  };
+  // tüm canlı video akışları (ekran + kamera) — odak modeli bunlar üzerinde:
+  // odaktaki video büyük, geri kalan TÜM akışlar (odaklı kişinin diğer
+  // kamerası/ekranı dahil) şeritte — Discord davranışı
+  const allVideos: { key: string; trackRef: TrackReference; isScreen: boolean; identity: string }[] = [
+    ...screens.map((t) => ({
+      key: `screen:${t.participant.identity}`,
+      trackRef: t,
+      isScreen: true,
+      identity: t.participant.identity,
+    })),
+    ...[...camByIdentity.values()].map((t) => ({
+      key: `cam:${t.participant.identity}`,
+      trackRef: t,
+      isScreen: false,
+      identity: t.participant.identity,
+    })),
+  ];
 
-  if (spotlit) {
+  if (spotlight && (spotId ? participants.some((p) => p.identity === spotId) : false)) {
+    const focusedVideo = allVideos.find((v) => v.key === spotlight) ?? null;
+    const spotPerson = spotId ? participants.find((p) => p.identity === spotId) ?? null : null;
+    const restVideos = allVideos.filter((v) => v.key !== spotlight);
+    const restIdentities = new Set(restVideos.map((v) => v.identity));
     return (
       <>
         <RemoteAudio />
         <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-          <div className="flex min-h-0 flex-1 gap-2">{dominant(spotlit)}</div>
+          <div className="flex min-h-0 flex-1 gap-2">
+            {focusedVideo ? (
+              <VideoTile
+                key={focusedVideo.key}
+                trackRef={focusedVideo.trackRef}
+                isScreen={focusedVideo.isScreen}
+                isFocus
+                fill
+                onClick={() => setSpotlight(null)}
+              />
+            ) : (
+              spotPerson && (
+                <div
+                  key={spotlight + '-ph'}
+                  onClick={() => setSpotlight(null)}
+                  title="büyütmeden çıkar"
+                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
+                >
+                  <Avatar userId={spotId!} label={nickFor(spotId!)} size={96} srcOverride={null} />
+                  <NamePlate identity={spotId!} isLocal={spotPerson.isLocal} isScreen={false} isFocus />
+                </div>
+              )
+            )}
+          </div>
           <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">
-            {participants.filter((p) => p.identity !== spotId).map(stripTile)}
+            {restVideos.map((v) => (
+              <div
+                key={v.key}
+                onClick={() => setSpotlight(v.key)}
+                title="büyüt"
+                className={`relative aspect-video h-full shrink-0 cursor-pointer overflow-hidden rounded-md border border-brass-700/50 bg-night-850 transition-colors hover:border-brass-500 ${TILE_HIDE}`}
+              >
+                <ParticipantTile
+                  trackRef={v.trackRef}
+                  className={`h-full w-full [&_video]:h-full [&_video]:w-full ${fit(v.isScreen)}`}
+                />
+                <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
+              </div>
+            ))}
+            {participants
+              .filter((p) => !restIdentities.has(p.identity) && p.identity !== spotId)
+              .map((p) => (
+                <div
+                  key={slotKey(p.identity)}
+                  onClick={() => setSpotlight(`cam:${p.identity}`)}
+                  title="büyüt"
+                  className="flex aspect-video h-full shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850 transition-colors hover:border-brass-500"
+                >
+                  <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
+                  <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+                </div>
+              ))}
           </div>
         </div>
       </>
