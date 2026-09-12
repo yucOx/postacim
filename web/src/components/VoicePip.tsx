@@ -1,58 +1,102 @@
-import { Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
+import { useRef } from 'react';
+import { Mic, MicOff, PhoneOff, PictureInPicture2, Users, Video, VideoOff } from 'lucide-react';
+import { ParticipantTile, RoomContext, useTracks } from '@livekit/components-react';
+import { Track } from 'livekit-client';
+import type { TrackReference } from '@livekit/components-react';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
+import { nickFor } from '../lib/nick';
+import { toast } from './Toast';
 
 const NO_PARTICIPANTS: { user_id: string; nick: string }[] = [];
 
-/** The community-call corner widget — stays over the chat while you browse
- *  other rooms (Discord-style). Mic control, participant list, one click back
- *  to the full room, or hang up. */
+/** minimized community video call: video stage (screen share first, then
+ *  cameras), compact controls and a real browser Picture-in-Picture escape
+ *  hatch so the call can float over other windows */
+function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | null> }): React.ReactNode {
+  // onlySubscribed: false — own camera shows too (Discord mini-player style)
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], { onlySubscribed: false });
+  // livekit v2 disables a camera by MUTING the track — muted refs paint black
+  const live = (t: TrackReference): boolean => !!t.publication && !t.publication.isMuted;
+  const screens = tracks.filter((t) => t.source === Track.Source.ScreenShare && live(t));
+  const cams = tracks.filter((t) => t.source === Track.Source.Camera && live(t));
+  const pick = screens[0] ?? cams.find((t) => !t.participant.isLocal) ?? cams[0];
+  if (!pick) {
+    return (
+      <div className="flex h-32 flex-col items-center justify-center bg-night-850 text-paper-500">
+        <VideoOff size={16} aria-hidden />
+        <span className="mt-1 font-display text-[10px] uppercase tracking-[0.14em]">kamera kapalı</span>
+      </div>
+    );
+  }
+  return (
+    <div ref={wrapRef} className="relative h-32 overflow-hidden bg-night-850">
+      <ParticipantTile
+        trackRef={pick}
+        className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+      />
+      <span className="pointer-events-none absolute bottom-1 left-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50">
+        {pick.participant.isLocal ? 'sen' : nickFor(pick.participant.identity)}
+      </span>
+    </div>
+  );
+}
+
+/** the minimized community call — Discord-style corner widget over the chat:
+ *  live video stage, mic/cam toggles, room shortcut, hang up, and a real
+ *  browser Picture-in-Picture escape hatch (video floats over other apps) */
 export default function VoicePip(): React.ReactNode {
+  const room = useVoiceStore((s) => s.room);
   const channelId = useVoiceStore((s) => s.joinedChannelId);
   const micOn = useVoiceStore((s) => s.micOn);
-  const presence = useVoiceStore((s) => (channelId ? s.presence[channelId] : undefined)) ?? NO_PARTICIPANTS;
+  const camOn = useVoiceStore((s) => s.camOn);
   const toggleMic = useVoiceStore((s) => s.toggleMic);
+  const toggleCam = useVoiceStore((s) => s.toggleCam);
   const leave = useVoiceStore((s) => s.leave);
-  const channel = useAppStore((s) =>
-    s.communities.flatMap((c) => c.channels).find((ch) => ch.id === channelId),
-  );
-
-  if (!channelId) return null;
-
-  const backToRoom = (): void => {
-    useAppStore.getState().selectChannel(channelId);
-    useAppStore.setState({ view: 'community', activeDmId: null });
-  };
+  const selectChannel = useAppStore((s) => s.selectChannel);
+  const channel = useAppStore((s) => s.communities.flatMap((c) => c.channels).find((ch) => ch.id === channelId));
+  const videoWrapRef = useRef<HTMLDivElement>(null);
 
   const round = (extra: string): string =>
     `flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${extra}`;
 
+  const enterBrowserPip = async (): Promise<void> => {
+    const v = videoWrapRef.current?.querySelector('video');
+    if (!v || typeof v.requestPictureInPicture !== 'function') {
+      // LAN http (localhost dışı) güvenli bağlam sayılmaz — API orada yok
+      toast.error('bu tarayıcıda pencere içi pencere yok — https gerekir');
+      return;
+    }
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      await v.requestPictureInPicture();
+    } catch {
+      toast.error('pencere içinde pencere açılamadı');
+    }
+  };
+
+  if (!channelId) return null;
+
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-64 rounded-lg border border-brass-600/70 bg-night-900 p-3 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]">
-      <div className="flex items-center gap-2">
-        <Volume2 size={14} className="shrink-0 text-lamp-500" aria-hidden />
-        <button
-          onClick={backToRoom}
-          className="min-w-0 flex-1 truncate text-left font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50 transition-colors hover:text-lamp-400"
-          title="sesli odaya dön"
-        >
+    <div className="fixed bottom-4 right-4 z-40 w-72 rounded-lg border border-brass-600/70 bg-night-900 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <Users size={14} className="shrink-0 text-lamp-500" aria-hidden />
+        <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50">
           {channel?.name ?? 'sesli oda'}
-        </button>
-        <span className="shrink-0 font-display text-[10px] font-semibold text-lamp-400">
-          {presence.length}
         </span>
       </div>
-      {presence.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-paper-500">
-          {presence.map((p) => (
-            <span key={p.user_id} className="truncate">
-              {p.nick}
-            </span>
-          ))}
+      {room ? (
+        <RoomContext.Provider value={room}>
+          <VideoStage wrapRef={videoWrapRef} />
+        </RoomContext.Provider>
+      ) : (
+        <div className="flex h-32 items-center justify-center bg-night-850 font-display text-[11px] uppercase tracking-[0.14em] text-paper-500">
+          odaya bağlanıyor…
         </div>
       )}
-      <div className="mt-2.5 flex items-center gap-2 border-t border-night-700 pt-2.5">
+      <div className="flex items-center gap-2 px-3 py-2">
         <button
+          type="button"
           onClick={() => void toggleMic()}
           className={round(
             micOn
@@ -63,18 +107,50 @@ export default function VoicePip(): React.ReactNode {
           aria-label={micOn ? 'mikrofonu kapat' : 'mikrofonu aç'}
           aria-pressed={micOn}
         >
-          {micOn ? <Mic size={15} /> : <MicOff size={15} />}
+          {micOn ? <Mic size={14} /> : <MicOff size={14} />}
         </button>
-        <button onClick={backToRoom} className="btn-ghost flex-1 !py-1.5 !text-xs" title="sesli odaya dön">
+        <button
+          type="button"
+          onClick={() => void toggleCam()}
+          className={round(
+            camOn
+              ? 'border-brass-600/60 bg-night-700 text-paper-50 hover:border-brass-500'
+              : 'border-stamp-500/70 bg-stamp-500 text-white hover:bg-stamp-400',
+          )}
+          title={camOn ? 'kamerayı kapat' : 'kamerayı aç'}
+          aria-label={camOn ? 'kamerayı kapat' : 'kamerayı aç'}
+          aria-pressed={camOn}
+        >
+          {camOn ? <Video size={14} /> : <VideoOff size={14} />}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            selectChannel(channelId);
+            useAppStore.setState({ view: 'community', activeDmId: null });
+          }}
+          className="btn-ghost flex-1 !py-1 !text-xs"
+          title="sesli odaya dön"
+        >
           odaya dön
         </button>
         <button
+          type="button"
+          onClick={() => void enterBrowserPip()}
+          className={round('border-brass-600/60 bg-night-700 text-paper-50 hover:border-brass-500')}
+          title="tarayıcı pencere içinde pencere"
+          aria-label="tarayıcı pencere içinde pencere"
+        >
+          <PictureInPicture2 size={14} />
+        </button>
+        <button
+          type="button"
           onClick={() => void leave()}
           className={round('border-stamp-500/70 bg-stamp-100 text-stamp-400 hover:bg-stamp-500 hover:text-white')}
           title="sesli odadan ayrıl"
           aria-label="sesli odadan ayrıl"
         >
-          <PhoneOff size={14} />
+          <PhoneOff size={13} />
         </button>
       </div>
     </div>
