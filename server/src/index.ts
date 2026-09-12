@@ -73,6 +73,9 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 app.addHook('onRequest', async (req, reply) => {
+  // GET-only public avatar fetch — the URL is only knowable by people who
+  // already talk to this user; no message content, same exposure as nicks
+  if (req.method === 'GET' && /^\/api\/users\/[^/]+\/avatar$/.test(req.url.split('?')[0])) return;
   if (!req.url.startsWith('/api')) return;
   if (PUBLIC_PATHS.has(req.url.split('?')[0])) return;
   const header = req.headers.authorization;
