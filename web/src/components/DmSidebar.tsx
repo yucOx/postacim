@@ -1,7 +1,8 @@
-import { User, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
+import Avatar from './Avatar';
 
 // persistent DM list — Discord-style left column, so the chat picker never
 // disappears while a conversation is open
@@ -17,7 +18,7 @@ export default function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const byRecent = (a: { last_message_at: number | null }, b: { last_message_at: number | null }): number =>
     (b.last_message_at ?? 0) - (a.last_message_at ?? 0);
 
-  const row = (id: string, label: string, icon: React.ReactNode): React.ReactNode => {
+  const row = (id: string, label: string, visual: React.ReactNode): React.ReactNode => {
     const unread = unreadCount(id, dmMessages[id]);
     const active = id === activeDmId;
     return (
@@ -31,8 +32,8 @@ export default function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
           active ? 'bg-night-700 text-paper-50' : 'text-paper-500 hover:bg-night-800/70 hover:text-paper-100'
         }`}
       >
-        <span className="shrink-0 text-brass-600" aria-hidden>
-          {icon}
+        <span className="shrink-0" aria-hidden>
+          {visual}
         </span>
         <span className={`flex-1 truncate ${unread > 0 && !active ? 'font-semibold text-paper-100' : ''}`}>
           {label}
@@ -57,12 +58,12 @@ export default function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="flex-1 overflow-y-auto px-2 py-2">
         <div className="plate mb-1 px-2">GRUPLAR</div>
         <div className="mb-4 flex flex-col gap-0.5">
-          {[...gdms].sort(byRecent).map((g) => row(g.id, g.name, <Users size={13} />))}
+          {[...gdms].sort(byRecent).map((g) => row(g.id, g.name, <Users size={16} />))}
           {gdms.length === 0 && <p className="px-2 py-1 text-xs text-paper-500">grup yok</p>}
         </div>
         <div className="plate mb-1 px-2">DM</div>
         <div className="flex flex-col gap-0.5">
-          {[...dms].sort(byRecent).map((d) => row(d.id, d.peer.nick, <User size={13} />))}
+          {[...dms].sort(byRecent).map((d) => row(d.id, d.peer.nick, <Avatar userId={d.peer.id} label={d.peer.nick} size={22} />))}
           {dms.length === 0 && <p className="px-2 py-1 text-xs text-paper-500">arkadaşından başla</p>}
         </div>
       </div>
