@@ -269,18 +269,51 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   }
 
   const count = participants.length;
-  const cols =
-    count === 1
-      ? 'minmax(0, 720px)'
-      : count === 2
-        ? 'repeat(2, minmax(0, 1fr))'
-        : 'repeat(auto-fit, minmax(280px, 1fr))';
+
+  // 1-2 kişide Discord gibi: bölmeler sahnenin tüm yüksekliğini doldurur,
+  // video contain (kırpma yok) — baştan beri büyük durur
+  if (count <= 2) {
+    return (
+      <>
+        <RemoteAudio />
+        <div className="flex min-h-0 flex-1 gap-3 p-4">
+          {participants.map((p) => {
+            const cam = camByIdentity.get(p.identity);
+            const focused = spotlight === `cam:${p.identity}`;
+            return (
+              <div
+                key={slotKey(p.identity)}
+                onClick={() => toggleSpotlight('cam', p.identity)}
+                title={focused ? 'büyütmeden çıkar' : 'büyüt'}
+                className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${
+                  focused ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
+                } ${TILE_HIDE}`}
+              >
+                {cam ? (
+                  <ParticipantTile
+                    trackRef={cam}
+                    className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
+                  </div>
+                )}
+                <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <RemoteAudio />
       <div
         className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
-        style={{ gridTemplateColumns: cols, justifyItems: count <= 2 ? 'center' : 'stretch' }}
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
       >
         {participants.map((p) => stripTile(p))}
       </div>
