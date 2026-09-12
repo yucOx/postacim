@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ParticipantTile, useParticipants, useTracks, AudioTrack } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
@@ -74,7 +74,7 @@ function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocu
         fill ? 'min-h-0 min-w-0 flex-1' : 'aspect-video w-full'
       } ${
         active ? 'border-lamp-500/80 ring-1 ring-lamp-500/50' : 'border-brass-700/50 hover:border-brass-500'
-      } ${fit(isScreen)}${TILE_HIDE}`}
+      } ${fill ? '[&_video]:object-contain' : fit(isScreen)}${TILE_HIDE}`}
     >
       <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
       <NamePlate
@@ -149,6 +149,14 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     const key = `${kind}:${identity}`;
     setSpotlight((cur) => (cur === key ? null : key));
   };
+
+  // yeni katılan olunca odağı bırak — sonradan bağlanan şeritte küçük kalmasın,
+  // herkes eşit büyüklükte başlasın
+  const prevCount = useRef(participants.length);
+  useEffect(() => {
+    if (participants.length > prevCount.current) setSpotlight(null);
+    prevCount.current = participants.length;
+  }, [participants.length]);
 
   if (participants.length === 0) {
     return (
@@ -228,7 +236,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
           <div className="flex min-h-0 flex-1 gap-2">{dominant(spotlit)}</div>
           <div className="flex h-32 shrink-0 gap-2 overflow-x-auto">
-            {participants.filter((p) => p.identity !== spotlight).map(stripTile)}
+            {participants.filter((p) => p.identity !== spotId).map(stripTile)}
           </div>
         </div>
       </>
