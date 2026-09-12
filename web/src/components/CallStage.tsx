@@ -209,7 +209,9 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       return (
         <div
           key={slotKey(p.identity) + '-dominant-ph'}
-          className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
+          onClick={() => setSpotlight(null)}
+          title="büyütmeden çıkar"
+          className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
         >
           <Avatar userId={p.identity} label={nickFor(p.identity)} size={96} srcOverride={null} />
           <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus />
