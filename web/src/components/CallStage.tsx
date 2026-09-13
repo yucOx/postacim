@@ -82,13 +82,15 @@ interface TileProps {
   fill?: boolean;
   /** absolute overlay inside the tile (e.g. the sharer's stop button) */
   overlay?: React.ReactNode;
+  /** tooltip override — the dominant tile's click toggles layout, not "büyüt" */
+  title?: string;
 }
 
-function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill, overlay }: TileProps): React.ReactNode {
+function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill, overlay, title: titleProp }: TileProps): React.ReactNode {
   return (
     <div
       onClick={onClick}
-      title={onClick ? (active ? 'büyütmeden çıkar' : 'büyüt') : undefined}
+      title={titleProp ?? (onClick ? (active ? 'büyütmeden çıkar' : 'büyüt') : undefined)}
       className={`relative cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${
         fill ? 'min-h-0 min-w-0 flex-1' : 'aspect-video w-full'
       } ${
@@ -176,6 +178,14 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     setSpotlight((cur) => (cur === key ? null : key));
   };
 
+  // yan yana düzende bir kameraya/avatara tıklamak o akışa odaklanıp odak
+  // görünümüne döner — spotlight'i set etmek yetmez, side dalı odak dalından
+  // önce koşulsuz render ettiği için aksi hâlde tıklama görünmez şekilde yutulur
+  const focusFromSide = (identity: string): void => {
+    setSpotlight(`cam:${identity}`);
+    setShareLayout('focus');
+  };
+
   // yeni katılan olunca odağı bırak — sonradan bağlanan şeritte küçük kalmasın,
   // herkes eşit büyüklükte başlasın
   const prevCount = useRef(participants.length);
@@ -183,6 +193,18 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     if (participants.length > prevCount.current) setSpotlight(null);
     prevCount.current = participants.length;
   }, [participants.length]);
+
+  // yeni yayın başlayınca büyük alanı yayın alsın — bayat spotlight (mesela
+  // kamerası kapalı birine tıklayıp büyütülmüş odak) yayını şeritte küçülterek
+  // gizlemesin (Discord: paylaşım her zaman odaklanır)
+  const prevScreens = useRef(0);
+  useEffect(() => {
+    if (screens.length > prevScreens.current) {
+      setSpotlight(null);
+      setShareLayout('focus');
+    }
+    prevScreens.current = screens.length;
+  }, [screens.length]);
 
   if (participants.length === 0) {
     return (
@@ -275,7 +297,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       return (
         <div
           key={v.key}
-          onClick={() => (v.isScreen ? setShareLayout('focus') : setSpotlight(`cam:${v.identity}`))}
+          onClick={() => (v.isScreen ? setShareLayout('focus') : focusFromSide(v.identity))}
           title={v.isScreen ? 'odak görünümüne dön' : 'büyüt'}
           className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border ${
             spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
@@ -301,7 +323,9 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
             .map((p) => (
               <div
                 key={slotKey(p.identity)}
-                className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
+                onClick={() => focusFromSide(p.identity)}
+                title="büyüt"
+                className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850 transition-colors hover:border-brass-500"
               >
                 <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
                 <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
@@ -365,6 +389,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 isScreen={focusedVideo.isScreen}
                 isFocus={!!spotlight}
                 fill
+                title={focusedVideo.isScreen ? 'yan yana göster' : 'büyütmeden çıkar'}
                 onClick={() => {
                   if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
                   else setSpotlight(null);
