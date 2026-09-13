@@ -25,13 +25,15 @@ function RemoteAudio(): React.ReactNode {
 }
 
 /** Remote screen-share audio — attached invisibly; the viewer's volume/mute
- *  controls drive the gain. Local share audio is never attached (echo). */
-function ShareAudio({ volume, muted }: { volume: number; muted: boolean }): React.ReactNode {
+ *  controls drive the gain. Only shares the viewer is actually WATCHING are
+ *  attached (unwatched live tiles stay silent). Local share audio is never
+ *  attached (echo). */
+function ShareAudio({ volume, muted, activeIds }: { volume: number; muted: boolean; activeIds: string[] }): React.ReactNode {
   const tracks = useTracks([Track.Source.ScreenShareAudio], { onlySubscribed: true });
   return (
     <>
       {tracks
-        .filter((t) => !t.participant.isLocal)
+        .filter((t) => !t.participant.isLocal && activeIds.includes(t.participant.identity))
         .map((t) => (
           <AudioTrack key={t.participant.identity} trackRef={t} volume={muted ? 0 : volume} className="hidden" />
         ))}
@@ -206,17 +208,19 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     prevCount.current = participants.length;
   }, [participants.length]);
 
-  // yeni yayın başlayınca büyük alanı yayın alsın — bayat spotlight (mesela
+  // KENDİ yayınım başlayınca büyük alanı yayın alsın — bayat spotlight (mesela
   // kamerası kapalı birine tıklayıp büyütülmüş odak) yayını şeritte küçülterek
-  // gizlemesin (Discord: paylaşım her zaman odaklanır)
-  const prevScreens = useRef(0);
+  // gizlemesin. Başkasının yayını otomatik alınmaz: "canlı" döşemesi olarak
+  // görünür, izleyici tıklayınca izler (Discord Watch Stream mantığı)
+  const ownScreenCount = screens.filter((t) => t.participant.isLocal).length;
+  const prevOwnScreens = useRef(0);
   useEffect(() => {
-    if (screens.length > prevScreens.current) {
+    if (ownScreenCount > prevOwnScreens.current) {
       setSpotlight(null);
       setShareLayout('focus');
     }
-    prevScreens.current = screens.length;
-  }, [screens.length]);
+    prevOwnScreens.current = ownScreenCount;
+  }, [ownScreenCount]);
 
   if (participants.length === 0) {
     return (
@@ -296,7 +300,9 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     </button>
   );
 
-  const autoFocusVideo = spotlight ? null : (allVideos.find((v) => v.isScreen) ?? null);
+  // varsayılan odak: yalnız kendi yayınım — başkasının yayını izleyiciye
+  // dayatılmaz, canlı döşemesi olarak izlemesi için bekler (Discord akışı)
+  const autoFocusVideo = spotlight ? null : (allVideos.find((v) => v.isScreen && v.trackRef.participant.isLocal) ?? null);
   const focusedKey = spotlight ?? (autoFocusVideo?.key ?? null);
   const focusedVideo = focusedKey ? (allVideos.find((v) => v.key === focusedKey) ?? null) : null;
   const focusId = focusedKey?.split(':')[1] ?? null;
@@ -328,6 +334,11 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     return (
       <>
         <RemoteAudio />
+        <ShareAudio
+          volume={shareVolume}
+          muted={shareMuted}
+          activeIds={screens.filter((t) => !t.participant.isLocal).map((t) => t.participant.identity)}
+        />
         <div className="flex min-h-0 flex-1 gap-2 p-3">
           {allVideos.map(paneFor)}
           {participants
@@ -391,7 +402,11 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     return (
       <>
         <RemoteAudio />
-        <ShareAudio volume={shareVolume} muted={shareMuted} />
+        <ShareAudio
+          volume={shareVolume}
+          muted={shareMuted}
+          activeIds={focusedVideo?.isScreen && !focusedVideo.trackRef.participant.isLocal ? [focusedVideo.identity] : []}
+        />
         <div className="flex min-h-0 flex-1 gap-2 p-3">
           <div className="flex min-h-0 min-w-0 flex-1">
             {focusedVideo ? (
@@ -408,6 +423,19 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 }}
                 overlay={
                   <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
+                    {focusedVideo.isScreen && !focusedVideo.trackRef.participant.isLocal && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          releaseSpot();
+                        }}
+                        className="rounded-md border border-night-700 bg-night-950/85 px-2 py-1 text-xs font-semibold text-paper-300 transition-colors hover:text-paper-100"
+                        title="yayını izlemeyi bırak — kameralara dön"
+                      >
+                        izlemeyi bırak
+                      </button>
+                    )}
                     {!focusedVideo.trackRef.participant.isLocal && (
                       <div className="flex items-center gap-1.5 rounded-md border border-night-700 bg-night-950/85 px-2 py-1">
                         <button
@@ -462,6 +490,20 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
 
   const count = participants.length;
 
+  // izlenmeyen uzak yayınlar — kameraların yanında "canlı" döşemesi olarak
+  // bekler, tıklayınca izlenmeye başlanır (odak moduna geçer)
+  const liveScreens = screens.filter((t) => !t.participant.isLocal && spotlight !== `screen:${t.participant.identity}`);
+  const liveBadge = (
+    <span className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400">
+      <span className="h-1.5 w-1.5 rounded-full bg-stamp-500" aria-hidden />
+      canlı
+    </span>
+  );
+  const watchLive = (t: TrackReference): void => {
+    setSpotlight(`screen:${t.participant.identity}`);
+    setShareLayout('focus');
+  };
+
   // 1-2 kişide Discord gibi: bölmeler sahnenin tüm yüksekliğini doldurur,
   // video contain (kırpma yok) — baştan beri büyük durur
   if (count <= 2) {
@@ -469,6 +511,21 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       <>
         <RemoteAudio />
         <div className="flex min-h-0 flex-1 gap-3 p-4">
+          {liveScreens.map((t) => (
+            <div
+              key={`live:${t.participant.identity}`}
+              onClick={() => watchLive(t)}
+              title="yayını izle"
+              className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border border-lamp-500/80 bg-night-850 transition-colors hover:border-lamp-400 ${TILE_HIDE}`}
+            >
+              <ParticipantTile
+                trackRef={t}
+                className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+              />
+              <NamePlate identity={t.participant.identity} isLocal={false} isScreen />
+              {liveBadge}
+            </div>
+          ))}
           {participants.map((p) => {
             const cam = camByIdentity.get(p.identity);
             const focused = spotlight === `cam:${p.identity}`;
@@ -507,6 +564,21 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
       >
+        {liveScreens.map((t) => (
+          <div
+            key={`live:${t.participant.identity}`}
+            onClick={() => watchLive(t)}
+            title="yayını izle"
+            className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border border-lamp-500/80 bg-night-850 transition-colors hover:border-lamp-400 ${TILE_HIDE}`}
+          >
+            <ParticipantTile
+              trackRef={t}
+              className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+            />
+            <NamePlate identity={t.participant.identity} isLocal={false} isScreen />
+            {liveBadge}
+          </div>
+        ))}
         {participants.map((p) => stripTile(p))}
       </div>
     </>

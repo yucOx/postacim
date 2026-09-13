@@ -57,6 +57,8 @@ interface VoiceState {
   toggleMic: () => Promise<void>;
   toggleCam: () => Promise<void>;
   toggleScreen: () => Promise<void>;
+  /** Discord Go Live akışı: diyaloğa girilen ayrıntılarla yayın başlat */
+  startScreen: (opts: ShareOpts) => Promise<void>;
   startDmCall: (dmId: string, video?: boolean) => Promise<void>;
   acceptIncoming: () => Promise<void>;
   declineIncoming: () => Promise<void>;
@@ -92,6 +94,30 @@ function loadPipPinned(): boolean {
 }
 
 export type CallQuality = 'hizli' | 'dengeli' | 'yuksek';
+
+/** Detaylı yayın diyaloğunun seçimleri (Discord Go Live benzeri). surface,
+ *  tarayıcının kaynak seçim ekranını ilgili kategoriye ön seçer — kaynak yine
+ *  tarayıcıda seçilir (web'de pencereler listelenemez). */
+export interface ShareOpts {
+  /** capture genişliği — 1280 (720p) gibi */
+  w: number;
+  /** capture yüksekliği — 720, 1080, 1440… */
+  h: number;
+  fps: 15 | 30 | 60;
+  /** sekme/sistem sesini de yayınla */
+  audio: boolean;
+  /** kaynak ipucu: tüm ekran / pencere / sekme */
+  surface: 'monitor' | 'window' | 'browser';
+}
+
+/** [yükseklik][fps] → maxBitrate; diyalogdaki çözünürlük × fps ikilileri */
+const SHARE_BITRATES: Record<number, Record<number, number>> = {
+  360: { 15: 500_000, 30: 800_000, 60: 1_200_000 },
+  480: { 15: 800_000, 30: 1_200_000, 60: 1_800_000 },
+  720: { 15: 1_500_000, 30: 2_500_000, 60: 4_000_000 },
+  1080: { 15: 2_500_000, 30: 4_000_000, 60: 6_000_000 },
+  1440: { 15: 4_000_000, 30: 6_000_000, 60: 9_000_000 },
+};
 
 const QUALITY_KEY = 'postacim.voiceQuality';
 
@@ -347,6 +373,34 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       next ? qualityTiers[q].screenPublish : undefined,
     );
     set({ screenOn: next, screenQuality: next ? q : null });
+  },
+
+  // detaylı diyaloğun seçimleriyle yayın başlat (Discord Go Live benzeri).
+  // bitrate tablosu Discord'un Go Live hedeflerine yaklaşık eşlenir; yüksek
+  // fps'te kare hızı korunur, statik içerikte çözünürlük.
+  startScreen: async (opts) => {
+    const room = get().room;
+    if (!room) return;
+    const bitrate = SHARE_BITRATES[opts.h]?.[opts.fps] ?? 2_500_000;
+    try {
+      await room.localParticipant.setScreenShareEnabled(
+        true,
+        {
+          audio: opts.audio,
+          resolution: { width: opts.w, height: opts.h, frameRate: opts.fps },
+          video: { displaySurface: opts.surface },
+          selfBrowserSurface: 'exclude',
+          systemAudio: 'include',
+        },
+        {
+          screenShareEncoding: { maxBitrate: bitrate, maxFramerate: opts.fps },
+          degradationPreference: opts.fps >= 60 ? 'maintain-framerate' : 'maintain-resolution',
+        },
+      );
+      set({ screenOn: true, screenQuality: null });
+    } catch (err) {
+      set({ error: err instanceof Error ? `yayın başlatılamadı: ${err.message}` : 'yayın başlatılamadı' });
+    }
   },
 
   // DM call: join the room, then ring. Media path identical to community calls
