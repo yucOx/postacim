@@ -206,6 +206,28 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     setShareLayout('focus');
   };
 
+  // İZLENMEYEN uzak yayın izleyicide HİÇ render edilmez (içerik preview'ı bile
+  // değil) — yalnız yayıncının kendi döşemesinde "canlı" rozet butonu belirir;
+  // rozete tıklayınca izlenir, izlemeyi bırakınca yayın tamamen kaybolur ve
+  // rozet geri gelir. Bu yüzden kamera durumundan bağımsız çalışır.
+  const shareByIdentity = new Map(
+    screens.filter((t) => !t.participant.isLocal).map((t) => [t.participant.identity, t]),
+  );
+  const liveBadgeBtn = (identity: string): React.ReactNode => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        watchScreen(identity);
+      }}
+      className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
+      title="yayını izle"
+    >
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-stamp-500" aria-hidden />
+      canlı — izle
+    </button>
+  );
+
   // yan yana düzende bir kameraya/avatara tıklamak o akışa odaklanıp odak
   // görünümüne döner — spotlight'i set etmek yetmez, side dalı odak dalından
   // önce koşulsuz render ettiği için aksi hâlde tıklama görünmez şekilde yutulur
@@ -277,6 +299,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       >
         <ParticipantTile trackRef={cam} className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+        {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </div>
     ) : (
       <div
@@ -287,6 +310,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       >
         <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+        {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </div>
     );
   };
@@ -519,19 +543,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
 
   const count = participants.length;
 
-  // izlenmeyen uzak yayınlar — kameraların yanında "canlı" döşemesi olarak
-  // bekler, tıklayınca izlenmeye başlanır (odak moduna geçer)
-  const liveScreens = screens.filter((t) => !t.participant.isLocal && spotlight !== `screen:${t.participant.identity}`);
-  const watchLive = (t: TrackReference): void => {
-    watchScreen(t.participant.identity);
-  };
-  const liveBadge = (
-    <span className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400">
-      <span className="h-1.5 w-1.5 rounded-full bg-stamp-500" aria-hidden />
-      canlı
-    </span>
-  );
-
   // 1-2 kişide Discord gibi: bölmeler sahnenin tüm yüksekliğini doldurur,
   // video contain (kırpma yok) — baştan beri büyük durur
   if (count <= 2) {
@@ -539,21 +550,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       <>
         <RemoteAudio />
         <div className="flex min-h-0 flex-1 gap-3 p-4">
-          {liveScreens.map((t) => (
-            <div
-              key={`live:${t.participant.identity}`}
-              onClick={() => watchLive(t)}
-              title="yayını izle"
-              className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border border-lamp-500/80 bg-night-850 transition-colors hover:border-lamp-400 ${TILE_HIDE}`}
-            >
-              <ParticipantTile
-                trackRef={t}
-                className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
-              />
-              <NamePlate identity={t.participant.identity} isLocal={false} isScreen />
-              {liveBadge}
-            </div>
-          ))}
           {participants.map((p) => {
             const cam = camByIdentity.get(p.identity);
             const focused = spotlight === `cam:${p.identity}`;
@@ -577,6 +573,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                   </div>
                 )}
                 <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+                {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
               </div>
             );
           })}
@@ -592,21 +589,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
       >
-        {liveScreens.map((t) => (
-          <div
-            key={`live:${t.participant.identity}`}
-            onClick={() => watchLive(t)}
-            title="yayını izle"
-            className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border border-lamp-500/80 bg-night-850 transition-colors hover:border-lamp-400 ${TILE_HIDE}`}
-          >
-            <ParticipantTile
-              trackRef={t}
-              className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
-            />
-            <NamePlate identity={t.participant.identity} isLocal={false} isScreen />
-            {liveBadge}
-          </div>
-        ))}
         {participants.map((p) => stripTile(p))}
       </div>
     </>
