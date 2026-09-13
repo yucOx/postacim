@@ -292,6 +292,85 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       </>
     );
   }
+
+  // odak modu: manuel odak ya da varsayılan ekran paylaşımı büyük + sağ
+  // dikey şeritte TÜM katılımcıların slotu (akışı olanın tile'ı, olmayanın
+  // avatarı) — kimse kaybolmaz
+  if (focusedKey && (focusedVideo || focusPerson)) {
+    const slotFor = (p: Participant): React.ReactNode => {
+      const pVideos = allVideos.filter((v) => v.identity === p.identity && v.key !== focusedKey);
+      if (pVideos.length > 0) {
+        return pVideos.map((v) => {
+          const own = v.trackRef.participant.isLocal && v.isScreen;
+          return (
+            <div
+              key={v.key}
+              onClick={() => setSpotlight(v.key)}
+              title="büyüt"
+              className={`relative aspect-video w-full shrink-0 cursor-pointer overflow-hidden rounded-md border ${
+                spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
+              } bg-night-850 transition-colors ${TILE_HIDE}`}
+            >
+              <ParticipantTile
+                trackRef={v.trackRef}
+                className={`h-full w-full [&_video]:h-full [&_video]:w-full ${fit(v.isScreen)}`}
+              />
+              <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
+              {own && stopBtn(true)}
+            </div>
+          );
+        });
+      }
+      return (
+        <div
+          key={slotKey(p.identity) + '-slot'}
+          onClick={p.identity === focusId ? undefined : () => setSpotlight(`cam:${p.identity}`)}
+          title={p.identity === focusId ? undefined : 'büyüt'}
+          className="relative flex aspect-video w-full shrink-0 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
+        >
+          <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
+          <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+        </div>
+      );
+    };
+    return (
+      <>
+        <RemoteAudio />
+        <div className="flex min-h-0 flex-1 gap-2 p-3">
+          <div className="flex min-h-0 min-w-0 flex-1">
+            {focusedVideo ? (
+              <VideoTile
+                key={focusedVideo.key}
+                trackRef={focusedVideo.trackRef}
+                isScreen={focusedVideo.isScreen}
+                isFocus={!!spotlight}
+                fill
+                onClick={() => {
+                  if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
+                  else setSpotlight(null);
+                }}
+                overlay={focusedVideo.isScreen && focusedVideo.trackRef.participant.isLocal ? stopBtn() : undefined}
+              />
+            ) : (
+              focusPerson && (
+                <div
+                  key={focusedKey + '-ph'}
+                  onClick={() => setSpotlight(null)}
+                  title="büyütmeden çıkar"
+                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
+                >
+                  <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
+                  <NamePlate identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
+                </div>
+              )
+            )}
+          </div>
+          <div className="flex w-44 shrink-0 flex-col gap-2 overflow-y-auto">{participants.map(slotFor)}</div>
+        </div>
+      </>
+    );
+  }
+
   const count = participants.length;
 
   // 1-2 kişide Discord gibi: bölmeler sahnenin tüm yüksekliğini doldurur,
