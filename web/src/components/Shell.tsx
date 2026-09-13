@@ -102,6 +102,8 @@ export default function Shell() {
   const activeChannelId = useAppStore((s) => s.activeChannelId);
   const activeDm = useAppStore((s) => (s.activeDmId ? s.dms.find((d) => d.id === s.activeDmId) ?? null : null));
   const isDmCall = useVoiceStore((s) => s.isDmCall);
+  const callState = useVoiceStore((s) => s.callState);
+  const callDmId = callState?.channelId ?? null;
   const joinedVoiceChannel = useVoiceStore((s) => s.joinedChannelId);
   const pip = useVoiceStore((s) => s.pip);
   const dms = useAppStore((s) => s.dms);
@@ -319,7 +321,13 @@ export default function Shell() {
 
         {view === 'dm' ? (
           <main className="flex min-w-0 flex-1 flex-col">
-            {activeDm ? <DmChat dmId={activeDm.id} /> : <DmHome />}
+            {isDmCall && callDmId && activeDm?.id === callDmId ? (
+              <CallView />
+            ) : activeDm ? (
+              <DmChat dmId={activeDm.id} />
+            ) : (
+              <DmHome />
+            )}
           </main>
         ) : (
           <main className="flex min-w-0 flex-1 flex-col">
@@ -362,7 +370,6 @@ export default function Shell() {
       {profileModal && <ProfileModal onClose={() => setProfileModal(false)} />}
       {notifModal && <SettingsModal onClose={() => setNotifModal(false)} />}
       {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
-      {isDmCall && !pip && <CallView />}
       {isDmCall && pip && <PiPWidget />}
       {/* ongoing community call, minimized while browsing other rooms */}
       {!isDmCall && joinedVoiceChannel && !(view === 'community' && channel?.type === 'voice' && activeChannelId === joinedVoiceChannel) && (

@@ -22,7 +22,9 @@ export default function CallView(): React.ReactNode {
     callState.phase === 'ringing' ? 'çalıyor…' : callState.phase === 'ended' ? (callState.note ?? 'bitti') : 'görüşme açık';
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-night-950/97">
+    // tam ekran overlay değil — ana flex satırına sığan panel; böylece
+    // sol ray (sunucu + DM listesi) görüşme boyunca görünür kalır (Discord)
+    <div className="flex min-w-0 flex-1 flex-col bg-night-950">
       <div className="flex items-center gap-3 border-b border-night-700 bg-night-900/60 px-4 py-2.5">
         <span className="plate">GÖRÜŞME</span>
         <span className="font-display text-lg font-semibold uppercase tracking-[0.08em] text-paper-50">{peerNick}</span>
