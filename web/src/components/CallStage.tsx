@@ -177,31 +177,48 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
 
   const toggleSpotlight = (kind: 'screen' | 'cam', identity: string): void => {
     const key = `${kind}:${identity}`;
-    setSpotlight((cur) => (cur === key ? null : key));
+    if (spotlight === key) {
+      setSpotlight(null);
+      return;
+    }
+    // büyütme anındaki yerleşimi mühürle — küçültünce buraya dön (bayat
+    // eski 'side' tercihi istemsizce yan yana düzen açmasın)
+    returnLayout.current = shareLayout;
+    returnSpot.current = null;
+    setSpotlight(key);
   };
 
-  // odağa geçmeden önceki yayın yerleşimi — odaklı kamerayı küçültünce odak
-  // yayınına değil, geldiğin yerleşime dön (side'dan büyüttüysen side'a düş)
+  // odağa geçmeden önceki yayın yerleşimi — odaklı kamerayı küçültünce
+  // geldiğin yerleşime dön (side'dan büyüttüysen side'a düş)
   const returnLayout = useRef<'focus' | 'side'>('focus');
+  // yayın izlerken bir kamerayı büyütürsen çıkışta yine O yayına dön (Discord:
+  // yayın → şeritten kamera → küçült → yayın). Kameradan kameraya geçiş
+  // zincirlenmez — küçültünce düz düzene düşer.
+  const returnSpot = useRef<string | null>(null);
   const spotCam = (identity: string): void => {
     returnLayout.current = shareLayout;
+    returnSpot.current = spotlight?.startsWith('screen:') ? spotlight : null;
     setSpotlight(`cam:${identity}`);
   };
   const releaseSpot = (): void => {
-    setSpotlight(null);
-    setShareLayout(returnLayout.current);
+    const back = returnSpot.current;
+    returnSpot.current = null;
+    setSpotlight(back);
+    setShareLayout(back ? 'focus' : returnLayout.current);
   };
 
   // bir yayını izlemeye başla (canlı döşemesi / şerit / side bölmesi) — çıkışta
   // hep düz kamera düzenine dönmek için yerleşimi odak'a sabitleriz
   const watchScreen = (identity: string): void => {
     returnLayout.current = 'focus';
+    returnSpot.current = null;
     setSpotlight(`screen:${identity}`);
     setShareLayout('focus');
   };
   // izlemeyi bırak: spotlight'ı bırak + kamera düzenine dön — returnLayout'a
   // güvenme, eski 'side' tercihi yayını tekrar büyük gösterebilir
   const unwatch = (): void => {
+    returnSpot.current = null;
     setSpotlight(null);
     setShareLayout('focus');
   };
@@ -240,7 +257,10 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   // herkes eşit büyüklükte başlasın
   const prevCount = useRef(participants.length);
   useEffect(() => {
-    if (participants.length > prevCount.current) setSpotlight(null);
+    if (participants.length > prevCount.current) {
+      returnSpot.current = null;
+      setSpotlight(null);
+    }
     prevCount.current = participants.length;
   }, [participants.length]);
 
@@ -252,6 +272,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const prevOwnScreens = useRef(0);
   useEffect(() => {
     if (ownScreenCount > prevOwnScreens.current) {
+      returnSpot.current = null;
       setSpotlight(null);
       setShareLayout('focus');
     }
@@ -267,6 +288,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   // avatar placeholder'ına kilitler, kameraya dönemiyordun
   useEffect(() => {
     if (spotlight?.startsWith('screen:') && !screens.some((t) => `screen:${t.participant.identity}` === spotlight)) {
+      returnSpot.current = null;
       setSpotlight(null);
       setShareLayout('focus');
     }
