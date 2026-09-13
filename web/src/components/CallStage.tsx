@@ -178,11 +178,23 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     setSpotlight((cur) => (cur === key ? null : key));
   };
 
+  // odağa geçmeden önceki yayın yerleşimi — odaklı kamerayı küçültünce odak
+  // yayınına değil, geldiğin yerleşime dön (side'dan büyüttüysen side'a düş)
+  const returnLayout = useRef<'focus' | 'side'>('focus');
+  const spotCam = (identity: string): void => {
+    returnLayout.current = shareLayout;
+    setSpotlight(`cam:${identity}`);
+  };
+  const releaseSpot = (): void => {
+    setSpotlight(null);
+    setShareLayout(returnLayout.current);
+  };
+
   // yan yana düzende bir kameraya/avatara tıklamak o akışa odaklanıp odak
   // görünümüne döner — spotlight'i set etmek yetmez, side dalı odak dalından
   // önce koşulsuz render ettiği için aksi hâlde tıklama görünmez şekilde yutulur
   const focusFromSide = (identity: string): void => {
-    setSpotlight(`cam:${identity}`);
+    spotCam(identity);
     setShareLayout('focus');
   };
 
@@ -348,7 +360,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           return (
             <div
               key={v.key}
-              onClick={() => setSpotlight(v.key)}
+              onClick={() => (v.isScreen ? setSpotlight(v.key) : spotCam(v.identity))}
               title="büyüt"
               className={`relative aspect-video w-full shrink-0 cursor-pointer overflow-hidden rounded-md border ${
                 spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
@@ -367,7 +379,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       return (
         <div
           key={slotKey(p.identity) + '-slot'}
-          onClick={p.identity === focusId ? undefined : () => setSpotlight(`cam:${p.identity}`)}
+          onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
           title={p.identity === focusId ? undefined : 'büyüt'}
           className="relative flex aspect-video w-full shrink-0 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
         >
@@ -392,7 +404,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 title={focusedVideo.isScreen ? 'yan yana göster' : 'büyütmeden çıkar'}
                 onClick={() => {
                   if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
-                  else setSpotlight(null);
+                  else releaseSpot();
                 }}
                 overlay={
                   <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
@@ -432,7 +444,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               focusPerson && (
                 <div
                   key={focusedKey + '-ph'}
-                  onClick={() => setSpotlight(null)}
+                  onClick={releaseSpot}
                   title="büyütmeden çıkar"
                   className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
                 >
