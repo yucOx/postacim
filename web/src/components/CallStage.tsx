@@ -411,9 +411,9 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     );
   }
 
-  // odak modu: manuel odak ya da varsayılan ekran paylaşımı büyük + sağ
-  // dikey şeritte TÜM katılımcıların slotu (akışı olanın tile'ı, olmayanın
-  // avatarı) — kimse kaybolmaz
+  // odak modu (Discord Go Live): odak/yayın büyük + ALT yatay şeritte TÜM
+  // katılımcılar yan yana (akışı olanın tile'ı, olmayanın avatarı) — kimse
+  // kaybolmaz
   if (focusedKey && (focusedVideo || focusPerson)) {
     const slotFor = (p: Participant): React.ReactNode => {
       const pVideos = allVideos.filter((v) => v.identity === p.identity && v.key !== focusedKey);
@@ -425,7 +425,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               key={v.key}
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               title="büyüt"
-              className={`relative aspect-video w-full shrink-0 cursor-pointer overflow-hidden rounded-md border ${
+              className={`relative h-full aspect-video shrink-0 cursor-pointer overflow-hidden rounded-md border ${
                 spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
               } bg-night-850 transition-colors ${TILE_HIDE}`}
             >
@@ -444,7 +444,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           key={slotKey(p.identity) + '-slot'}
           onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
           title={p.identity === focusId ? undefined : 'büyüt'}
-          className="relative flex aspect-video w-full shrink-0 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
+          className="relative flex h-full aspect-video shrink-0 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
         >
           <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
           <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
@@ -459,7 +459,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           muted={shareMuted}
           activeIds={focusedVideo?.isScreen && !focusedVideo.trackRef.participant.isLocal ? [focusedVideo.identity] : []}
         />
-        <div className="flex min-h-0 flex-1 gap-2 p-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
           <div className="flex min-h-0 min-w-0 flex-1">
             {focusedVideo ? (
               <VideoTile
@@ -535,7 +535,10 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               )
             )}
           </div>
-          <div className="flex w-44 shrink-0 flex-col gap-2 overflow-y-auto">{participants.map(slotFor)}</div>
+          {/* Discord Go Live düzeni: herkes yayının altında yan yana yatay şeritte */}
+          <div className="flex h-28 shrink-0 gap-2 overflow-x-auto">
+            {participants.map(slotFor)}
+          </div>
         </div>
       </>
     );
