@@ -192,6 +192,20 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     setShareLayout(returnLayout.current);
   };
 
+  // bir yayını izlemeye başla (canlı döşemesi / şerit / side bölmesi) — çıkışta
+  // hep düz kamera düzenine dönmek için yerleşimi odak'a sabitleriz
+  const watchScreen = (identity: string): void => {
+    returnLayout.current = 'focus';
+    setSpotlight(`screen:${identity}`);
+    setShareLayout('focus');
+  };
+  // izlemeyi bırak: spotlight'ı bırak + kamera düzenine dön — returnLayout'a
+  // güvenme, eski 'side' tercihi yayını tekrar büyük gösterebilir
+  const unwatch = (): void => {
+    setSpotlight(null);
+    setShareLayout('focus');
+  };
+
   // yan yana düzende bir kameraya/avatara tıklamak o akışa odaklanıp odak
   // görünümüne döner — spotlight'i set etmek yetmez, side dalı odak dalından
   // önce koşulsuz render ettiği için aksi hâlde tıklama görünmez şekilde yutulur
@@ -221,6 +235,20 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     }
     prevOwnScreens.current = ownScreenCount;
   }, [ownScreenCount]);
+  // side tercihi yayınsız kalmasın: yayınlar bitince sıfırla — kalan eski
+  // 'side' bir sonraki UZAK yayını otomatik büyük gösterirdi (izleyici izlemeden
+  // izleme moduna düşüyordu)
+  useEffect(() => {
+    if (screens.length === 0) setShareLayout('focus');
+  }, [screens.length]);
+  // izlenen yayın bitince spotlight'ı bırak — ölü screen: anahtarı odak boş
+  // avatar placeholder'ına kilitler, kameraya dönemiyordun
+  useEffect(() => {
+    if (spotlight?.startsWith('screen:') && !screens.some((t) => `screen:${t.participant.identity}` === spotlight)) {
+      setSpotlight(null);
+      setShareLayout('focus');
+    }
+  }, [screens, spotlight]);
 
   if (participants.length === 0) {
     return (
@@ -315,8 +343,8 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       return (
         <div
           key={v.key}
-          onClick={() => (v.isScreen ? setShareLayout('focus') : focusFromSide(v.identity))}
-          title={v.isScreen ? 'odak görünümüne dön' : 'büyüt'}
+          onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
+          title={v.isScreen ? 'yayını izle' : 'büyüt'}
           className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border ${
             spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
           } bg-night-850 transition-colors ${TILE_HIDE}`}
@@ -371,7 +399,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           return (
             <div
               key={v.key}
-              onClick={() => (v.isScreen ? setSpotlight(v.key) : spotCam(v.identity))}
+              onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               title="büyüt"
               className={`relative aspect-video w-full shrink-0 cursor-pointer overflow-hidden rounded-md border ${
                 spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
@@ -423,12 +451,13 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 }}
                 overlay={
                   <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
+                    {focusedVideo.trackRef.participant.isLocal && stopBtn(false)}
                     {focusedVideo.isScreen && !focusedVideo.trackRef.participant.isLocal && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          releaseSpot();
+                          unwatch();
                         }}
                         className="rounded-md border border-night-700 bg-night-950/85 px-2 py-1 text-xs font-semibold text-paper-300 transition-colors hover:text-paper-100"
                         title="yayını izlemeyi bırak — kameralara dön"
@@ -493,16 +522,15 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   // izlenmeyen uzak yayınlar — kameraların yanında "canlı" döşemesi olarak
   // bekler, tıklayınca izlenmeye başlanır (odak moduna geçer)
   const liveScreens = screens.filter((t) => !t.participant.isLocal && spotlight !== `screen:${t.participant.identity}`);
+  const watchLive = (t: TrackReference): void => {
+    watchScreen(t.participant.identity);
+  };
   const liveBadge = (
     <span className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400">
       <span className="h-1.5 w-1.5 rounded-full bg-stamp-500" aria-hidden />
       canlı
     </span>
   );
-  const watchLive = (t: TrackReference): void => {
-    setSpotlight(`screen:${t.participant.identity}`);
-    setShareLayout('focus');
-  };
 
   // 1-2 kişide Discord gibi: bölmeler sahnenin tüm yüksekliğini doldurur,
   // video contain (kırpma yok) — baştan beri büyük durur
