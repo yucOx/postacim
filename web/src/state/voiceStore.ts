@@ -342,7 +342,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
     const q = get().quality;
     await room.localParticipant.setScreenShareEnabled(
       next,
-      undefined,
+      // sekme/sistem sesi de paylaşılabilir — izleyici sesi kısabilir/kapatabilir
+      { audio: true },
       next ? qualityTiers[q].screenPublish : undefined,
     );
     set({ screenOn: next, screenQuality: next ? q : null });

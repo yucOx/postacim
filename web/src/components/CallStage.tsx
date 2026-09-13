@@ -3,6 +3,7 @@ import { ParticipantTile, useParticipants, useTracks, AudioTrack } from '@liveki
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
 import { useVoiceStore } from '../state/voiceStore';
 import Avatar from './Avatar';
@@ -18,6 +19,21 @@ function RemoteAudio(): React.ReactNode {
         .filter((t) => !t.participant.isLocal)
         .map((t) => (
           <AudioTrack key={t.participant.identity} trackRef={t} className="hidden" />
+        ))}
+    </>
+  );
+}
+
+/** Remote screen-share audio — attached invisibly; the viewer's volume/mute
+ *  controls drive the gain. Local share audio is never attached (echo). */
+function ShareAudio({ volume, muted }: { volume: number; muted: boolean }): React.ReactNode {
+  const tracks = useTracks([Track.Source.ScreenShareAudio], { onlySubscribed: true });
+  return (
+    <>
+      {tracks
+        .filter((t) => !t.participant.isLocal)
+        .map((t) => (
+          <AudioTrack key={t.participant.identity} trackRef={t} volume={muted ? 0 : volume} className="hidden" />
         ))}
     </>
   );
@@ -151,6 +167,9 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const toggleScreen = useVoiceStore((s) => s.toggleScreen);
   // paylaşım görünümü yerleşimi: odak (büyük + sağ şerit) / yan yana eşit bölmeler
   const [shareLayout, setShareLayout] = useState<'focus' | 'side'>('focus');
+  // izleyici yayın sesi: 0-1 + sessize alma (ekran paylaşımı sesi)
+  const [shareVolume, setShareVolume] = useState(1);
+  const [shareMuted, setShareMuted] = useState(false);
 
   const toggleSpotlight = (kind: 'screen' | 'cam', identity: string): void => {
     const key = `${kind}:${identity}`;
@@ -188,7 +207,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         key={slotKey(p.identity)}
         onClick={() => toggleSpotlight('cam', p.identity)}
         title={focused ? 'büyütmeden çıkar' : 'büyüt'}
-        className={`relative aspect-video h-full shrink-0 cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${border} ${TILE_HIDE}`}
+        className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${border} ${TILE_HIDE}`}
       >
         <ParticipantTile trackRef={cam} className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
@@ -198,7 +217,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         key={slotKey(p.identity)}
         onClick={() => toggleSpotlight('cam', p.identity)}
         title={focused ? 'büyütmeden çıkar' : 'büyüt'}
-        className={`flex aspect-video h-full shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850 transition-colors ${border}`}
+        className={`flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850 transition-colors ${border}`}
       >
         <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
@@ -336,6 +355,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     return (
       <>
         <RemoteAudio />
+        <ShareAudio volume={shareVolume} muted={shareMuted} />
         <div className="flex min-h-0 flex-1 gap-2 p-3">
           <div className="flex min-h-0 min-w-0 flex-1">
             {focusedVideo ? (
@@ -349,7 +369,39 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                   if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
                   else setSpotlight(null);
                 }}
-                overlay={focusedVideo.isScreen && focusedVideo.trackRef.participant.isLocal ? stopBtn() : undefined}
+                overlay={
+                  <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
+                    {!focusedVideo.trackRef.participant.isLocal && (
+                      <div className="flex items-center gap-1.5 rounded-md border border-night-700 bg-night-950/85 px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShareMuted((m) => !m);
+                          }}
+                          className="text-paper-300 transition-colors hover:text-lamp-400"
+                          title={shareMuted ? 'yayın sesini aç' : 'yayın sesini kapat'}
+                          aria-label={shareMuted ? 'yayın sesini aç' : 'yayın sesini kapat'}
+                        >
+                          {shareMuted || shareVolume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                        </button>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={shareMuted ? 0 : Math.round(shareVolume * 100)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            setShareVolume(Number(e.target.value) / 100);
+                            setShareMuted(false);
+                          }}
+                          className="w-20 accent-lamp-500"
+                          aria-label="yayın sesi seviyesi"
+                        />
+                      </div>
+                    )}
+                  </div>
+                }
               />
             ) : (
               focusPerson && (
