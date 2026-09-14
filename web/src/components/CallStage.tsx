@@ -644,16 +644,20 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     return (
       <>
         <RemoteAudio />
-        <div className="flex min-h-0 flex-1 gap-3 p-4">
+        <div className="flex min-h-0 flex-1 items-center justify-center gap-3 p-4">
           {participants.map((p) => {
             const cam = camByIdentity.get(p.identity);
             const focused = spotlight === `cam:${p.identity}`;
+            // çerçeve görüntüyü sarsın — flex-1 dolu kutu değil, yayın
+            // oranında (bilinmiyorsa 16:9) sahneye sığan pencere
+            const aspect = cam ? (trackAspect(cam) ?? 16 / 9) : 16 / 9;
             return (
               <div
                 key={slotKey(p.identity)}
                 onClick={() => toggleSpotlight('cam', p.identity)}
                 title={focused ? 'büyütmeden çıkar' : 'büyüt'}
-                className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${
+                style={{ aspectRatio: `${aspect}` }}
+                className={`relative h-full min-w-0 max-w-full w-auto cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${
                   focused ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
                 } ${TILE_HIDE}`}
               >
