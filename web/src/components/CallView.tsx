@@ -23,14 +23,13 @@ export default function CallView(): React.ReactNode {
 
   return (
     // tam ekran overlay değil — ana flex satırına sığan panel; böylece
-    // sol ray (sunucu + DM listesi) görüşme boyunca görünür kalır (Discord)
-    <div className="flex min-w-0 flex-1 flex-col bg-night-950">
-      <div className="flex items-center gap-3 border-b border-night-700 bg-night-900/60 px-4 py-2.5">
+    // sol ray (sunucu + DM listesi) görüşme boyunca görünür kalır (Discord).
+    // min-h-0 olmadan içerideki flex-1'ler viewport'u taşırıp scroll yaratır
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-night-950">
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-night-700 bg-night-900/60 px-3 py-2">
         <span className="plate">GÖRÜŞME</span>
-        <span className="font-display text-lg font-semibold uppercase tracking-[0.08em] text-paper-50">{peerNick}</span>
-        <span className="sealed-band">
-          {status}
-        </span>
+        <span className="font-display text-base font-semibold uppercase tracking-[0.08em] text-paper-50">{peerNick}</span>
+        <span className="sealed-band">{status}</span>
         <button
           onClick={() => setPip(true)}
           className="btn-ghost ml-auto !px-2 !py-1"
@@ -41,17 +40,27 @@ export default function CallView(): React.ReactNode {
           küçült
         </button>
       </div>
-      {error && <div className="border-b border-stamp-500/50 bg-stamp-100 px-4 py-2 text-sm text-stamp-400">{error}</div>}
+      {error && <div className="shrink-0 border-b border-stamp-500/50 bg-stamp-100 px-4 py-2 text-sm text-stamp-400">{error}</div>}
       {!room ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-paper-500">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-paper-500">
           <PigeonMark size={30} className="text-brass-600" />
           <p className="text-sm">vagona bağlanıyor…</p>
         </div>
       ) : (
+        // CallStage + alt kontroller ana sütunda — CallStage flex-1 ile kalan
+        // yüksekliği alır; min-h-0 kardeşler içermezse içerideki dikey
+        // yerleşim viewport'a sığar
         <RoomContext.Provider value={room}>
-          <CallStage />
-          <CallQualityPicker />
-          <CallControls variant="call" onEnd={() => void cancelCall()} endLabel="bitir" onMinimize={() => setPip(true)} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {/* CallStage fragment döndürüyor; sarmalayıcı olmadan içerideki
+                flex-1 ebeveyne göre sıfır kalıp sahnenin yüksekliği içeriğe
+                göre şişer, viewport taşar. Sarmalayıcı flex-col: CallStage
+                parçaları (RemoteAudio, ShareAudio, ana div) direkt çocuk olur;
+                ana div flex-1'i kalan yeri kaplar. */}
+            <CallStage />
+            <CallQualityPicker />
+            <CallControls variant="call" onEnd={() => void cancelCall()} endLabel="bitir" onMinimize={() => setPip(true)} />
+          </div>
         </RoomContext.Provider>
       )}
     </div>
