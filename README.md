@@ -80,6 +80,46 @@ docker compose up -d --build  # livekit + server + web
   prod için güçlü çift üret: `docker run --rm livekit/livekit-server:v1.13.1 generate-keys`
   (bilinen örnek değerlerde sunucu açılmayı reddeder)
 - `WEB_PORT` — web'in yayın portu (default 80)
+- `SCREEN_SHARE` — `off` yapılırsa ses token'larından ekran paylaşım izni
+  (`screen_share` publish kaynağı) düşer: istemci UI'ı yine de görebilir ama
+  yayın LiveKit'te fiziksel olarak reddedilir. Acil durum kill switch'i —
+  değiştirince yalnız `docker compose up -d server` yeniden başlatmak yeter.
+
+### Medya: kalite, limitler ve optimizasyon
+
+İstemci tarafı (tarayıcıda çalışır, sunucu transcode yapmaz — SFU yalnız iletir):
+
+- **Simulcast + Dynacast + AdaptiveStream** (`voiceStore.connectRoom`): gönderici
+  2-3 kalite katmanı basar; SFU her izleyiciye yalnız bant genişliğine ve tile
+  boyutuna uyan katmanı yollar, kimse izlemiyorsa katman durur (Discord'un Go
+  Live mimarisiyle aynı üçlü).
+- **Ekran paylaşımı VP9** codec'li: metin/UI içeriği VP8'e göre ~yarı bitratete
+  aynı netlik taşır. Kamera VP8 kalır (tarayıcı VP9 simulcast desteği zayıf).
+  E2EE (SFrame) codec-agnostiktir — paketlemeden önce şifreler.
+- **`contentHint`**: ekran track'ine `detail` (netlik koru), kameraya `motion`
+  (akıcılık koru) — tarayıcı encoder'ına ücretsiz ipucu.
+- **Kalite katmanları** (kalite seçici: hızlı/dengeli/yüksek) `degradationPreference`
+  ile: hızlı kare hızı koruyup çözünürlükten, yüksek çözünürlük koruyup kareden
+  kırpılır. Yayın diyaloğu tavanı 1080p30 (1440p bilinçli kapalı — tek yayıncı
+  küçük SFU'yu doldurabilir), varsayılan 720p30.
+
+Sunucu tarafı (token ile zorlanır — UI'ı aşamaz):
+
+- **Oda limitleri** her ses token'ına gömülü (`RoomConfiguration`): oda başına
+  25 katılımcı, boşalan oda 5 dakikada kapanır. Yük artarsa `maxParticipants`
+  önce 15'e düşürülür, sonra LiveKit ayrı host'a taşınır.
+- **`SCREEN_SHARE=off`** kill switch (yukarıda) — token grant seviyesinde.
+- E2EE (SFrame) stream başına ~%10 encoder/decoder CPU maliyeti koyar; gizlilik
+  vaadinin bilinçli bedelidir, kaldırılamaz.
+
+### Arayüz dili (i18n)
+
+5 dil: Türkçe, İngilizce, Almanca, Fransızca, İspanyolca. İlk açılışta tarayıcı
+diline bakılır (`tr*` → Türkçe, diğerleri → İngilizce); seçim localStorage'da
+saklanır, dil seçiciye giriş ekranının sağ üstünden ve üst başlıktaki dünya
+ikonundan erişilir. Yeni dil eklemek: `web/src/i18n/types.ts` union'ına kod,
+`locales/<kod>.ts` katalog dosyası; anahtar eksikliği `locale-parity` testini
+kırdığı için CI'da yakalanır.
 
 Güncelleme: `git pull && docker compose up -d --build`.
 

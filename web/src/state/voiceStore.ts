@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Room, RoomEvent, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets } from 'livekit-client';
+import { Room, RoomEvent, Track, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets } from 'livekit-client';
 import type { LocalParticipant, TrackPublishOptions, VideoCaptureOptions } from 'livekit-client';
 import { api } from '../api/client';
 import type { VoiceTokenResponse } from '../api/types';
@@ -139,24 +139,37 @@ const qualityTiers: Record<
   CallQuality,
   { camCapture: VideoCaptureOptions; camPublish: TrackPublishOptions; screenPublish: TrackPublishOptions }
 > = {
-  // hızlı: small + framerate-first — encoder sheds resolution before frames
+  // hızlı: small + framerate-first — encoder sheds resolution before frames.
+  // Ekran paylaşımı hep VP9: metin/UI içeriği VP8'e göre ~yarı bitratete aynı
+  // netlik (E2EE codec-agnostik — SFrame paketlemeden önce şifreler). Kamera
+  // VP8 kalır: browser VP9 simulcast desteği zayıf.
   hizli: {
     camCapture: { resolution: VideoPresets.h360.resolution },
     camPublish: { videoEncoding: VideoPresets.h360.encoding, degradationPreference: 'maintain-framerate' },
-    screenPublish: { screenShareEncoding: ScreenSharePresets.h720fps15.encoding, degradationPreference: 'maintain-framerate' },
+    screenPublish: { screenShareEncoding: ScreenSharePresets.h720fps15.encoding, videoCodec: 'vp9', degradationPreference: 'maintain-framerate' },
   },
   dengeli: {
     camCapture: { resolution: VideoPresets.h720.resolution },
     camPublish: { videoEncoding: VideoPresets.h720.encoding },
-    screenPublish: { screenShareEncoding: ScreenSharePresets.h1080fps15.encoding },
+    screenPublish: { screenShareEncoding: ScreenSharePresets.h1080fps15.encoding, videoCodec: 'vp9' },
   },
   // yüksek: resolution-first — encoder keeps pixels, drops frames if squeezed
   yuksek: {
     camCapture: { resolution: VideoPresets.h1080.resolution },
     camPublish: { videoEncoding: VideoPresets.h1080.encoding, degradationPreference: 'maintain-resolution' },
-    screenPublish: { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding, degradationPreference: 'maintain-resolution' },
+    screenPublish: { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding, videoCodec: 'vp9', degradationPreference: 'maintain-resolution' },
   },
 };
+
+// encoder ipucu: ekran = 'detail' (kare at, netliği koru), kamera = 'motion'
+// (akıcılık koru). Publish bittikten sonra track'in mediaStreamTrack'ine
+// yazılır — encoder'a ücretsiz yönlendirme.
+function hintTrack(src: Track.Source): void {
+  const st = useVoiceStore.getState();
+  const pub = st.room?.localParticipant.getTrackPublication(src);
+  const mst = pub?.track?.mediaStreamTrack;
+  if (mst) mst.contentHint = src === Track.Source.ScreenShare ? 'detail' : 'motion';
+}
 
 const cleanup = (room: Room | null): void => {
   if (!room) return;
@@ -358,6 +371,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       next ? q.camCapture : undefined,
       next ? q.camPublish : undefined,
     );
+    if (next) hintTrack(Track.Source.Camera);
     set({ camOn: next });
   },
 
@@ -372,6 +386,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       { audio: true },
       next ? qualityTiers[q].screenPublish : undefined,
     );
+    if (next) hintTrack(Track.Source.ScreenShare);
     set({ screenOn: next, screenQuality: next ? q : null });
   },
 
@@ -394,9 +409,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         },
         {
           screenShareEncoding: { maxBitrate: bitrate, maxFramerate: opts.fps },
+          videoCodec: 'vp9',
           degradationPreference: opts.fps >= 60 ? 'maintain-framerate' : 'maintain-resolution',
         },
       );
+      hintTrack(Track.Source.ScreenShare);
       set({ screenOn: true, screenQuality: null });
     } catch (err) {
       set({ error: err instanceof Error ? `yayın başlatılamadı: ${err.message}` : 'yayın başlatılamadı' });

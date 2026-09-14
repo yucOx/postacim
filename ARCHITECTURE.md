@@ -118,6 +118,13 @@ Tümü `/api` önekli. `index.ts` auth hook'u: `PUBLIC_PATHS` dışında her şe
 |---|---|---|
 | POST `/channels/:id/voice-token` | LiveKit oda token'ı (`ch_<id>` odası, 15 dk TTL); sarılı anahtar varlığı kanıt | evet |
 
+Token içeriği kaynak limitlerini taşır (`livekit.ts`): `RoomConfiguration`
+(maxParticipants 25, emptyTimeout 300 sn) ve `SCREEN_SHARE=off` iken
+`canPublishSources: [camera, microphone]` — ekran paylaşımı sunucu tarafından
+fiziksel engellenir. İstemci tarafı yayın optimizasyonları (simulcast+dynacast+
+adaptiveStream, ekran VP9, contentHint) `web/src/state/voiceStore.ts`'te;
+ayrıntı README "Medya: kalite, limitler ve optimizasyon" bölümünde.
+
 ### Davetler (`routes/invites.ts`)
 
 | Uç | Amaç | Auth | Limit |
