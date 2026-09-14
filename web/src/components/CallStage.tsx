@@ -230,20 +230,62 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const shareByIdentity = new Map(
     screens.filter((t) => !t.participant.isLocal).map((t) => [t.participant.identity, t]),
   );
-  const liveBadgeBtn = (identity: string): React.ReactNode => (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        watchScreen(identity);
-      }}
-      className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
-      title="yayını izle"
-    >
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-stamp-500" aria-hidden />
-      canlı — izle
-    </button>
-  );
+  // canlı yayın rozeti — tıklayınca doğrudan spotlight almak yerine küçük
+  // bir onay penceresi açılır: "katıl" / "vazgeç" (Discord Go Live mantığı;
+  // istemeden spot alıp çağrı akışını bozmamak için)
+  const [joinPrompt, setJoinPrompt] = useState<string | null>(null);
+  const liveBadgeBtn = (identity: string): React.ReactNode => {
+    const open = joinPrompt === identity;
+    return (
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="absolute right-2 top-2 z-10"
+      >
+        {open ? (
+          <div className="flex flex-col gap-1.5 rounded-md border border-brass-600/70 bg-night-950/95 p-2 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.7)]">
+            <span className="font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-stamp-400">
+              {nickFor(identity)} yayında
+            </span>
+            <span className="text-[11px] text-paper-300">yayına katılmak istiyor musun?</span>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setJoinPrompt(null);
+                  watchScreen(identity);
+                }}
+                className="flex-1 rounded border border-lamp-500/70 bg-lamp-100/60 px-2 py-1 text-[11px] font-semibold text-lamp-300 transition-colors hover:bg-lamp-500 hover:text-night-950"
+                title="yayına katıl"
+              >
+                katıl
+              </button>
+              <button
+                type="button"
+                onClick={() => setJoinPrompt(null)}
+                className="flex-1 rounded border border-night-700 px-2 py-1 text-[11px] text-paper-300 transition-colors hover:text-paper-100"
+                title="vazgeç"
+              >
+                vazgeç
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setJoinPrompt(identity);
+            }}
+            className="flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
+            title="yayına katıl"
+          >
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-stamp-500" aria-hidden />
+            canlı — izle
+          </button>
+        )}
+      </div>
+    );
+  };
 
   // yan yana düzende bir kameraya/avatara tıklamak o akışa odaklanıp odak
   // görünümüne döner — spotlight'i set etmek yetmez, side dalı odak dalından
@@ -263,6 +305,10 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     }
     prevCount.current = participants.length;
   }, [participants.length]);
+  // prompt açıkken peer paylaşımı durdurursa havada kalmasın
+  useEffect(() => {
+    if (joinPrompt && !shareByIdentity.has(joinPrompt)) setJoinPrompt(null);
+  }, [joinPrompt, shareByIdentity]);
 
   // KENDİ yayınım başlayınca büyük alanı yayın alsın — bayat spotlight (mesela
   // kamerası kapalı birine tıklayıp büyütülmüş odak) yayını şeritte küçülterek
