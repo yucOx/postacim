@@ -21,6 +21,7 @@ export default {
     balanced: 'dengeli',
     high: 'yüksek',
     qualityStale: 'sonraki yayın için geçerli',
+    cam720Note: 'test: kamera 720p sınırında — 1080p ileride açılır',
     qualityTitle: 'kalite: {name}',
     resolution: 'çözünürlük',
     fps: 'kare hızı',

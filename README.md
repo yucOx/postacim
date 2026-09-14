@@ -102,6 +102,10 @@ docker compose up -d --build  # livekit + server + web
   ile: hızlı kare hızı koruyup çözünürlükten, yüksek çözünürlük koruyup kareden
   kırpılır. Yayın diyaloğu tavanı 1080p30 (1440p bilinçli kapalı — tek yayıncı
   küçük SFU'yu doldurabilir), varsayılan 720p30.
+- **TEST AŞAMASI: kamera 720p tavanlı** — 'yüksek' katman farkı yalnız ekran
+  paylaşımında (1080p30). Kapasite oturunca `voiceStore.qualityTiers`'da
+  `yuksek.camCapture/camPublish` `VideoPresets.h1080`'e döndürülür; UI'daki
+  "1080p ileride açılır" notu (`call.cam720Note`) o zaman kaldırılır.
 
 Sunucu tarafı (token ile zorlanır — UI'ı aşamaz):
 

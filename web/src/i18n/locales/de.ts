@@ -17,6 +17,7 @@ export default {
     balanced: 'ausgewogen',
     high: 'hoch',
     qualityStale: 'gilt für den nächsten stream',
+    cam720Note: 'test: kamera bei 720p gedeckelt — 1080p später',
     qualityTitle: 'qualität: {name}',
     resolution: 'auflösung',
     fps: 'bildrate',

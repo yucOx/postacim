@@ -39,6 +39,7 @@ export default function CallQualityPicker(): React.ReactNode {
         );
       })}
       {staleShare && <span className="text-[10px] text-paper-500">{t('call.qualityStale')}</span>}
+      <span className="hidden md:inline text-[10px] text-paper-700">{t('call.cam720Note')}</span>
     </div>
   );
 }

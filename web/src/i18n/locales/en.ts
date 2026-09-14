@@ -30,6 +30,7 @@ export default {
     screenPromptTitle: 'Start stream',
     screenPromptHint: 'you will be asked what to share on the browser picker in the next step',
     qualityStale: 'applies to next stream',
+    cam720Note: 'test: camera capped at 720p — 1080p coming later',
     qualityTitle: 'quality: {name}',
     plate: 'CALL',
     minimize: 'minimize',

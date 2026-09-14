@@ -17,6 +17,7 @@ export default {
     balanced: 'équilibrée',
     high: 'haute',
     qualityStale: 's applique au prochain stream',
+    cam720Note: 'test : caméra limitée à 720p — 1080p plus tard',
     qualityTitle: 'qualité : {name}',
     resolution: 'résolution',
     fps: 'fréquence d images',

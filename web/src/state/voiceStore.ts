@@ -153,10 +153,13 @@ const qualityTiers: Record<
     camPublish: { videoEncoding: VideoPresets.h720.encoding },
     screenPublish: { screenShareEncoding: ScreenSharePresets.h1080fps15.encoding, videoCodec: 'vp9' },
   },
-  // yüksek: resolution-first — encoder keeps pixels, drops frames if squeezed
+  // yüksek: resolution-first — encoder keeps pixels, drops frames if squeezed.
+  // TEST AŞAMASI: kamera 1080p bilinçli kapalı — dengeli ile aynı kamera
+  // preseti, fark yalnız ekran paylaşımında (1080p30). Kapasite oturunca
+  // camCapture/camPublish VideoPresets.h1080'e döner.
   yuksek: {
-    camCapture: { resolution: VideoPresets.h1080.resolution },
-    camPublish: { videoEncoding: VideoPresets.h1080.encoding, degradationPreference: 'maintain-resolution' },
+    camCapture: { resolution: VideoPresets.h720.resolution },
+    camPublish: { videoEncoding: VideoPresets.h720.encoding, degradationPreference: 'maintain-resolution' },
     screenPublish: { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding, videoCodec: 'vp9', degradationPreference: 'maintain-resolution' },
   },
 };
