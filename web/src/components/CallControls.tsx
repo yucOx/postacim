@@ -5,14 +5,15 @@ import { useVoiceStore, type CallQuality, type ShareOpts } from '../state/voiceS
 import Modal from './Modal';
 import { useT } from '../i18n/I18nProvider';
 
-// diyalogdaki çözünürlük satırları; kalite ayarına göre ön seçilir
+// diyalogdaki çözünürlük satırları; kalite ayarına göre ön seçilir.
+// 1440p bilinçli yok — tek yayıncı bile SFU'yu doldurur (kaynak limiti:
+// küçük VPS); kaliteli yayın için tavan 1080p30.
 // (etiketler sabit: 360p/480p… — sayısal, dile bağlı değil)
 const RES_ROWS: { h: number; w: number; label: string }[] = [
   { h: 360, w: 640, label: '360p' },
   { h: 480, w: 854, label: '480p' },
   { h: 720, w: 1280, label: '720p' },
   { h: 1080, w: 1920, label: '1080p' },
-  { h: 1440, w: 2560, label: '1440p' },
 ];
 const FPS_ROWS: Array<ShareOpts['fps']> = [15, 30, 60];
 // kaynak ipucu — tarayıcının seçim ekranında o kategoriye ön seçilir
@@ -47,7 +48,7 @@ export default function CallControls({
   // kaynak ipucu + çözünürlük + fps + ses, sonra tarayıcıdan kaynak seçimi
   const [screenPrompt, setScreenPrompt] = useState(false);
   const [resH, setResH] = useState(() => QUALITY_TO_RES[quality]);
-  const [fps, setFps] = useState<ShareOpts['fps']>(15);
+  const [fps, setFps] = useState<ShareOpts['fps']>(30); // 15 fps akıcılık için düşük kalıyor — varsayılan 30
   const [shareAudio, setShareAudio] = useState(true);
   const [surface, setSurface] = useState<ShareOpts['surface']>('monitor');
 

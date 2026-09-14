@@ -36,6 +36,10 @@ export const config = {
   livekitUrl: process.env.LIVEKIT_URL ?? 'http://localhost:7880',
   livekitApiKey: process.env.LIVEKIT_API_KEY ?? 'devkey',
   livekitSecret,
+  // kill switch: SCREEN_SHARE=off → voice tokens drop the screen_share publish
+  // source; clients physically cannot publish a stream (UI hides it too loose
+  // to trust — the token is the enforcement point)
+  screenShareEnabled: process.env.SCREEN_SHARE !== 'off',
   // default 7 days — a stolen cookie's validity window; SESSION_TTL_DAYS env overrides
   sessionTtlDays: num(process.env.SESSION_TTL_DAYS, 7),
   /** optional Cloudflare Turnstile — unset secret disables the check entirely

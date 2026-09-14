@@ -1,4 +1,4 @@
-import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { AccessToken, RoomConfiguration, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 import { config } from './config.js';
 
 // Offline-signed JWT: the server never talks to livekit-server for this.
@@ -14,7 +14,23 @@ export async function mintVoiceToken(
     // window; legit clients mint a fresh token on every join.
     ttl: '15m',
   });
-  at.addGrant({ room: `ch_${channelId}`, roomJoin: true, canPublish: true, canSubscribe: true });
+  at.addGrant({
+    room: `ch_${channelId}`,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+    // SCREEN_SHARE=off → screen_share publish physically impossible
+    ...(config.screenShareEnabled
+      ? {}
+      : { canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE] }),
+  });
+  // room-level resource caps (ilk günden sıkı: kullanıcı arttıkça gevşet)
+  at.roomConfig = new RoomConfiguration({
+    // 6 vCPU SFU tavanı; %50 yükte 15'e düşürülür
+    maxParticipants: 25,
+    // boşalan oda 5 dk sonra kapanır — hayalet oda yok
+    emptyTimeout: 300,
+  });
   return at.toJwt();
 }
 
