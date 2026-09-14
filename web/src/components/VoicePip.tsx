@@ -3,6 +3,7 @@ import { Mic, MicOff, PhoneOff, PictureInPicture2, Pin, PinOff, Users, Video, Vi
 import { ParticipantTile, RoomContext, useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
+import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { nickFor } from '../lib/nick';
@@ -26,6 +27,7 @@ function loadVidPref(): VidPref {
  *  cameras), compact controls and a real browser Picture-in-Picture escape
  *  hatch so the call can float over other windows */
 function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | null> }): React.ReactNode {
+  const { t } = useT();
   // onlySubscribed: false — own camera shows too (Discord mini-player style)
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], { onlySubscribed: false });
   // livekit v2 disables a camera by MUTING the track — muted refs paint black
@@ -55,11 +57,17 @@ function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | nul
       // private mode — session-only
     }
   };
+  const prefLabel = (p: VidPref): string => {
+    if (p === 'auto') return t('pip.prefAuto');
+    if (p === 'screen') return t('pip.prefScreen');
+    if (p === 'camera') return t('pip.prefCamera');
+    return t('pip.prefSelf');
+  };
   if (!pick) {
     return (
       <div className="flex h-32 flex-col items-center justify-center bg-night-850 text-paper-500">
         <VideoOff size={16} aria-hidden />
-        <span className="mt-1 font-display text-[10px] uppercase tracking-[0.14em]">kamera kapalı</span>
+        <span className="mt-1 font-display text-[10px] uppercase tracking-[0.14em]">{t('pip.camOff')}</span>
       </div>
     );
   }
@@ -70,16 +78,16 @@ function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | nul
         className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover [&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden"
       />
       <span className="pointer-events-none absolute bottom-1 left-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50">
-        {pick.participant.isLocal ? 'sen' : nickFor(pick.participant.identity)}
+        {pick.participant.isLocal ? t('call.nameSelf') : nickFor(pick.participant.identity)}
       </span>
       {screens.length > 0 && cams.length > 0 && (
         <button
           type="button"
           onClick={cycle}
           className="absolute bottom-1 right-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50 transition-colors hover:border-lamp-500/70 hover:text-lamp-400"
-          title="büyük gösterilecek akışı değiştir (oto → ekran → kamera → sen)"
+          title={t('pip.cycleTitle')}
         >
-          {pref === 'auto' ? 'oto' : pref === 'screen' ? 'ekran' : pref === 'camera' ? 'kamera' : 'sen'}
+          {prefLabel(pref)}
         </button>
       )}
     </div>
@@ -90,6 +98,7 @@ function VideoStage({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement | nul
  *  live video stage, mic/cam toggles, room shortcut, hang up, and a real
  *  browser Picture-in-Picture escape hatch (video floats over other apps) */
 export default function VoicePip(): React.ReactNode {
+  const { t } = useT();
   const room = useVoiceStore((s) => s.room);
   const channelId = useVoiceStore((s) => s.joinedChannelId);
   const micOn = useVoiceStore((s) => s.micOn);
@@ -110,14 +119,14 @@ export default function VoicePip(): React.ReactNode {
     const v = videoWrapRef.current?.querySelector('video');
     if (!v || typeof v.requestPictureInPicture !== 'function') {
       // LAN http (localhost dışı) güvenli bağlam sayılmaz — API orada yok
-      toast.error('bu tarayıcıda pencere içi pencere yok — https gerekir');
+      toast.error(t('call.pipUnsupported'));
       return;
     }
     try {
       if (document.pictureInPictureElement) await document.exitPictureInPicture();
       await v.requestPictureInPicture();
     } catch {
-      toast.error('pencere içinde pencere açılamadı');
+      toast.error(t('call.pipFailed'));
     }
   };
 
@@ -138,9 +147,9 @@ export default function VoicePip(): React.ReactNode {
             useAppStore.setState({ view: 'community', activeDmId: null });
           }}
           className="min-w-0 flex-1 truncate text-left font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50 transition-colors hover:text-lamp-400"
-          title="sesli odaya dön"
+          title={t('pip.returnRoom')}
         >
-          {channel?.name ?? 'sesli oda'}
+          {channel?.name ?? t('pip.roomName')}
         </button>
         <button
           type="button"
@@ -148,8 +157,8 @@ export default function VoicePip(): React.ReactNode {
           className={`shrink-0 rounded p-1 transition-colors ${
             pipPinned ? 'text-lamp-400 hover:text-lamp-300' : 'text-paper-500 hover:text-paper-100'
           }`}
-          title={pipPinned ? 'pinlemeyi kaldır' : 'en üstte sabitle'}
-          aria-label={pipPinned ? 'pinlemeyi kaldır' : 'en üstte sabitle'}
+          title={pipPinned ? t('pip.unpin') : t('pip.pinTop')}
+          aria-label={pipPinned ? t('pip.unpin') : t('pip.pinTop')}
           aria-pressed={pipPinned}
         >
           {pipPinned ? <Pin size={13} /> : <PinOff size={13} />}
@@ -161,7 +170,7 @@ export default function VoicePip(): React.ReactNode {
         </RoomContext.Provider>
       ) : (
         <div className="flex h-32 items-center justify-center bg-night-850 font-display text-[11px] uppercase tracking-[0.14em] text-paper-500">
-          odaya bağlanıyor…
+          {t('pip.connecting')}
         </div>
       )}
       <div className="flex items-center gap-2 px-3 py-2">
@@ -173,8 +182,8 @@ export default function VoicePip(): React.ReactNode {
               ? 'border-brass-600/60 bg-night-700 text-paper-50 hover:border-brass-500'
               : 'border-stamp-500/70 bg-stamp-500 text-white hover:bg-stamp-400',
           )}
-          title={micOn ? 'mikrofonu kapat' : 'mikrofonu aç'}
-          aria-label={micOn ? 'mikrofonu kapat' : 'mikrofonu aç'}
+          title={micOn ? t('call.micOn') : t('call.micOff')}
+          aria-label={micOn ? t('call.micOn') : t('call.micOff')}
           aria-pressed={micOn}
         >
           {micOn ? <Mic size={14} /> : <MicOff size={14} />}
@@ -187,8 +196,8 @@ export default function VoicePip(): React.ReactNode {
               ? 'border-brass-600/60 bg-night-700 text-paper-50 hover:border-brass-500'
               : 'border-stamp-500/70 bg-stamp-500 text-white hover:bg-stamp-400',
           )}
-          title={camOn ? 'kamerayı kapat' : 'kamerayı aç'}
-          aria-label={camOn ? 'kamerayı kapat' : 'kamerayı aç'}
+          title={camOn ? t('call.camOn') : t('call.camOff')}
+          aria-label={camOn ? t('call.camOn') : t('call.camOff')}
           aria-pressed={camOn}
         >
           {camOn ? <Video size={14} /> : <VideoOff size={14} />}
@@ -198,8 +207,8 @@ export default function VoicePip(): React.ReactNode {
           type="button"
           onClick={() => void enterBrowserPip()}
           className={round('border-brass-600/60 bg-night-700 text-paper-50 hover:border-brass-500')}
-          title="tarayıcı pencere içinde pencere"
-          aria-label="tarayıcı pencere içinde pencere"
+          title={t('call.pipTitle')}
+          aria-label={t('call.pipTitle')}
         >
           <PictureInPicture2 size={14} />
         </button>
@@ -207,8 +216,8 @@ export default function VoicePip(): React.ReactNode {
           type="button"
           onClick={() => void leave()}
           className={round('border-stamp-500/70 bg-stamp-100 text-stamp-400 hover:bg-stamp-500 hover:text-white')}
-          title="sesli odadan ayrıl"
-          aria-label="sesli odadan ayrıl"
+          title={t('call.leaveRoom')}
+          aria-label={t('call.leaveRoom')}
         >
           <PhoneOff size={13} />
         </button>

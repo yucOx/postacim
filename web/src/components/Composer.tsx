@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { SendHorizontal } from 'lucide-react';
+import { useT } from '../i18n/I18nProvider';
 
 export default function Composer({
   send,
@@ -16,6 +17,7 @@ export default function Composer({
   /** fired (throttled) while the user types — typing indicator relay */
   onTyping?: () => void;
 }) {
+  const { t } = useT();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -37,7 +39,7 @@ export default function Composer({
       requestAnimationFrame(resize);
       await send(body);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'gönderilemedi');
+      setError(err instanceof Error ? err.message : t('composer.sendError'));
       setText(body);
     }
   };
@@ -68,14 +70,14 @@ export default function Composer({
           rows={1}
           placeholder={placeholder}
           disabled={disabled}
-          aria-label="mesaj yaz"
+          aria-label={t('composer.ariaWrite')}
           className="input max-h-40 flex-1 resize-none py-2.5 leading-relaxed"
         />
         <button
           onClick={() => void submit()}
           disabled={disabled || sending || !text.trim()}
-          aria-label="gönder"
-          title="gönder"
+          aria-label={t('composer.send')}
+          title={t('composer.sendTitle')}
           className="btn-lamp !h-10 !w-10 shrink-0 !p-0"
         >
           <SendHorizontal size={17} />

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { useT } from '../i18n/I18nProvider';
 
 /** 0-4 heuristic score — length dominates, classes add, common patterns sink it */
 export function passwordScore(pw: string): number {
@@ -13,7 +14,7 @@ export function passwordScore(pw: string): number {
   return Math.max(0, Math.min(4, Math.round(score)));
 }
 
-const LABELS = ['çok zayıf', 'zayıf', 'orta', 'iyi', 'güçlü'];
+const LABEL_KEYS = ['veryWeak', 'weak', 'medium', 'good', 'strong'] as const;
 const COLORS = ['bg-stamp-500', 'bg-stamp-400', 'bg-lamp-500', 'bg-lamp-400', 'bg-paper-50'];
 
 export default function PasswordInput({
@@ -34,6 +35,7 @@ export default function PasswordInput({
   /** 'new-password' when creating; 'current-password' when re-entering an existing one */
   autoComplete?: 'new-password' | 'current-password';
 }) {
+  const { t } = useT();
   const [show, setShow] = useState(false);
   const score = passwordScore(value);
   return (
@@ -52,7 +54,7 @@ export default function PasswordInput({
         <button
           type="button"
           onClick={() => setShow((s) => !s)}
-          aria-label={show ? 'şifreyi gizle' : 'şifreyi göster'}
+          aria-label={show ? t('password.hide') : t('password.show')}
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-paper-500 transition-colors hover:text-paper-100"
         >
           {show ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -66,7 +68,7 @@ export default function PasswordInput({
             ))}
           </div>
           <span className={score <= 1 ? 'text-stamp-400' : score === 2 ? 'text-lamp-500' : 'text-paper-100'}>
-            {LABELS[score]}
+            {t(`password.${LABEL_KEYS[score]}`)}
           </span>
         </div>
       )}

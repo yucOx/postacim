@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { RoomContext, useTracks, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { Maximize2, PhoneOff } from 'lucide-react';
+import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { nickFor } from '../lib/nick';
@@ -15,6 +16,7 @@ const MARGIN = 16;
 /** The minimized call — a draggable corner window over the chat, with snap
  *  back to the corner on double-click. Everything underneath stays interactive. */
 export default function PiPWidget(): React.ReactNode {
+  const { t } = useT();
   const room = useVoiceStore((s) => s.room);
   const callState = useVoiceStore((s) => s.callState);
   const setPip = useVoiceStore((s) => s.setPip);
@@ -98,23 +100,23 @@ export default function PiPWidget(): React.ReactNode {
       style={{ left: pos.x, top: pos.y, touchAction: 'none' }}
     >
       <div className="flex items-center gap-2 border-b border-night-700 px-3 py-2">
-        <span className="plate">GÖRÜŞME</span>
+        <span className="plate">{t('call.plate')}</span>
         <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50">
           {peerNick}
         </span>
         <button
           onClick={() => setPip(false)}
           className="rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
-          title="büyüt"
-          aria-label="aramayı büyüt"
+          title={t('pip.maximize')}
+          aria-label={t('pip.maximizeAria')}
         >
           <Maximize2 size={14} />
         </button>
         <button
           onClick={() => void cancelCall()}
           className="rounded p-1 text-paper-500 transition-colors hover:bg-stamp-100 hover:text-stamp-400"
-          title="aramayı bitir"
-          aria-label="aramayı bitir"
+          title={t('pip.endCall')}
+          aria-label={t('pip.endCallAria')}
         >
           <PhoneOff size={14} />
         </button>
@@ -126,7 +128,7 @@ export default function PiPWidget(): React.ReactNode {
       ) : (
         <RoomContext.Provider value={room}>
           <PiPTile />
-          <CallControls variant="call" onEnd={() => void cancelCall()} endLabel="bitir" />
+          <CallControls variant="call" onEnd={() => void cancelCall()} endLabel={t('call.end')} />
         </RoomContext.Provider>
       )}
     </div>
@@ -135,6 +137,7 @@ export default function PiPWidget(): React.ReactNode {
 
 /** prefers the remote screen share, then camera; falls back to anything */
 function PiPTile(): React.ReactNode {
+  const { t } = useT();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare, Track.Source.Microphone], {
     onlySubscribed: true,
   });
@@ -149,7 +152,7 @@ function PiPTile(): React.ReactNode {
     return (
       <div className="flex h-40 flex-col items-center justify-center gap-2 bg-night-850 text-paper-500">
         <PigeonMark size={24} className="text-brass-600" />
-        <span className="font-display text-[11px] uppercase tracking-[0.18em]">karşı taraf bekleniyor</span>
+        <span className="font-display text-[11px] uppercase tracking-[0.18em]">{t('pip.waitingPeer')}</span>
       </div>
     );
   }

@@ -8,8 +8,10 @@ import { useSettingsStore } from '../state/settingsStore';
 import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
 import CommunitySettings from './CommunitySettings';
+import { useT } from '../i18n/I18nProvider';
 
 export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const { t } = useT();
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
   const activeChannelId = useAppStore((s) => s.activeChannelId);
   const selectChannel = useAppStore((s) => s.selectChannel);
@@ -76,11 +78,11 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
         <span className={`flex-1 truncate ${unread > 0 && !active ? 'font-semibold text-paper-100' : ''}`}>
           {chName}
         </span>
-        {locked && <Lock size={12} className="shrink-0 text-lamp-500" aria-label="anahtar yenilenmeli" />}
+        {locked && <Lock size={12} className="shrink-0 text-lamp-500" aria-label={t('nav.keyNeedsRefresh')} />}
         {unread > 0 && !active && (
           <span
             className="flex h-4 min-w-4 items-center justify-center rounded-full bg-lamp-500 px-1 font-display text-[9px] font-bold text-night-950"
-            aria-label={`${unread} okunmadı`}
+            aria-label={t('nav.unread', { n: unread })}
           >
             {unread > 99 ? '99+' : unread}
           </span>
@@ -95,12 +97,12 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
         <span className="truncate font-display text-base font-semibold uppercase tracking-[0.12em] text-paper-100">
           {community.name}
         </span>
-        {muted && <BellOff size={13} className="ml-1 shrink-0 text-paper-500" aria-label="bildirimler susturulmuş" />}
+        {muted && <BellOff size={13} className="ml-1 shrink-0 text-paper-500" aria-label={t('nav.notificationsMuted')} />}
         <button
           onClick={() => setMenu(true)}
           className="relative ml-2 shrink-0 rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
-          title="topluluk menüsü"
-          aria-label="topluluk menüsü"
+          title={t('nav.communityMenu')}
+          aria-label={t('nav.communityMenu')}
         >
           <MoreVertical size={15} />
           {(community.pending_join_requests ?? 0) > 0 && (
@@ -112,13 +114,13 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
         <div className="plate mb-1 flex items-center justify-between px-2">
-          YAZI ODALARI
+          {t('nav.textRooms')}
           {isOwner && (
             <button
               onClick={() => setModalType('text')}
               className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
-              title="yazı odası ekle"
-              aria-label="yazı odası ekle"
+              title={t('nav.addTextRoom')}
+              aria-label={t('nav.addTextRoom')}
             >
               <Plus size={13} />
             </button>
@@ -127,13 +129,13 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
         <div className="mb-4 flex flex-col gap-0.5">{textChannels.map((c) => row(c.id, c.name))}</div>
 
         <div className="plate mb-1 flex items-center justify-between px-2">
-          SES ODALARI
+          {t('nav.voiceRooms')}
           {isOwner && (
             <button
               onClick={() => setModalType('voice')}
               className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
-              title="ses odası ekle"
-              aria-label="ses odası ekle"
+              title={t('nav.addVoiceRoom')}
+              aria-label={t('nav.addVoiceRoom')}
             >
               <Plus size={13} />
             </button>
@@ -156,7 +158,7 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
                 >
                   <Volume2 size={13} className="shrink-0 text-brass-600" aria-hidden />
                   <span className="flex-1 truncate">{c.name}</span>
-                  {c.needs_rekey && <Lock size={12} className="shrink-0 text-lamp-500" aria-label="anahtar yenilenmeli" />}
+                  {c.needs_rekey && <Lock size={12} className="shrink-0 text-lamp-500" aria-label={t('nav.keyNeedsRefresh')} />}
                   {present.length > 0 && (
                     <span className="font-display text-[10px] font-semibold text-lamp-400">{present.length}</span>
                   )}
@@ -196,24 +198,24 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
                 className="btn-ghost"
               >
                 <Settings size={14} />
-                ayarlar
+                {t('nav.settings')}
               </button>
             )}
             <button
               onClick={() => toggleCommunityMute(community.id)}
               className="btn-ghost"
-              title="bu sunucunun bildirim sesini kapat/aç (okunmadı göstergeleri kalır)"
+              title={t('nav.muteToggleTitle')}
             >
               {muted ? <BellOff size={14} /> : <Bell size={14} />}
-              {muted ? 'bildirimleri aç' : 'bildirimleri sustur'}
+              {muted ? t('nav.muteOn') : t('nav.muteOff')}
             </button>
             {isOwner ? (
               <button onClick={() => setConfirm('delete')} className="btn-stamp">
-                topluluğu sil
+                {t('nav.deleteCommunity')}
               </button>
             ) : (
               <button onClick={() => setConfirm('leave')} className="btn-stamp">
-                topluluktan ayrıl
+                {t('nav.leaveCommunity')}
               </button>
             )}
           </div>
@@ -222,10 +224,10 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
 
       {confirm === 'leave' && (
         <ConfirmDialog
-          title="Topluluktan ayrıl"
-          message={`'${community.name}' topluluğundan ayrılmak istediğine emin misin? Kalan yöneticiler kanal anahtarlarını yenileyene kadar odalar kilitli kalır.`}
+          title={t('nav.leaveTitle')}
+          message={t('nav.leaveMessage', { name: community.name })}
           danger
-          confirmLabel="ayrıl"
+          confirmLabel={t('nav.leaveConfirm')}
           onConfirm={() => {
             setConfirm(null);
             void leaveCommunity(community.id).catch(() => {});
@@ -235,10 +237,10 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
       )}
       {confirm === 'delete' && (
         <ConfirmDialog
-          title="Topluluğu sil"
-          message={`'${community.name}' topluluğu, tüm odaları ve mesajlarıyla birlikte kalıcı olarak silinecek. Bu geri alınamaz.`}
+          title={t('nav.deleteTitle')}
+          message={t('nav.deleteMessage', { name: community.name })}
           danger
-          confirmLabel="sil"
+          confirmLabel={t('nav.deleteConfirm')}
           onConfirm={() => {
             setConfirm(null);
             void deleteCommunity(community.id).catch(() => {});
@@ -248,20 +250,20 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
       )}
 
       {modalType && (
-        <Modal title={modalType === 'text' ? 'Yeni yazı odası' : 'Yeni ses odası'} onClose={() => setModalType(null)}>
+        <Modal title={modalType === 'text' ? t('nav.newTextRoom') : t('nav.newVoiceRoom')} onClose={() => setModalType(null)}>
           <div className="flex flex-col gap-3">
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => name.trim() && e.key === 'Enter' && void submit()}
-              placeholder="oda adı"
+              placeholder={t('nav.channelNamePlaceholder')}
               maxLength={64}
               className="input"
             />
             {error && <p className="text-sm text-stamp-400">{error}</p>}
             <button onClick={() => void submit()} disabled={busy || !name.trim()} className="btn-lamp">
-              {busy ? 'oluşturuluyor…' : 'oluştur'}
+              {busy ? t('nav.creating') : t('nav.createChannel')}
             </button>
           </div>
         </Modal>

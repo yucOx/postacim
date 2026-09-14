@@ -8,8 +8,10 @@ import Avatar from './Avatar';
 import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
 import { SponsorNote } from './SponsorNote';
+import { useT } from '../i18n/I18nProvider';
 
 export default function ProfileModal({ onClose }: { onClose: () => void }): React.ReactNode {
+  const { t } = useT();
   const user = useAuthStore((s) => s.user);
   // anahtar defteri damgası — head'in kısa parmak izi (bant dışı karşılaştırma için)
   const keylogStamp = useSecurityStore((s) => s.keylogStamp);
@@ -141,7 +143,7 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
   };
 
   return (
-    <Modal title="Profil" onClose={onClose}>
+    <Modal title={t('profile.title')} onClose={onClose}>
       <div className="flex w-80 flex-col gap-4" onPaste={onPaste}>
         <div className="flex items-center gap-3">
           {preview ? (
@@ -161,10 +163,10 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
             </p>
             <p className="text-[11px] text-paper-500">
               {preview
-                ? `${(previewBytes / 1024).toFixed(1)} KB · 64×64 JPEG`
+                ? t('profile.avatarSize', { kb: (previewBytes / 1024).toFixed(1) })
                 : hasAvatar
-                  ? 'avatar yüklü'
-                  : 'henüz avatar yok — harf avatarı kullanılıyor'}
+                  ? t('profile.avatarLoaded')
+                  : t('profile.noAvatar')}
             </p>
           </div>
         </div>
@@ -180,36 +182,35 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
         {keylogStamp && (
           <div className="rounded-sm border border-brass-700/40 bg-night-950/70 px-3 py-2">
             <p className="font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-paper-500">
-              anahtar defteri damgası
+              {t('profile.keylogStamp')}
             </p>
             <p className="select-all font-mono text-sm font-semibold tracking-[0.08em] text-lamp-300">
               {keylogStamp}
             </p>
             <p className="mt-0.5 text-[11px] text-paper-500">
-              sunucudaki herkese açık anahtar defterinin son kaydının damgası — güvendiğin
-              başka bir cihazdaki damgayla bant dışı karşılaştır
+              {t('profile.keylogHint')}
             </p>
           </div>
         )}
 
         <div className="flex flex-wrap gap-2">
           <button onClick={onPick} disabled={busy} className="btn-ghost">
-            dosya seç
+            {t('profile.pickFile')}
           </button>
           {preview && (
             <button onClick={() => void onSave()} disabled={busy} className="btn-lamp">
-              {busy ? 'kaydediliyor…' : 'kaydet'}
+              {busy ? t('profile.saving') : t('profile.save')}
             </button>
           )}
           {hasAvatar && !preview && (
             <button onClick={() => void onClear()} disabled={busy} className="btn-ghost hover:!border-stamp-500/70 hover:!text-stamp-400">
-              avatarı kaldır
+              {t('profile.removeAvatar')}
             </button>
           )}
         </div>
 
         <p className="text-[11px] text-paper-500">
-          resim seç veya yapıştır (Cmd/Ctrl+V) · 64×64 küçük JPEG olarak kaydedilir (~3-8KB)
+          {t('profile.pasteHint')}
         </p>
 
         {deviceSupported && deviceActive !== null && (
@@ -224,12 +225,12 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
                   : 'w-full rounded border border-lamp-600/50 bg-lamp-100/60 px-3 py-1.5 text-xs text-lamp-300 transition-colors hover:bg-lamp-100'
               }
             >
-              {deviceBusy ? 'işlem sürüyor…' : deviceActive ? 'cihaz kilidini kaldır' : 'bu cihazda hatırla (passkey)'}
+              {deviceBusy ? t('profile.deviceBusy') : deviceActive ? t('profile.deviceRemove') : t('profile.deviceEnroll')}
             </button>
             <p className="mt-1 text-[11px] text-paper-500">
               {deviceActive
-                ? 'kaldırınca sayfa yenilenince yine şifre sorulur'
-                : "kayıtlıysan sayfa yenilenince şifre yerine passkey ile dönersin"}
+                ? t('profile.deviceRemoveHint')
+                : t('profile.deviceEnrollHint')}
             </p>
             {deviceError && <p className="mt-1 text-xs text-stamp-400">{deviceError}</p>}
           </div>
@@ -240,15 +241,15 @@ export default function ProfileModal({ onClose }: { onClose: () => void }): Reac
           disabled={busy}
           className="mt-2 w-full rounded border border-stamp-500/60 px-3 py-1.5 text-xs text-stamp-400 transition-colors hover:bg-stamp-100"
         >
-          hesabımı kalıcı sil
+          {t('profile.deleteAccount')}
         </button>
         {error && <p className="text-sm text-stamp-400">{error}</p>}
         {confirmDelete && (
           <ConfirmDialog
-            title="Hesabı sil"
+            title={t('profile.deleteTitle')}
             danger
-            confirmLabel="kalıcı sil"
-            message="Hesabın, yazdığın tüm mesajlar, DM'ler, kurduğun gruplar ve topluluklar kalıcı silinir. Bu işlem geri alınamaz — kurtarma ifaden bile eski hesabı getiremez."
+            confirmLabel={t('profile.deleteConfirm')}
+            message={t('profile.deleteMessage')}
             onConfirm={() => void onDeleteAccount()}
             onCancel={() => setConfirmDelete(false)}
           />

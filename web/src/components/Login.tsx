@@ -4,6 +4,7 @@ import { EyeOff, Fingerprint, KeyRound, ServerOff, ShieldCheck } from 'lucide-re
 import { useAuthStore } from '../state/authStore';
 import { generateMnemonic, quizPositions, validateMnemonic } from '../crypto/bip39';
 import { hasDeviceUnlock } from '../crypto/devicekey';
+import { useT } from '../i18n/I18nProvider';
 import PasswordInput, { passwordScore } from './PasswordInput';
 import Turnstile, { turnstileEnabled } from './Turnstile';
 import { PigeonMark, Postmark, SealMark } from './Brand';
@@ -12,6 +13,7 @@ import { SponsorNote } from './SponsorNote';
 type Step = 'login' | 'register' | 'phrase' | 'forgot';
 
 export default function Login() {
+  const { t } = useT();
   const [step, setStep] = useState<Step>('login');
   const [nick, setNick] = useState('');
   const [password, setPassword] = useState('');
@@ -41,9 +43,9 @@ export default function Login() {
     setBusy(true);
     try {
       const ok = await unlockWithDevice(tsToken ?? undefined);
-      if (!ok) throw new Error('passkey açılamadı — şifrenle girebilirsin');
+      if (!ok) throw new Error(t('auth.passkeyFail'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'bir hata oluştu');
+      setError(err instanceof Error ? err.message : t('auth.genericError'));
       setTsToken(null); // token tek kullanımlık — yeniden bas
       setTsAttempt((a) => a + 1);
     } finally {
@@ -81,7 +83,7 @@ export default function Login() {
       if (step === 'login') await login(nick.trim(), password, tsToken ?? undefined);
       else setStep('phrase'); // phrase screen finishes registration
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'bir hata oluştu');
+      setError(err instanceof Error ? err.message : t('auth.genericError'));
       setTsToken(null); // token consumed server-side — force a fresh challenge
       setTsAttempt((a) => a + 1);
     } finally {
@@ -112,20 +114,20 @@ export default function Login() {
               postacim
             </h1>
             <p className="mt-2 max-w-xs text-sm text-paper-500">
-              güvercinler gece uçar — mesajın da seninle gizli taşınır
+              {t('auth.tagline')}
             </p>
             <ul className="mt-6 flex flex-col gap-2.5 text-sm text-paper-300">
               <li className="flex items-center gap-2.5">
                 <ShieldCheck size={16} className="shrink-0 text-lamp-500" />
-                mesajlar ve aramalar uçtan uca şifreli
+                {t('auth.featureE2ee')}
               </li>
               <li className="flex items-center gap-2.5">
                 <ServerOff size={16} className="shrink-0 text-lamp-500" />
-                sunucu içeriği asla göremez — yalnızca sarılı kutular
+                {t('auth.featureNoServer')}
               </li>
               <li className="flex items-center gap-2.5">
                 <EyeOff size={16} className="shrink-0 text-lamp-500" />
-                okundu bilgisi cihazından çıkmaz
+                {t('auth.featureNoRead')}
               </li>
             </ul>
           </div>
@@ -142,21 +144,21 @@ export default function Login() {
               <PigeonMark size={22} className="text-lamp-500" />
               <div>
                 <div className="plate !text-sm !tracking-[0.2em] text-paper-100">
-                  {step === 'login' ? 'GİRİŞ' : 'KAYIT'}
+                  {step === 'login' ? t('auth.headerLogin') : t('auth.headerRegister')}
                 </div>
                 <p className="mt-0.5 text-[11px] text-paper-500">
-                  sunucu hiçbir şey göremez
+                  {t('auth.headerSubtitle')}
                 </p>
               </div>
             </div>
 
             <div className="flex flex-col gap-4">
               <label className="flex flex-col gap-1 text-sm">
-                <span className="text-paper-300">nick</span>
+                <span className="text-paper-300">{t('auth.labelNick')}</span>
                 <input
                   value={nick}
                   onChange={(e) => setNick(e.target.value)}
-                  placeholder="guvercin"
+                  placeholder={t('auth.nickPlaceholder')}
                   autoComplete="username"
                   required
                   minLength={3}
@@ -166,7 +168,7 @@ export default function Login() {
               </label>
 
               <div className="flex flex-col gap-1 text-sm">
-                <span className="text-paper-300">şifre</span>
+                <span className="text-paper-300">{t('auth.labelPassword')}</span>
                 <PasswordInput
                   value={password}
                   onChange={setPassword}
@@ -178,10 +180,10 @@ export default function Login() {
               {step === 'register' && (
                 <>
                   <div className="flex flex-col gap-1 text-sm">
-                    <span className="text-paper-300">şifre (tekrar)</span>
+                    <span className="text-paper-300">{t('auth.labelPasswordRepeat')}</span>
                     <PasswordInput value={password2} onChange={setPassword2} placeholder="••••••••" showStrength={false} />
                     {password2.length > 0 && password !== password2 && (
-                      <span className="text-[11px] text-stamp-400">şifreler eşleşmiyor</span>
+                      <span className="text-[11px] text-stamp-400">{t('auth.passwordMismatch')}</span>
                     )}
                   </div>
 
@@ -193,11 +195,15 @@ export default function Login() {
                       className="mt-0.5 accent-lamp-500"
                     />
                     <span>
-                      Şifremi kaybedersem <b className="text-paper-100">hesabım ve tüm geçmişim kurtarılamaz</b> — bunun
-                      için bir kurtarma ifadesi kaydedeceğim.
+                      {(() => {
+                        const txt = t('auth.ackLabel');
+                        const m = txt.match(/^(.*?)\{bold\}(.*?)\{\/bold\}(.*)$/);
+                        if (!m) return txt;
+                        return <>{m[1]}<b className="text-paper-100">{m[2]}</b>{m[3]}</>;
+                      })()}
                     </span>
                   </label>
-                  {ack && !ackReady && <p className="text-center text-[11px] text-paper-500">biraz düşün…</p>}
+                  {ack && !ackReady && <p className="text-center text-[11px] text-paper-500">{t('auth.ackWait')}</p>}
                 </>
               )}
 
@@ -213,10 +219,10 @@ export default function Login() {
                 className="btn-lamp w-full"
               >
                 {busy
-                  ? 'anahtar türetiliyor…'
+                  ? t('auth.keyDeriving')
                   : step === 'login'
-                    ? 'giriş yap'
-                    : 'kurtarma ifadesine geç →'}
+                    ? t('auth.loginBtn')
+                    : t('auth.registerNextBtn')}
               </button>
 
               {step === 'login' && pkAvailable && (
@@ -228,7 +234,7 @@ export default function Login() {
                 >
                   <span className="flex items-center justify-center gap-1.5">
                     <Fingerprint size={14} />
-                    passkey ile aç
+                    {t('auth.passkeyBtn')}
                   </span>
                 </button>
               )}
@@ -242,7 +248,7 @@ export default function Login() {
                   }}
                   className="text-paper-500 transition-colors hover:text-paper-100"
                 >
-                  {step === 'login' ? 'hesabın yok mu? kayıt ol' : 'hesabın var mı? giriş yap'}
+                  {step === 'login' ? t('auth.switchToRegister') : t('auth.switchToLogin')}
                 </button>
                 {step === 'login' && (
                   <button
@@ -254,7 +260,7 @@ export default function Login() {
                     className="flex items-center gap-1 text-xs text-paper-500 transition-colors hover:text-paper-300"
                   >
                     <KeyRound size={12} />
-                    şifremi unuttum
+                    {t('auth.forgotBtn')}
                   </button>
                 )}
               </div>
@@ -270,6 +276,7 @@ export default function Login() {
 // --- reload re-auth: session cookie alive, KEK gone with the old tab ---
 
 function ReauthStep({ nick }: { nick: string }) {
+  const { t } = useT();
   const reauthenticate = useAuthStore((s) => s.reauthenticate);
   const logout = useAuthStore((s) => s.logout);
   const unlockWithDevice = useAuthStore((s) => s.unlockWithDevice);
@@ -288,9 +295,9 @@ function ReauthStep({ nick }: { nick: string }) {
     setBusy(true);
     try {
       const ok = await unlockWithDevice();
-      if (!ok) setError('passkey açılamadı — şifrenle girebilirsin');
+      if (!ok) setError(t('auth.passkeyFail'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'bir hata oluştu');
+      setError(err instanceof Error ? err.message : t('auth.genericError'));
     } finally {
       setBusy(false);
     }
@@ -305,7 +312,7 @@ function ReauthStep({ nick }: { nick: string }) {
     } catch (err) {
       // wrong password only fails locally — the session stays valid, so the
       // user stays here and can retry
-      setError(err instanceof Error ? err.message : 'bir hata oluştu');
+      setError(err instanceof Error ? err.message : t('auth.genericError'));
     } finally {
       setBusy(false);
     }
@@ -323,19 +330,19 @@ function ReauthStep({ nick }: { nick: string }) {
         <div className="mb-5 flex items-center gap-2.5 border-b border-night-700 pb-4">
           <PigeonMark size={22} className="text-lamp-500" />
           <div>
-            <div className="plate !text-sm !tracking-[0.2em] text-paper-100">TEKRAR GİRİŞ</div>
+            <div className="plate !text-sm !tracking-[0.2em] text-paper-100">{t('auth.headerReauth')}</div>
             <p className="mt-0.5 text-[11px] text-paper-500">
-              oturumun hâlâ açık — anahtarın için şifren gerekiyor
+              {t('auth.reauthSubtitle')}
             </p>
           </div>
         </div>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-sm">
-            <span className="text-paper-300">nick</span>
+            <span className="text-paper-300">{t('auth.labelNick')}</span>
             <div className="input select-all">{nick}</div>
           </div>
           <div className="flex flex-col gap-1 text-sm">
-            <span className="text-paper-300">şifre</span>
+            <span className="text-paper-300">{t('auth.labelPassword')}</span>
             <PasswordInput
               value={password}
               onChange={setPassword}
@@ -349,13 +356,13 @@ function ReauthStep({ nick }: { nick: string }) {
             <p className="rounded-md border border-stamp-500/60 bg-stamp-100 px-3 py-2 text-sm text-stamp-400">{error}</p>
           )}
           <button type="submit" disabled={busy || !password} className="btn-lamp w-full">
-            {busy ? 'anahtar türetiliyor…' : 'giriş yap'}
+            {busy ? t('auth.keyDeriving') : t('auth.loginBtn')}
           </button>
           {pkAvailable && (
             <button type="button" onClick={() => void passkeyRetry()} disabled={busy} className="btn-ghost w-full">
               <span className="flex items-center justify-center gap-1.5">
                 <Fingerprint size={14} />
-                passkey ile aç
+                {t('auth.passkeyBtn')}
               </span>
             </button>
           )}
@@ -365,7 +372,7 @@ function ReauthStep({ nick }: { nick: string }) {
             disabled={busy}
             className="w-full text-center text-xs text-paper-500 transition-colors hover:text-paper-300"
           >
-            bu hesap değil — başka hesapla gir
+            {t('auth.notYouBtn')}
           </button>
         </div>
       </form>
@@ -388,6 +395,7 @@ function PhraseStep({
   clearTsToken: () => void;
   onBack: () => void;
 }) {
+  const { t } = useT();
   const register = useAuthStore((s) => s.register);
   const [phase, setPhase] = useState<'show' | 'quiz' | 'saved'>('show');
   // generated once, lives only in memory — the phrase never regenerates mid-ritual
@@ -427,11 +435,11 @@ function PhraseStep({
     setError(null);
     try {
       const ok = await validateMnemonic(words);
-      if (!ok) throw new Error('ifade doğrulanamadı — tekrar dene');
+      if (!ok) throw new Error(t('auth.phraseInvalid'));
       await register(nick, password, words, tsToken ?? undefined);
     } catch (err) {
       // a burned Turnstile token (or any failure) → main form remints one
-      setError(err instanceof Error ? err.message : 'kayıt başarısız');
+      setError(err instanceof Error ? err.message : t('auth.registerFail'));
       clearTsToken();
     } finally {
       setBusy(false);
@@ -443,9 +451,9 @@ function PhraseStep({
       <div className="mb-5 flex items-center gap-2.5 border-b border-night-700 pb-4">
         <KeyRound size={18} className="text-lamp-500" />
         <div>
-          <div className="plate !text-sm !tracking-[0.2em] text-paper-100">KURTARMA İFADESİ</div>
+          <div className="plate !text-sm !tracking-[0.2em] text-paper-100">{t('auth.phraseTitle')}</div>
           <p className="mt-0.5 text-[11px] text-paper-500">
-            şifreni kaybedersen hesabını geri getiren tek şey — şimdi kaydet
+            {t('auth.phraseSubtitle')}
           </p>
         </div>
       </div>
@@ -465,10 +473,10 @@ function PhraseStep({
           </div>
           <div className="mt-4 flex gap-2">
             <button onClick={download} className="btn-ghost flex-1">
-              indir
+              {t('auth.phraseDownload')}
             </button>
             <button onClick={() => setPhase('quiz')} disabled={!words} className="btn-lamp flex-1">
-              kaydettim, doğrula →
+              {t('auth.phraseSavedContinue')}
             </button>
           </div>
         </>
@@ -477,12 +485,17 @@ function PhraseStep({
       {phase === 'quiz' && (
         <>
           <p className="text-center text-sm text-paper-300">
-            kaydettiğinden emin olalım — <b className="text-paper-100">{quiz.map((i) => i + 1).join(', ')}.</b> kelimeleri yaz:
+            {(() => {
+              const txt = t('auth.phraseIntro', { positions: quiz.map((i) => i + 1).join(', ') });
+              const m = txt.match(/^(.*?)\{bold\}(.*?)\{\/bold\}(.*)$/);
+              if (!m) return txt;
+              return <>{m[1]}<b className="text-paper-100">{m[2]}</b>{m[3]}</>;
+            })()}
           </p>
           <div className="mt-4 flex flex-col gap-2">
             {quiz.map((i) => (
               <label key={i} className="flex items-center gap-2 text-sm">
-                <span className="w-16 shrink-0 text-paper-500">{i + 1}. kelime</span>
+                <span className="w-16 shrink-0 text-paper-500">{t('auth.phraseWordLabel', { n: i + 1 })}</span>
                 <input
                   value={answers[i] ?? ''}
                   onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))}
@@ -494,13 +507,13 @@ function PhraseStep({
             ))}
           </div>
           <button onClick={() => setPhase('saved')} disabled={!quizOk} className="btn-lamp mt-4 w-full">
-            doğru — hesabımı oluştur
+            {t('auth.phraseConfirmBtn')}
           </button>
           <button
             onClick={() => setPhase('show')}
             className="mt-3 w-full text-center text-xs text-paper-500 transition-colors hover:text-paper-300"
           >
-            ← kelimelere geri dön
+            {t('auth.phraseBackToWords')}
           </button>
         </>
       )}
@@ -509,13 +522,13 @@ function PhraseStep({
         <>
           <div className="rounded-md border border-lamp-600/60 bg-lamp-100/60 p-3 text-sm text-lamp-300">
             kayıt tamamlanıyor — kurtarma ifaden{' '}
-            <b className="text-paper-100">{downloaded ? 'indirilen dosyada' : 'az önce yazdığın kelimelerde'}</b>.
+            <b className="text-paper-100">{downloaded ? t('auth.phraseSavedFile') : t('auth.phraseSavedTyped')}</b>.
           </div>
           {error && (
             <p className="mt-3 rounded-md border border-stamp-500/60 bg-stamp-100 px-3 py-2 text-sm text-stamp-400">{error}</p>
           )}
           <button onClick={() => void finish()} disabled={busy} className="btn-lamp mt-4 w-full">
-            {busy ? 'anahtarlar türetiliyor…' : 'başla'}
+            {busy ? t('auth.phraseKeyDeriving') : t('auth.phraseStart')}
           </button>
         </>
       )}
@@ -528,7 +541,7 @@ function PhraseStep({
           onClick={onBack}
           className="mt-4 w-full text-center text-xs text-paper-500 transition-colors hover:text-paper-300"
         >
-          ← geri
+          {t('auth.phraseBack')}
         </button>
       )}
     </div>
@@ -538,6 +551,7 @@ function PhraseStep({
 // --- "forgot password" flow ---
 
 function ForgotStep({ onBack }: { onBack: () => void }) {
+  const { t } = useT();
   const recoverLogin = useAuthStore((s) => s.recoverLogin);
   const [nick, setNick] = useState('');
   const [wordsText, setWordsText] = useState('');
@@ -562,7 +576,7 @@ function ForgotStep({ onBack }: { onBack: () => void }) {
     try {
       await recoverLogin(nick.trim(), words, newPassword);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'kurtarma başarısız');
+      setError(err instanceof Error ? err.message : t('auth.recoveryFailed'));
     } finally {
       setBusy(false);
     }
@@ -573,50 +587,50 @@ function ForgotStep({ onBack }: { onBack: () => void }) {
       <div className="mb-5 flex items-center gap-2.5 border-b border-night-700 pb-4">
         <KeyRound size={18} className="text-lamp-500" />
         <div>
-          <div className="plate !text-sm !tracking-[0.2em] text-paper-100">ŞİFREMİ UNUTTUM</div>
+          <div className="plate !text-sm !tracking-[0.2em] text-paper-100">{t('auth.headerForgot')}</div>
           <p className="mt-0.5 text-[11px] text-paper-500">
-            kurtarma ifadesini gir — kimliğin ve geçmişin aynı kalır
+            {t('auth.forgotSubtitle')}
           </p>
         </div>
       </div>
       <div className="flex flex-col gap-4">
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-paper-300">nick</span>
+          <span className="text-paper-300">{t('auth.labelNick')}</span>
           <input value={nick} onChange={(e) => setNick(e.target.value)} autoComplete="username" className="input" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-paper-300">kurtarma ifadesi (12 kelime)</span>
+          <span className="text-paper-300">{t('auth.labelPhrase')}</span>
           <textarea
             value={wordsText}
             onChange={(e) => setWordsText(e.target.value)}
             rows={2}
-            placeholder="word1 word2 …"
+            placeholder={t('auth.phrasePlaceholder')}
             className="input font-mono"
             spellCheck={false}
           />
           {wordsText.trim().length > 0 && words.length !== 12 && (
-            <span className="text-[11px] text-lamp-500">{words.length}/12 kelime</span>
+            <span className="text-[11px] text-lamp-500">{t('auth.wordCount', { count: words.length })}</span>
           )}
         </label>
         <div className="flex flex-col gap-1 text-sm">
-          <span className="text-paper-300">yeni şifre</span>
+          <span className="text-paper-300">{t('auth.labelNewPassword')}</span>
           <PasswordInput value={newPassword} onChange={setNewPassword} />
         </div>
         <div className="flex flex-col gap-1 text-sm">
-          <span className="text-paper-300">yeni şifre (tekrar)</span>
+          <span className="text-paper-300">{t('auth.labelNewPasswordRepeat')}</span>
           <PasswordInput value={newPassword2} onChange={setNewPassword2} showStrength={false} />
         </div>
         {error && (
           <p className="rounded-md border border-stamp-500/60 bg-stamp-100 px-3 py-2 text-sm text-stamp-400">{error}</p>
         )}
         <button onClick={() => void submit()} disabled={busy || !canGo} className="btn-lamp w-full">
-          {busy ? 'kimlik geri getiriliyor…' : 'şifreyi sıfırla ve gir'}
+          {busy ? t('auth.restoring') : t('auth.resetBtn')}
         </button>
         <button
           onClick={onBack}
           className="w-full text-center text-xs text-paper-500 transition-colors hover:text-paper-300"
         >
-          ← girişe dön
+          {t('auth.backToLogin')}
         </button>
       </div>
     </div>

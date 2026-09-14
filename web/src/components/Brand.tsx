@@ -1,3 +1,5 @@
+import { useT } from '../i18n/I18nProvider';
+
 /** postacim mark — the carrier pigeon of the night mail, drawn once, reused everywhere. */
 export function PigeonMark({ className = '', size = 24 }: { className?: string; size?: number }) {
   return (
@@ -21,12 +23,16 @@ export function PigeonMark({ className = '', size = 24 }: { className?: string; 
 export function SealMark({
   className = '',
   size = 96,
-  text = 'POSTACIM · UÇTAN UCA · ',
+  text,
 }: {
   className?: string;
   size?: number;
   text?: string;
 }) {
+  // default seal text is locale-aware; pass `text` to override
+  // (e.g. a community name wrapped around the arc)
+  const { t } = useT();
+  const label = text ?? t('brand.sealText');
   return (
     <svg viewBox="0 0 100 100" width={size} height={size} className={className} aria-hidden="true">
       <defs>
@@ -35,7 +41,7 @@ export function SealMark({
       <circle cx="50" cy="50" r="47" fill="none" stroke="currentColor" strokeWidth="2" />
       <circle cx="50" cy="50" r="41" fill="none" stroke="currentColor" strokeWidth="0.75" />
       <text fontSize="8.2" letterSpacing="2.2" fill="currentColor" fontFamily="var(--font-display), sans-serif">
-        <textPath href="#seal-arc">{text}</textPath>
+        <textPath href="#seal-arc">{label}</textPath>
       </text>
       <g transform="translate(30 32) scale(1.68)">
         <PigeonMark size={24} />

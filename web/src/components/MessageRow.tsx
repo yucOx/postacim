@@ -9,6 +9,7 @@ import { CornerDownRight, Copy, EyeOff, Reply, Smile, Trash2 } from 'lucide-reac
 import Avatar from './Avatar';
 import UserCard from './UserCard';
 import { Postmark } from './Brand';
+import { useT } from '../i18n/I18nProvider';
 
 // own-nick highlight: split on the nick (case-insensitive, regex-escaped) and
 // wrap matches in a mention pill — plain text for everything else
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export default function MessageRow({ m, prev, replyBody, onToggleReaction, onReply, onReact, canDeleteAll, onDeleteForMe, onDeleteAll }: Props) {
+  const { t } = useT();
   const sealAt = useChatStore((s) => s.sealAt[m.id]);
   const grouped =
     prev !== null && prev.senderId === m.senderId && m.sentAt - prev.sentAt < 5 * 60_000 && sameDay(prev.sentAt, m.sentAt);
@@ -108,8 +110,8 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
           <button
             onClick={() => setUserCard(true)}
             className="shrink-0 rounded-sm transition-transform hover:scale-105"
-            title={`${m.nick} — üye kartı`}
-            aria-label={`${m.nick} üye kartı`}
+            title={t('message.userCardTitle', { name: m.nick })}
+            aria-label={t('message.userCardAria', { name: m.nick })}
           >
             <Avatar userId={m.senderId} label={m.nick} size={36} />
           </button>
@@ -123,7 +125,7 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
               <span className="font-semibold" style={{ color: nickColor(m.replyTo.nick) }}>
                 {m.replyTo.nick}
               </span>
-              {replyBody ? ` — ${replyBody.slice(0, 90)}` : ' — silinmiş mesaj'}
+              {replyBody ? t('message.replySnippet', { body: replyBody.slice(0, 90) }) : t('message.deletedSnippet')}
             </span>
           </div>
         )}
@@ -141,7 +143,7 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
             {own && (
               <span
                 className={`text-brass-500 ${fresh ? 'animate-stamp' : ''}`}
-                title="bu vagondan mühürlenip gönderildi"
+                title={t('message.sealTitle')}
               >
                 <Postmark />
               </span>
@@ -150,7 +152,7 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
         )}
         {m.body === null ? (
           <p className="flex items-center gap-1.5 text-sm italic text-paper-500">
-            bu zarf açılamadı — anahtar bu epoch için sende değil
+            {t('message.undecryptable')}
           </p>
         ) : (
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-paper-100">
@@ -168,7 +170,7 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
                     ? 'border-lamp-500/70 bg-lamp-100/60 text-lamp-300'
                     : 'border-night-600 bg-night-800 text-paper-300 hover:border-brass-600'
                 }`}
-                title={r.me ? 'tepkini geri al' : 'tepki ver'}
+                title={r.me ? t('message.reactUndo') : t('message.reactAdd')}
                 aria-pressed={r.me}
               >
                 {r.emoji}
@@ -189,7 +191,7 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
           onClick={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
         >
-          {onReply && item('Yanıtla', <Reply size={13} />, false, onReply)}
+          {onReply && item(t('message.ctxReply'), <Reply size={13} />, false, onReply)}
           {onReact && readable && (
             <div className="flex gap-0.5 rounded px-2 py-1">
               {QUICK_EMOJIS.map((emoji) => (
@@ -201,7 +203,7 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
                     onReact(emoji);
                   }}
                   className="rounded p-0.5 text-sm transition-transform hover:scale-125"
-                  aria-label={`tepki: ${emoji}`}
+                  aria-label={t('message.reactAria', { emoji })}
                 >
                   {emoji}
                 </button>
@@ -209,7 +211,7 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
             </div>
           )}
           {readable &&
-            item('Mesajı kopyala', <Copy size={13} />, false, () => {
+            item(t('message.ctxCopy'), <Copy size={13} />, false, () => {
               try {
                 void navigator.clipboard.writeText(m.body!);
               } catch {
@@ -217,8 +219,8 @@ export default function MessageRow({ m, prev, replyBody, onToggleReaction, onRep
               }
             })}
           <div className="my-1 h-px bg-night-700" aria-hidden />
-          {onDeleteForMe && item('Benim için sil', <EyeOff size={13} />, true, onDeleteForMe)}
-          {canDeleteAll && onDeleteAll && item('Herkes için sil', <Trash2 size={13} />, true, onDeleteAll)}
+          {onDeleteForMe && item(t('message.ctxDeleteForMe'), <EyeOff size={13} />, true, onDeleteForMe)}
+          {canDeleteAll && onDeleteAll && item(t('message.ctxDeleteAll'), <Trash2 size={13} />, true, onDeleteAll)}
         </div>
       )}
       {userCard && <UserCard userId={m.senderId} nick={m.nick} onClose={() => setUserCard(false)} />}

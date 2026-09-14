@@ -7,6 +7,7 @@ import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import Modal from './Modal';
 import { PigeonMark } from './Brand';
 import { parseInviteLink } from '../crypto/invite';
+import { useT } from '../i18n/I18nProvider';
 
 // server rail order — client-side only, the server never learns it
 const ORDER_KEY = 'pgv_com_order';
@@ -20,6 +21,7 @@ const loadOrder = (): string[] => {
 };
 
 export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) {
+  const { t } = useT();
   const communities = useAppStore((s) => s.communities);
   const activeId = useAppStore((s) => s.activeCommunityId);
   const selectCommunity = useAppStore((s) => s.selectCommunity);
@@ -88,7 +90,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
           showDmHome();
           onNavigate?.();
         }}
-        title="özel mesajlar / arkadaşlar"
+        title={t('nav.dmHome')}
         className={tag(view === 'dm')}
       >
         <PigeonMark size={21} />
@@ -143,27 +145,27 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
           </button>
         );
       })}
-      <button onClick={() => setCreating(true)} title="topluluk oluştur" className={tag(false) + ' text-lamp-500'}>
+      <button onClick={() => setCreating(true)} title={t('nav.createCommunity')} className={tag(false) + ' text-lamp-500'}>
         <Plus size={19} />
       </button>
-      <button onClick={() => setJoining(true)} title="davet linkiyle katıl" className={tag(false)}>
+      <button onClick={() => setJoining(true)} title={t('nav.joinWithInvite')} className={tag(false)}>
         <ArrowUpRight size={18} />
       </button>
 
       {joining && (
-        <Modal title="Davetle katıl" onClose={() => setJoining(false)}>
+        <Modal title={t('nav.joinSubmit')} onClose={() => setJoining(false)}>
           <div className="flex flex-col gap-3">
             <input
               autoFocus
               value={inviteLink}
               onChange={(e) => setInviteLink(e.target.value)}
-              placeholder="davet linki: https://…/#/davet/COD…"
+              placeholder={t('nav.invitePlaceholder')}
               className="input"
             />
             <button
               onClick={() => {
                 if (!parseInviteLink(inviteLink)) {
-                  setError('geçerli bir davet linki değil');
+                  setError(t('nav.invalidInvite'));
                   return;
                 }
                 // reuse the link's own fragment verbatim (ephemeral key encoding preserved)
@@ -175,17 +177,17 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
               disabled={!inviteLink.trim()}
               className="btn-lamp"
             >
-              davetle katıl
+              {t('nav.joinSubmit')}
             </button>
             <div className="my-1 flex items-center gap-3">
               <div className="perf flex-1" aria-hidden />
-              <span className="plate">VEYA</span>
+              <span className="plate">{t('nav.or')}</span>
               <div className="perf flex-1" aria-hidden />
             </div>
             <input
               value={applyName}
               onChange={(e) => setApplyName(e.target.value)}
-              placeholder="topluluk adı ile başvur"
+              placeholder={t('nav.applyPlaceholder')}
               maxLength={64}
               className="input"
             />
@@ -197,7 +199,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
                 try {
                   const com = await api<{ id: string }>(`/communities/by-name/${encodeURIComponent(applyName.trim())}`);
                   await api(`/communities/${com.id}/join-requests`, { method: 'POST' });
-                  setApplyMsg('başvurun gönderildi — onay bekleniyor');
+                  setApplyMsg(t('nav.applySent'));
                   setApplyName('');
                 } catch (err) {
                   setError(err instanceof Error ? err.message : 'hata');
@@ -206,7 +208,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
               disabled={!applyName.trim()}
               className="btn-ghost"
             >
-              başvur
+              {t('nav.applySubmit')}
             </button>
             {error && <p className="text-sm text-stamp-400">{error}</p>}
           </div>
@@ -214,23 +216,23 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
       )}
 
       {creating && (
-        <Modal title="Yeni topluluk" onClose={() => setCreating(false)}>
+        <Modal title={t('nav.newCommunity')} onClose={() => setCreating(false)}>
           <div className="flex flex-col gap-3">
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => name.trim() && e.key === 'Enter' && void submit()}
-              placeholder="topluluk adı"
+              placeholder={t('nav.newCommunityPlaceholder')}
               maxLength={64}
               className="input"
             />
             <p className="text-xs text-paper-500">
-              `genel` yazı odası + `Genel Ses` sesli oda otomatik oluşturulur.
+              {t('nav.newCommunityHint')}
             </p>
             {error && <p className="text-sm text-stamp-400">{error}</p>}
             <button onClick={() => void submit()} disabled={busy || !name.trim()} className="btn-lamp">
-              {busy ? 'oluşturuluyor…' : 'oluştur'}
+              {busy ? t('nav.creating') : t('nav.create')}
             </button>
           </div>
         </Modal>

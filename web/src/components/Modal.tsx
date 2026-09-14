@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useT } from '../i18n/I18nProvider';
 
 export default function Modal({
   title,
@@ -10,6 +11,7 @@ export default function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const { t } = useT();
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function Modal({
           <h2 className="plate !text-sm !tracking-[0.2em] text-paper-100">{title}</h2>
           <button
             onClick={onClose}
-            aria-label="kapat"
+            aria-label={t('modal.close')}
             className="rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
           >
             <X size={16} />

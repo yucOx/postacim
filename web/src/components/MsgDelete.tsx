@@ -3,6 +3,7 @@ import { EyeOff, Reply, Smile, Trash2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatTime } from '../lib/format';
 import { QUICK_EMOJIS } from '../lib/reactions';
+import { useT } from '../i18n/I18nProvider';
 
 // dm_/gdm_ channel ids pick their own endpoint + AAD scope; community channels are 'ch'
 const scopeOf = (channelId: string): 'ch' | 'dm' | 'gdm' =>
@@ -15,6 +16,7 @@ export async function deleteForEveryone(channelId: string, messageId: number): P
 
 /** muted placeholder rendered in place of a tombstoned message */
 export function DeletedRow({ nick, sentAt }: { nick: string; sentAt: number }) {
+  const { t } = useT();
   return (
     <div className="flex gap-3 px-4 pt-3 pb-0.5">
       <div className="w-9 shrink-0">
@@ -30,7 +32,7 @@ export function DeletedRow({ nick, sentAt }: { nick: string; sentAt: number }) {
           <span className="text-sm font-semibold text-paper-500">{nick}</span>
           <span className="font-mono text-[10px] text-paper-500">{formatTime(sentAt)}</span>
         </div>
-        <p className="text-sm italic text-paper-500">bu mesaj silindi</p>
+        <p className="text-sm italic text-paper-500">{t('delete.tombstone')}</p>
       </div>
     </div>
   );
@@ -80,12 +82,13 @@ export function HoverActions({
         ? 'border-brass-500/70 bg-night-800 text-lamp-400'
         : 'border-night-700 bg-night-900 hover:border-stamp-500/70 hover:text-stamp-400'
     }`;
+  const { t } = useT();
   return (
     <div
       ref={wrapRef}
       className={`absolute right-4 top-1 z-10 items-center gap-1 ${picking ? 'flex' : 'hidden group-hover:flex'}`}
     >
-      <button type="button" onClick={onReply} title="yanıtla" aria-label="yanıtla" className={cls(false)}>
+      <button type="button" onClick={onReply} title={t('delete.reply')} aria-label={t('delete.reply')} className={cls(false)}>
         <Reply size={12} />
       </button>
       <button
@@ -96,19 +99,19 @@ export function HoverActions({
           setUp(!!r && r.bottom + 180 > window.innerHeight);
           setPicking((v) => !v);
         }}
-        title="tepki ver"
-        aria-label="tepki ver"
+        title={t('delete.react')}
+        aria-label={t('delete.react')}
         aria-expanded={picking}
         className={cls(picking)}
       >
         <Smile size={12} />
       </button>
       {canDeleteAll && (
-        <button type="button" onClick={onDeleteAll} title="herkes için sil" aria-label="herkes için sil" className={cls(false)}>
+        <button type="button" onClick={onDeleteAll} title={t('delete.forAll')} aria-label={t('delete.forAll')} className={cls(false)}>
           <Trash2 size={12} />
         </button>
       )}
-      <button type="button" onClick={onDeleteForMe} title="benim için sil" aria-label="benim için sil" className={cls(false)}>
+      <button type="button" onClick={onDeleteForMe} title={t('delete.forMe')} aria-label={t('delete.forMe')} className={cls(false)}>
         <EyeOff size={12} />
       </button>
       {picking && (
@@ -126,7 +129,7 @@ export function HoverActions({
                 onReact(emoji);
               }}
               className="rounded p-0.5 text-sm transition-transform hover:scale-125"
-              aria-label={`tepki: ${emoji}`}
+              aria-label={t('delete.reactAria', { emoji })}
             >
               {emoji}
             </button>

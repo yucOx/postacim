@@ -18,11 +18,13 @@ import Composer from './Composer';
 import Modal from './Modal';
 import SafetyModal from './SafetyModal';
 import { ShieldCheck } from 'lucide-react';
+import { useT } from '../i18n/I18nProvider';
 
 // stable ref: `?? []` in a zustand selector recreates it each call and loops React 19 (#185)
 const NO_MESSAGES: DmDisplayMessage[] = [];
 
 function AddMemberModal({ gdmId, onClose }: { gdmId: string; onClose: () => void }) {
+  const { t } = useT();
   const friends = useAppStore((s) => s.friends);
   const gdm = useAppStore((s) => s.gdms.find((g) => g.id === gdmId));
   const addGdmMember = useAppStore((s) => s.addGdmMember);
@@ -31,9 +33,9 @@ function AddMemberModal({ gdmId, onClose }: { gdmId: string; onClose: () => void
   const candidates = friends.filter((f) => !gdm?.members.some((m) => m.id === f.id));
 
   return (
-    <Modal title="Üye ekle" onClose={onClose}>
+    <Modal title={t('addMember.title')} onClose={onClose}>
       <div className="flex w-72 flex-col gap-2">
-        {candidates.length === 0 && <p className="text-sm text-paper-500">ekleyebileceğin arkadaş kalmadı</p>}
+        {candidates.length === 0 && <p className="text-sm text-paper-500">{t('addMember.empty')}</p>}
         {candidates.map((f) => (
           <button
             key={f.id}
@@ -45,7 +47,7 @@ function AddMemberModal({ gdmId, onClose }: { gdmId: string; onClose: () => void
                 await addGdmMember(gdmId, f.id);
                 onClose();
               } catch (err) {
-                setError(err instanceof Error ? err.message : 'hata');
+                setError(err instanceof Error ? err.message : t('addMember.errorFallback'));
               } finally {
                 setBusy(false);
               }
@@ -53,17 +55,18 @@ function AddMemberModal({ gdmId, onClose }: { gdmId: string; onClose: () => void
             className="flex items-center justify-between rounded px-2 py-1.5 text-left text-sm text-paper-300 transition-colors hover:bg-night-800"
           >
             {f.nick}
-            <span className="text-xs text-lamp-500">ekle</span>
+            <span className="text-xs text-lamp-500">{t('addMember.add')}</span>
           </button>
         ))}
         {error && <p className="text-sm text-stamp-400">{error}</p>}
-        <p className="text-[11px] text-paper-500">ekleme, grup anahtarını yeniler</p>
+        <p className="text-[11px] text-paper-500">{t('addMember.rekeyHint')}</p>
       </div>
     </Modal>
   );
 }
 
 export default function DmChat({ dmId }: { dmId: string }) {
+  const { t } = useT();
   const dm = useAppStore((s) => s.dms.find((d) => d.id === dmId));
   const gdm = useAppStore((s) => s.gdms.find((g) => g.id === dmId));
   const showDmHome = useAppStore((s) => s.showDmHome);
@@ -127,7 +130,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
   };
 
   if (!dm && !gdm) {
-    return <div className="flex flex-1 items-center justify-center text-sm text-paper-500">DM bulunamadı</div>;
+    return <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{t('dm.notFound')}</div>;
   }
   const title = dm ? dm.peer.nick : (gdm?.name ?? '');
   const sub = dm ? null : gdm!.members.map((m) => m.nick).join(', ');
@@ -138,8 +141,8 @@ export default function DmChat({ dmId }: { dmId: string }) {
         <button
           onClick={showDmHome}
           className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
-          title="geri"
-          aria-label="geri"
+          title={t('dm.back')}
+          aria-label={t('dm.back')}
         >
           <ChevronLeft size={17} />
         </button>
@@ -148,25 +151,25 @@ export default function DmChat({ dmId }: { dmId: string }) {
         </span>
         <span className="sealed-band">
           <ShieldCheck size={11} />
-          uçtan uca mühürlü
+          {t('dm.sealed')}
         </span>
         {gdm && (
           <>
             <button
               onClick={() => setAdding(true)}
               className="btn-ghost ml-auto !px-2 !py-1 !text-xs"
-              title="üye ekle"
+              title={t('dm.addMember')}
             >
               <UserPlus size={13} />
-              üye
+              {t('dm.addMemberLabel')}
             </button>
             <button
               onClick={() => setShowLeave(true)}
               className="btn-ghost !px-2 !py-1 !text-xs hover:!border-stamp-500/70 hover:!text-stamp-400"
-              title="gruptan ayrıl"
+              title={t('dm.leaveTitle')}
             >
               <LogOut size={13} />
-              ayrıl
+              {t('dm.leave')}
             </button>
           </>
         )}
@@ -176,7 +179,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
               onClick={() => void startDmCall(dmId, false).catch(() => {})}
               disabled={callLocked}
               className="btn-ghost ml-auto !px-2.5 !py-1 !text-xs"
-              title={callLocked && callChannelId === dmId ? 'arama sürüyor' : 'şifreli sesli ara'}
+              title={callLocked && callChannelId === dmId ? t('dm.voiceCallActive') : t('dm.voiceCall')}
             >
               <Phone size={13} />
               ara
@@ -185,7 +188,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
               onClick={() => void startDmCall(dmId, true).catch(() => {})}
               disabled={callLocked}
               className="btn-ghost !px-2.5 !py-1 !text-xs"
-              title={callLocked && callChannelId === dmId ? 'arama sürüyor' : 'şifreli görüntülü ara'}
+              title={callLocked && callChannelId === dmId ? t('dm.videoCallActive') : t('dm.videoCall')}
             >
               <Video size={13} />
               görüntülü
@@ -193,10 +196,10 @@ export default function DmChat({ dmId }: { dmId: string }) {
             <button
               onClick={() => setSafety(true)}
               className="btn-ghost !px-2.5 !py-1 !text-xs"
-              title="güvenlik numarası"
+              title={t('dm.safety')}
             >
               <Fingerprint size={13} />
-              güvenlik
+              {t('dm.safetyLabel')}
             </button>
           </>
         )}
@@ -206,13 +209,13 @@ export default function DmChat({ dmId }: { dmId: string }) {
         {hasMore && (
           <div className="flex justify-center py-2">
             <button onClick={() => void loadOlder(dmId)} className="btn-ghost !py-1 !text-xs">
-              daha eski mesajlar
+              {t('dm.loadOlder')}
             </button>
           </div>
         )}
         {visible.length === 0 && (
           <div className="flex h-full items-center justify-center text-sm text-paper-500">
-            {dm ? `${dm.peer.nick} ile ilk mühürlü zarfı sen bırak` : 'grupta ilk mühürlü zarfı sen bırak'}
+            {dm ? t('dm.emptyDm', { name: dm.peer.nick }) : t('dm.emptyGdm')}
           </div>
         )}
         {visible.map((m, i) => {
@@ -232,7 +235,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
               {m.id === dividerId && (
                 <div className="my-1 flex items-center gap-2 px-4">
                   <div className="h-px flex-1 bg-brass-500" aria-hidden />
-                  <span className="plate !text-[10px] !tracking-[0.14em] text-brass-400">YENİ</span>
+                  <span className="plate !text-[10px] !tracking-[0.14em] text-brass-400">{t('dm.newDivider')}</span>
                   <div className="h-px flex-1 bg-brass-500" aria-hidden />
                 </div>
               )}
@@ -287,10 +290,10 @@ export default function DmChat({ dmId }: { dmId: string }) {
         onTyping={() => wsSend({ type: 'typing', channel_id: dmId })}
         placeholder={
           reply
-            ? `${reply.nick} kişisine yanıt yaz…  (Enter: gönder)`
+            ? t('dm.placeholderReply', { name: reply.nick })
             : dm
-              ? `@${dm.peer.nick} — şifreli mesaj…  (Enter: gönder)`
-              : `${gdm!.name} — şifreli mesaj…  (Enter: gönder)`
+              ? t('dm.placeholderDm', { name: dm.peer.nick })
+              : t('dm.placeholderGdm', { name: gdm!.name })
         }
       />
       {adding && gdm && <AddMemberModal gdmId={gdm.id} onClose={() => setAdding(false)} />}
@@ -299,10 +302,10 @@ export default function DmChat({ dmId }: { dmId: string }) {
       )}
       {showLeave && gdm && (
         <ConfirmDialog
-          title="Gruptan ayrıl"
-          message={`'${gdm.name}' grubundan ayrılmak istediğine emin misin? Bu geri alınamaz.`}
+          title={t('leaveGdm.title')}
+          message={t('leaveGdm.message', { name: gdm.name })}
           danger
-          confirmLabel="ayrıl"
+          confirmLabel={t('leaveGdm.confirm')}
           onConfirm={() => {
             void leaveGdm(gdm.id)
               .then(() => showDmHome())

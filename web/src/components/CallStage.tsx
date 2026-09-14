@@ -5,6 +5,7 @@ import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
 import { Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
+import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
 import Avatar from './Avatar';
 
@@ -52,14 +53,15 @@ function NamePlate({
   isScreen: boolean;
   isFocus?: boolean;
 }): React.ReactNode {
+  const { t } = useT();
   return (
     <span className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
       <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
         {nickFor(identity)}
-        {isLocal && ' (sen)'}
+        {isLocal && ` (${t('call.nameSelf')})`}
       </span>
-      {isScreen && <span className="shrink-0 font-mono text-[9px] text-lamp-400">ekran</span>}
-      {isFocus && <span className="shrink-0 font-mono text-[9px] text-lamp-400">odak</span>}
+      {isScreen && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameScreen')}</span>}
+      {isFocus && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameFocus')}</span>}
     </span>
   );
 }
@@ -106,10 +108,11 @@ interface TileProps {
 }
 
 function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill, overlay, title: titleProp }: TileProps): React.ReactNode {
+  const { t } = useT();
   return (
     <div
       onClick={onClick}
-      title={titleProp ?? (onClick ? (active ? 'büyütmeden çıkar' : 'büyüt') : undefined)}
+      title={titleProp ?? (onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined)}
       className={`relative cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${
         fill ? 'min-h-0 min-w-0 flex-1' : 'aspect-video w-full'
       } ${
@@ -139,10 +142,11 @@ function PlaceholderTile({
   onClick?: () => void;
   active?: boolean;
 }): React.ReactNode {
+  const { t } = useT();
   return (
     <div
       onClick={onClick}
-      title={onClick ? (active ? 'büyütmeden çıkar' : 'büyüt') : undefined}
+      title={onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined}
       className={`relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border bg-night-850 ${
         active ? 'border-lamp-500/80' : 'border-brass-700/50'
       } ${onClick ? 'cursor-pointer transition-colors hover:border-brass-500' : ''}`}
@@ -162,6 +166,7 @@ function PlaceholderTile({
  *  screen share if they have one, else camera); clicking again returns to the
  *  automatic layout. Screen shares are never cropped — they letterbox. */
 export default function CallStage({ emptyLabel }: { emptyLabel?: string }): React.ReactNode {
+  const { t } = useT();
   const participants = useParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: false,
@@ -261,9 +266,9 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         {open ? (
           <div className="flex flex-col gap-1.5 rounded-md border border-brass-600/70 bg-night-950/95 p-2 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.7)]">
             <span className="font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-stamp-400">
-              {nickFor(identity)} yayında
+              {t('call.liveNow', { name: nickFor(identity) })}
             </span>
-            <span className="text-[11px] text-paper-300">yayına katılmak istiyor musun?</span>
+            <span className="text-[11px] text-paper-300">{t('stream.joinPrompt')}</span>
             <div className="flex gap-1.5">
               <button
                 type="button"
@@ -272,17 +277,17 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                   watchScreen(identity);
                 }}
                 className="flex-1 rounded border border-lamp-500/70 bg-lamp-100/60 px-2 py-1 text-[11px] font-semibold text-lamp-300 transition-colors hover:bg-lamp-500 hover:text-night-950"
-                title="yayına katıl"
+                title={t('stream.badgeTitle')}
               >
-                katıl
+                {t('stream.join')}
               </button>
               <button
                 type="button"
                 onClick={() => setJoinPrompt(null)}
                 className="flex-1 rounded border border-night-700 px-2 py-1 text-[11px] text-paper-300 transition-colors hover:text-paper-100"
-                title="vazgeç"
+                title={t('stream.decline')}
               >
-                vazgeç
+                {t('stream.decline')}
               </button>
             </div>
           </div>
@@ -294,10 +299,10 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               setJoinPrompt(identity);
             }}
             className="flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
-            title="yayına katıl"
+            title={t('stream.badgeTitle')}
           >
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-stamp-500" aria-hidden />
-            canlı — izle
+            {t('stream.badgeWatch')}
           </button>
         )}
       </div>
@@ -380,7 +385,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       <div
         key={slotKey(p.identity)}
         onClick={() => toggleSpotlight('cam', p.identity)}
-        title={focused ? 'büyütmeden çıkar' : 'büyüt'}
+        title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
         style={aspect ? { aspectRatio: `${aspect}` } : undefined}
         className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${border} ${TILE_HIDE}`}
       >
@@ -395,7 +400,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       <div
         key={slotKey(p.identity)}
         onClick={() => toggleSpotlight('cam', p.identity)}
-        title={focused ? 'büyütmeden çıkar' : 'büyüt'}
+        title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
         className={`flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850 transition-colors ${border}`}
       >
         <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
@@ -438,7 +443,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         small ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'
       }`}
     >
-      paylaşımı durdur
+      {t('call.stopShare')}
     </button>
   );
 
@@ -458,7 +463,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         <div
           key={v.key}
           onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
-          title={v.isScreen ? 'yayını izle' : 'büyüt'}
+          title={v.isScreen ? t('stream.enlargeStream') : t('stream.enlarge')}
           className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border ${
             spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
           } bg-night-850 transition-colors ${TILE_HIDE}`}
@@ -489,7 +494,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               <div
                 key={slotKey(p.identity)}
                 onClick={() => focusFromSide(p.identity)}
-                title="büyüt"
+                title={t('stream.enlarge')}
                 className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850 transition-colors hover:border-brass-500"
               >
                 <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
@@ -515,7 +520,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
             <div
               key={v.key}
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
-              title="büyüt"
+              title={t('stream.enlarge')}
               style={aspect ? { aspectRatio: `${aspect}` } : undefined}
               className={`relative h-full aspect-video shrink-0 cursor-pointer overflow-hidden rounded-md border ${
                 spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
@@ -535,7 +540,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         <div
           key={slotKey(p.identity) + '-slot'}
           onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
-          title={p.identity === focusId ? undefined : 'büyüt'}
+          title={p.identity === focusId ? undefined : t('stream.enlarge')}
           className="relative flex h-full aspect-video shrink-0 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
         >
           <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
@@ -560,7 +565,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 isScreen={focusedVideo.isScreen}
                 isFocus={!!spotlight}
                 fill
-                title={focusedVideo.isScreen ? 'yan yana göster' : 'büyütmeden çıkar'}
+                title={focusedVideo.isScreen ? t('stream.sideBySide') : t('stream.enlargeExit')}
                 onClick={() => {
                   if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
                   else releaseSpot();
@@ -576,9 +581,9 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                           unwatch();
                         }}
                         className="rounded-md border border-night-700 bg-night-950/85 px-2 py-1 text-xs font-semibold text-paper-300 transition-colors hover:text-paper-100"
-                        title="yayını izlemeyi bırak — kameralara dön"
+                        title={t('stream.leaveStream')}
                       >
-                        izlemeyi bırak
+                        {t('stream.leaveStreamBtn')}
                       </button>
                     )}
                     {!focusedVideo.trackRef.participant.isLocal && (
@@ -590,8 +595,8 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                             setShareMuted((m) => !m);
                           }}
                           className="text-paper-300 transition-colors hover:text-lamp-400"
-                          title={shareMuted ? 'yayın sesini aç' : 'yayın sesini kapat'}
-                          aria-label={shareMuted ? 'yayın sesini aç' : 'yayın sesini kapat'}
+                          title={shareMuted ? t('stream.unmute') : t('stream.mute')}
+                          aria-label={shareMuted ? t('stream.unmute') : t('stream.mute')}
                         >
                           {shareMuted || shareVolume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}
                         </button>
@@ -606,7 +611,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                             setShareMuted(false);
                           }}
                           className="w-20 accent-lamp-500"
-                          aria-label="yayın sesi seviyesi"
+                          aria-label={t('stream.volLabel')}
                         />
                       </div>
                     )}
@@ -618,7 +623,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 <div
                   key={focusedKey + '-ph'}
                   onClick={releaseSpot}
-                  title="büyütmeden çıkar"
+                  title={t('stream.enlargeExit')}
                   className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
                 >
                   <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
@@ -655,7 +660,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               <div
                 key={slotKey(p.identity)}
                 onClick={() => toggleSpotlight('cam', p.identity)}
-                title={focused ? 'büyütmeden çıkar' : 'büyüt'}
+                title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
                 style={{ aspectRatio: `${aspect}` }}
                 className={`relative h-full min-w-0 max-w-full w-auto cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${
                   focused ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'

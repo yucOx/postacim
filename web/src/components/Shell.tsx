@@ -28,6 +28,7 @@ import { useDmChatStore } from '../state/dmChatStore';
 import { useTypingStore } from '../state/typingStore';
 import { useUnreadStore, unreadCount } from '../state/unreadStore';
 import { useSettingsStore } from '../state/settingsStore';
+import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
 import { useSecurityStore } from '../state/securityStore';
 import { readRoute } from '../router';
@@ -86,6 +87,7 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function Shell() {
+  const { t } = useT();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [pwModal, setPwModal] = useState(false);
@@ -117,8 +119,8 @@ export default function Shell() {
   // browser-tab badge: total unread DMs
   const dmUnreadTotal = dms.reduce((n, d) => n + unreadCount(d.id, dmMessages[d.id]), 0);
   useEffect(() => {
-    document.title = dmUnreadTotal > 0 ? `(${dmUnreadTotal}) postacim` : 'postacim';
-  }, [dmUnreadTotal]);
+    document.title = dmUnreadTotal > 0 ? t('shell.tabTitleUnread', { count: dmUnreadTotal }) : t('shell.tabTitle');
+  }, [dmUnreadTotal, t]);
 
   // "bu cihazda hatırla" teklifi — bir kez: desteklenen cihazda, kayıt yoksa ve
   // daha önce reddedilmemişse çıkar. Destek yoksa hiç görünmez.
@@ -200,13 +202,13 @@ export default function Shell() {
         <div className="flex min-w-0 items-center gap-2.5">
           <button
             onClick={() => setNavOpen(true)}
-            aria-label="menü"
+            aria-label={t('shell.menu')}
             className="rounded p-1 text-paper-300 transition-colors hover:bg-night-800 hover:text-paper-100 lg:hidden"
           >
             <Menu size={18} />
           </button>
           <PigeonMark size={19} className="shrink-0 text-lamp-500" />
-          <span className="plate !text-sm !tracking-[0.22em] text-paper-100">postacim</span>
+          <span className="plate !text-sm !tracking-[0.22em] text-paper-100">{t('shell.brand')}</span>
           {wsStat !== 'open' && (
             <span
               className={`ml-1 rounded-sm border px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.16em] ${
@@ -215,7 +217,7 @@ export default function Shell() {
                   : 'border-stamp-500/70 bg-stamp-100 text-stamp-400'
               }`}
             >
-              {wsStat === 'connecting' ? 'hat kuruluyor' : 'hat yok — yeniden deneniyor'}
+              {wsStat === 'connecting' ? t('shell.connecting') : t('shell.offline')}
             </span>
           )}
         </div>
@@ -223,8 +225,8 @@ export default function Shell() {
           <button
             onClick={() => setProfileModal(true)}
             className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-paper-300 transition-colors hover:bg-night-800 hover:text-paper-100"
-            title="profil"
-            aria-label="profil"
+            title={t('shell.profile')}
+            aria-label={t('shell.profile')}
           >
             {user && <Avatar userId={user.id} label={user.nick} size={22} srcOverride={user.avatar_updated_at ? undefined : null} />}
             <span className="hidden sm:inline">{user?.nick}</span>
@@ -232,25 +234,25 @@ export default function Shell() {
           <button
             onClick={() => setNotifModal(true)}
             className="btn-ghost !px-2 !py-1 !text-xs"
-            title="bildirim ayarları"
+            title={t('shell.notifSettingsTitle')}
           >
             <Bell size={13} />
           </button>
           <button
             onClick={() => setRecModal(true)}
             className="btn-ghost !px-2 !py-1 !text-xs"
-            title="kurtarma ifadesi"
+            title={t('shell.recoveryTitle')}
           >
             <ShieldCheck size={13} />
-            <span className="hidden md:inline">kurtarma</span>
+            <span className="hidden md:inline">{t('shell.recovery')}</span>
           </button>
-          <button onClick={() => setPwModal(true)} className="btn-ghost !px-2 !py-1 !text-xs" title="şifre değiştir">
+          <button onClick={() => setPwModal(true)} className="btn-ghost !px-2 !py-1 !text-xs" title={t('shell.passwordTitle')}>
             <KeyRound size={13} />
-            <span className="hidden md:inline">şifre</span>
+            <span className="hidden md:inline">{t('shell.password')}</span>
           </button>
-          <button onClick={() => void logout()} className="btn-ghost !px-2 !py-1 !text-xs" title="çıkış yap">
+          <button onClick={() => void logout()} className="btn-ghost !px-2 !py-1 !text-xs" title={t('shell.logoutTitle')}>
             <LogOut size={13} />
-            <span className="hidden md:inline">çıkış</span>
+            <span className="hidden md:inline">{t('shell.logout')}</span>
           </button>
         </div>
       </header>
@@ -261,7 +263,7 @@ export default function Shell() {
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-brass-600/40 bg-lamp-100/70 px-3 py-2">
           <Bell size={14} className="shrink-0 text-lamp-500" aria-hidden />
           <span className="min-w-0 flex-1 text-sm text-lamp-300">
-            {notifHint ?? 'masaüstü bildirimleri açılsın mı? sekme arkadayken gönderen ve oda görünür — içerik asla'}
+            {notifHint ?? t('shell.notifAsk')}
           </span>
           {!notifHint && (
             <>
@@ -273,13 +275,13 @@ export default function Shell() {
                       useSettingsStore.getState().enableDesktop();
                       setNotifPrompt(false);
                     } else {
-                      setNotifHint('izin verilmedi — adres çubuğundaki kilitten Bildirimler iznini ver, sonra ayarlardan tekrar aç');
+                      setNotifHint(t('shell.notifNotGranted'));
                     }
                   });
                 }}
                 className="btn-lamp !py-1 !text-xs"
               >
-                aç
+                {t('shell.notifYes')}
               </button>
               <button
                 onClick={() => {
@@ -288,13 +290,13 @@ export default function Shell() {
                 }}
                 className="btn-ghost !py-1 !text-xs"
               >
-                şimdi değil
+                {t('shell.notifLater')}
               </button>
             </>
           )}
           {notifHint && (
             <button onClick={() => setNotifPrompt(false)} className="btn-ghost !py-1 !text-xs">
-              tamam
+              {t('shell.notifOk')}
             </button>
           )}
         </div>
@@ -305,8 +307,7 @@ export default function Shell() {
       {keylogWarning && (
         <div className="shrink-0 border-b border-stamp-500/70 bg-stamp-100 px-3 py-1.5">
           <p className="text-xs font-semibold text-stamp-400">
-            güvenlik uyarısı — {keylogWarning}. durum düzelene kadar bu sunucudaki hiçbir
-            anahtara güvenmeyin
+            {t('shell.keylogWarning', { message: keylogWarning })}
           </p>
         </div>
       )}
@@ -332,7 +333,7 @@ export default function Shell() {
         ) : (
           <main className="flex min-w-0 flex-1 flex-col">
             {!loaded ? (
-              <div className="flex flex-1 items-center justify-center text-paper-500">yükleniyor…</div>
+              <div className="flex flex-1 items-center justify-center text-paper-500">{t('shell.loading')}</div>
             ) : channel ? (
               channel.type === 'text' ? (
                 <ChatView channelId={channel.id} channelName={channel.name} />
@@ -341,7 +342,7 @@ export default function Shell() {
               )
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-paper-500">
-                soldan bir topluluk ve oda seç
+                {t('shell.selectCommunity')}
               </div>
             )}
           </main>
@@ -382,6 +383,7 @@ export default function Shell() {
 
 // Attach a recovery phrase to a logged-in account (created before the ritual).
 function RecoveryModal({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
   const setupRecovery = useAuthStore((s) => s.setupRecovery);
   const [phase, setPhase] = useState<'show' | 'quiz' | 'done'>('show');
   const [words, setWords] = useState<string[] | null>(null);
@@ -417,19 +419,17 @@ function RecoveryModal({ onClose }: { onClose: () => void }) {
       await setupRecovery(words);
       setPhase('done');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'kaydedilemedi');
+      setError(err instanceof Error ? err.message : t('recovery.fail'));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title="Kurtarma ifadesi" onClose={onClose}>
+    <Modal title={t('recovery.title')} onClose={onClose}>
       {phase === 'show' && (
         <div className="flex flex-col gap-3">
-          <p className="text-xs text-paper-500">
-            hesabın bu ifadede yedeklenir — şifreni kaybedersen tek kurtarma yolu bu
-          </p>
+          <p className="text-xs text-paper-500">{t('recovery.intro')}</p>
           <div className="grid grid-cols-3 gap-1.5">
             {(words ?? Array.from({ length: 12 }, () => '…')).map((w, i) => (
               <div
@@ -443,20 +443,20 @@ function RecoveryModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex gap-2">
             <button onClick={download} className="btn-ghost flex-1">
-              indir
+              {t('recovery.download')}
             </button>
             <button onClick={() => setPhase('quiz')} disabled={!words} className="btn-lamp flex-1">
-              kaydettim, doğrula
+              {t('recovery.savedContinue')}
             </button>
           </div>
         </div>
       )}
       {phase === 'quiz' && (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-paper-300">{quiz.map((i) => i + 1).join(', ')}. kelimeleri yaz:</p>
+          <p className="text-sm text-paper-300">{t('recovery.positionsPrompt', { positions: quiz.map((i) => i + 1).join(', ') })}</p>
           {quiz.map((i) => (
             <label key={i} className="flex items-center gap-2 text-sm">
-              <span className="w-14 shrink-0 text-paper-500">{i + 1}. kelime</span>
+              <span className="w-14 shrink-0 text-paper-500">{t('recovery.wordLabel', { n: i + 1 })}</span>
               <input
                 value={answers[i] ?? ''}
                 onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))}
@@ -466,21 +466,21 @@ function RecoveryModal({ onClose }: { onClose: () => void }) {
             </label>
           ))}
           <button onClick={() => void finish()} disabled={!quizOk || busy} className="btn-lamp">
-            {busy ? 'kaydediliyor…' : 'kaydet'}
+            {busy ? t('recovery.saving') : t('recovery.save')}
           </button>
           <button
             onClick={() => setPhase('show')}
             className="text-xs text-paper-500 transition-colors hover:text-paper-300"
           >
-            ← kelimelere dön
+            {t('recovery.backToWords')}
           </button>
         </div>
       )}
       {phase === 'done' && (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-lamp-300">kurtarma ifadesi hesabına bağlandı</p>
+          <p className="text-sm text-lamp-300">{t('recovery.success')}</p>
           <button onClick={onClose} className="btn-lamp">
-            tamam
+            {t('recovery.ok')}
           </button>
         </div>
       )}

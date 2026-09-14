@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { X } from 'lucide-react';
+import { useT } from '../i18n/I18nProvider';
 
 export interface Toast {
   id: number;
@@ -39,17 +40,18 @@ const STYLES: Record<Toast['kind'], string> = {
 export function ToastContainer(): React.JSX.Element {
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
+  const { t } = useT();
   return (
     <div className="pointer-events-none fixed right-4 top-12 z-[70] flex flex-col gap-2" role="status" aria-live="polite">
-      {toasts.map((t) => (
+      {toasts.map((toast) => (
         <div
-          key={t.id}
-          className={`animate-seal-in pointer-events-auto flex items-center gap-2 rounded-md border px-3 py-2 text-sm shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] ${STYLES[t.kind]}`}
+          key={toast.id}
+          className={`animate-seal-in pointer-events-auto flex items-center gap-2 rounded-md border px-3 py-2 text-sm shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] ${STYLES[toast.kind]}`}
         >
-          <span className="max-w-72">{t.text}</span>
+          <span className="max-w-72">{toast.text}</span>
           <button
-            onClick={() => dismiss(t.id)}
-            aria-label="kapat"
+            onClick={() => dismiss(toast.id)}
+            aria-label={t('toast.close')}
             className="rounded p-0.5 opacity-60 transition-opacity hover:opacity-100"
           >
             <X size={13} />

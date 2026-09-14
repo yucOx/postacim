@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Phone, X } from 'lucide-react';
 import { useVoiceStore } from '../state/voiceStore';
+import { useT } from '../i18n/I18nProvider';
 import { PigeonMark } from './Brand';
 
 // WebAudio ring — no audio files, two-tone pattern like a phone
@@ -44,6 +45,7 @@ function useRing(active: boolean): void {
 }
 
 export default function IncomingCall(): React.ReactNode {
+  const { t } = useT();
   const callState = useVoiceStore((s) => s.callState);
   const acceptIncoming = useVoiceStore((s) => s.acceptIncoming);
   const declineIncoming = useVoiceStore((s) => s.declineIncoming);
@@ -60,25 +62,25 @@ export default function IncomingCall(): React.ReactNode {
             <PigeonMark size={30} />
           </span>
         </div>
-        <p className="plate mt-4">GELEN GÖRÜŞME</p>
+        <p className="plate mt-4">{t('incoming.incomingTitle')}</p>
         <p className="mt-1 font-display text-xl font-semibold uppercase tracking-[0.08em] text-paper-50">
           {callState.fromNick}
         </p>
-        <p className="mt-0.5 text-xs text-paper-500">şifreli hat — uçtan uca</p>
+        <p className="mt-0.5 text-xs text-paper-500">{t('incoming.subtitle')}</p>
         <div className="mt-5 flex justify-center gap-4">
           <button
             onClick={() => void declineIncoming()}
             className="flex h-12 w-12 items-center justify-center rounded-full border border-stamp-500/70 bg-stamp-100 text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
-            title="reddet"
-            aria-label="aramayı reddet"
+            title={t('incoming.decline')}
+            aria-label={t('incoming.declineAria')}
           >
             <X size={19} />
           </button>
           <button
             onClick={() => void acceptIncoming().catch(() => {})}
             className="flex h-12 w-12 items-center justify-center rounded-full bg-lamp-500 text-night-950 transition-colors hover:bg-lamp-400"
-            title="kabul et"
-            aria-label="aramayı kabul et"
+            title={t('incoming.accept')}
+            aria-label={t('incoming.acceptAria')}
           >
             <Phone size={19} />
           </button>

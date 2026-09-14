@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
+import { useT } from '../i18n/I18nProvider';
 
 /** Branded replacement for window.confirm — focus-trapped, ESC to cancel. */
 export default function ConfirmDialog({
   title,
   message,
-  confirmLabel = 'onayla',
+  confirmLabel,
   danger = false,
   onConfirm,
   onCancel,
@@ -17,6 +18,7 @@ export default function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     ref.current?.focus();
@@ -33,7 +35,7 @@ export default function ConfirmDialog({
       <p className="mb-4 text-sm text-paper-300">{message}</p>
       <div className="flex justify-end gap-2">
         <button onClick={onCancel} className="btn-ghost">
-          vazgeç
+          {t('confirm.cancel')}
         </button>
         <button
           ref={ref}
@@ -44,7 +46,7 @@ export default function ConfirmDialog({
           }}
           className={danger ? 'btn-stamp' : 'btn-lamp'}
         >
-          {busy ? '…' : confirmLabel}
+          {busy ? t('confirm.busy') : (confirmLabel ?? t('confirm.defaultConfirm'))}
         </button>
       </div>
     </Modal>

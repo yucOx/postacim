@@ -9,8 +9,10 @@ import UserCard from './UserCard';
 import Modal from './Modal';
 import { toast } from './Toast';
 import Avatar from './Avatar';
+import { useT } from '../i18n/I18nProvider';
 
 export default function MemberList() {
+  const { t } = useT();
   const community = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId));
   const publicKeys = useAppStore((s) => s.publicKeys);
   const addMember = useAppStore((s) => s.addMember);
@@ -79,13 +81,13 @@ export default function MemberList() {
   return (
     <div className="flex w-56 shrink-0 flex-col border-l border-night-700 bg-night-900/50">
       <div className="plate flex items-center justify-between border-b border-night-700 px-4 py-3">
-        MANİFO — {community.members.length}
+        {t('members.roster', { n: community.members.length })}
         {isStaff && (
           <button
             onClick={() => setAdding(true)}
             className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
-            title="üye ekle"
-            aria-label="üye ekle"
+            title={t('members.addMember')}
+            aria-label={t('members.addMember')}
           >
             <UserPlus size={13} />
           </button>
@@ -100,28 +102,28 @@ export default function MemberList() {
               <button
                 onClick={() => setCard({ id: m.id, nick: m.nick })}
                 className="shrink-0 rounded-sm transition-transform hover:scale-105"
-                title={`${m.nick} — üye kartı`}
-                aria-label={`${m.nick} üye kartı`}
+                title={t('members.memberCardTitle', { name: m.nick })}
+                aria-label={t('members.memberCard', { name: m.nick })}
               >
                 <Avatar userId={m.id} label={m.nick} size={28} />
               </button>
               <span className={`flex-1 truncate text-sm ${m.id === me?.id ? 'text-paper-100' : 'text-paper-300'}`}>
                 {m.nick}
               </span>
-              {m.role === 'owner' && <Crown size={12} className="shrink-0 text-lamp-500" aria-label="sahip" />}
-              {m.role === 'admin' && <Star size={11} className="shrink-0 text-brass-400" aria-label="admin" />}
+              {m.role === 'owner' && <Crown size={12} className="shrink-0 text-lamp-500" aria-label={t('members.roleOwner')} />}
+              {m.role === 'admin' && <Star size={11} className="shrink-0 text-brass-400" aria-label={t('members.roleAdmin')} />}
               {m.id !== me?.id && (
                 <button
                   onClick={() => setFingerprint({ id: m.id, nick: m.nick, keyB64: publicKeys[m.id] })}
                   className="relative rounded p-0.5 text-paper-700 transition-colors hover:text-paper-100"
-                  title="parmak izi"
-                  aria-label={`${m.nick} parmak izi`}
+                  title={t('members.fingerprint')}
+                  aria-label={t('members.fingerprintOf', { name: m.nick })}
                 >
                   <Key size={11} />
                   {keyFlagged.has(m.id) && (
                     <span
                       className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-stamp-500"
-                      aria-label="anahtar değişti"
+                      aria-label={t('members.keyChanged')}
                     />
                   )}
                 </button>
@@ -132,22 +134,22 @@ export default function MemberList() {
                     <button
                       onClick={() => void act(() => setRole(community.id, m.id, m.role === 'member'))}
                       className="rounded p-0.5 text-paper-500 transition-colors hover:text-brass-400"
-                      title={m.role === 'member' ? 'admin yap' : 'adminliği kaldır'}
+                      title={m.role === 'member' ? t('members.makeAdmin') : t('members.removeAdmin')}
                     >
                       <Star size={11} />
                     </button>
                   )}
                   <button
-                    onClick={() => void act(() => banMember(community.id, m.id), `${m.nick} atılıp BANLANSIN mı? Odalar yeni anahtara döner.`)}
+                    onClick={() => void act(() => banMember(community.id, m.id), t('members.kickBanConfirm', { name: m.nick }))}
                     className="rounded p-0.5 text-paper-500 transition-colors hover:text-stamp-400"
-                    title="çıkar + banla"
+                    title={t('members.kickBan')}
                   >
                     <Ban size={11} />
                   </button>
                   <button
-                    onClick={() => void act(() => removeMember(community.id, m.id), `${m.nick} çıkarılsın mı? Odalar yeni anahtara döner.`)}
+                    onClick={() => void act(() => removeMember(community.id, m.id), t('members.kickConfirm', { name: m.nick }))}
                     className="rounded p-0.5 text-paper-500 transition-colors hover:text-stamp-400"
-                    title="çıkar"
+                    title={t('members.kick')}
                   >
                     <X size={12} />
                   </button>
@@ -159,23 +161,23 @@ export default function MemberList() {
       </div>
 
       {adding && (
-        <Modal title="Üye ekle" onClose={() => setAdding(false)}>
+        <Modal title={t('members.addTitle')} onClose={() => setAdding(false)}>
           <div className="flex flex-col gap-3">
             <input
               autoFocus
               value={nick}
               onChange={(e) => setNick(e.target.value)}
               onKeyDown={(e) => nick.trim() && e.key === 'Enter' && void submit()}
-              placeholder="nick"
+              placeholder={t('members.nickPlaceholder')}
               maxLength={24}
               className="input"
             />
             <p className="text-xs text-paper-500">
-              Kanal anahtarları onun anahtarına sarılır; sunucu yalnızca sarılı kutuları görür.
+              {t('members.addHint')}
             </p>
             {error && <p className="text-sm text-stamp-400">{error}</p>}
             <button onClick={() => void submit()} disabled={busy || !nick.trim()} className="btn-lamp">
-              {busy ? 'ekleniyor…' : 'ekle'}
+              {busy ? t('members.adding') : t('members.add')}
             </button>
           </div>
         </Modal>
@@ -198,10 +200,10 @@ export default function MemberList() {
       )}
       {pendingAct && (
         <ConfirmDialog
-          title="Emin misin?"
+          title={t('members.confirmTitle')}
           message={pendingAct.text}
           danger
-          confirmLabel="evet, devam"
+          confirmLabel={t('members.confirmYes')}
           onConfirm={() => void runAct(pendingAct.fn)}
           onCancel={() => setPendingAct(null)}
         />

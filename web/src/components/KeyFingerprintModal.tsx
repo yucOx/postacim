@@ -4,6 +4,7 @@ import { unb64 } from '../crypto/bytes';
 import { fingerprintPair, shortFingerprint } from '../crypto/fingerprint';
 import { ensurePinned, pinKey, type PinStatus } from '../lib/keypins';
 import Modal from './Modal';
+import { useT } from '../i18n/I18nProvider';
 
 /** fingerprint value block + copy button */
 function CopyBlock({
@@ -15,6 +16,7 @@ function CopyBlock({
   className?: string;
   children: ReactNode;
 }): ReactNode {
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
   const copy = async (): Promise<void> => {
     try {
@@ -33,7 +35,7 @@ function CopyBlock({
         {children}
       </div>
       <button onClick={() => void copy()} className="btn-ghost self-end !py-0.5 !text-xs">
-        {copied ? 'kopyalandı' : 'kopyala'}
+        {copied ? t('fingerprint.copied') : t('fingerprint.copy')}
       </button>
     </div>
   );
@@ -54,6 +56,7 @@ export default function KeyFingerprintModal({
   onTrust?: () => void;
   onClose: () => void;
 }): ReactNode {
+  const { t } = useT();
   const myPublicKey = useAuthStore((s) => s.publicKey);
   const [status, setStatus] = useState<PinStatus | 'loading' | 'error'>('loading');
   const [peerKeyB64, setPeerKeyB64] = useState<string | null>(null);
@@ -103,12 +106,12 @@ export default function KeyFingerprintModal({
   };
 
   return (
-    <Modal title="Parmak izi" onClose={onClose}>
+    <Modal title={t('fingerprint.title')} onClose={onClose}>
       <div className="flex w-80 flex-col gap-3">
-        <p className="text-[11px] text-paper-500">{peerNick} ile kimlik parmak izi</p>
+        <p className="text-[11px] text-paper-500">{t('fingerprint.withPeer', { name: peerNick })}</p>
 
-        {status === 'loading' && <p className="text-sm text-paper-500">hesaplanıyor…</p>}
-        {status === 'error' && <p className="text-sm text-stamp-400">anahtar alınamadı</p>}
+        {status === 'loading' && <p className="text-sm text-paper-500">{t('fingerprint.loading')}</p>}
+        {status === 'error' && <p className="text-sm text-stamp-400">{t('fingerprint.keyError')}</p>}
 
         {short && (
           <CopyBlock copyText={short.replace(/ /g, '')} className="text-center text-lg tracking-[0.12em]">
@@ -129,20 +132,20 @@ export default function KeyFingerprintModal({
         {status === 'changed' && (
           <div className="rounded border border-stamp-500/70 bg-night-950/70 p-3">
             <p className="text-sm font-semibold text-stamp-400">
-              Bu kişinin anahtarı değişti. Bu, hesap ele geçirme olabilir.
+              {t('fingerprint.changed')}
             </p>
             <p className="mt-1 text-[11px] text-paper-500">
-              yeni anahtarı başka bir kanaldan (yüz yüze, sesli) doğrulamadan iletişime güvenme.
+              {t('fingerprint.changedHint')}
             </p>
             <div className="mt-2 flex gap-2">
               <button
                 onClick={trust}
                 className="btn-ghost hover:!border-stamp-500/70 hover:!text-stamp-400"
               >
-                yine de güven
+                {t('fingerprint.trustAnyway')}
               </button>
               <button onClick={onClose} className="btn-lamp">
-                kapat
+                {t('fingerprint.close')}
               </button>
             </div>
           </div>
@@ -150,11 +153,10 @@ export default function KeyFingerprintModal({
 
         {status === 'same' && full && (
           <p className="text-[11px] text-paper-500">
-            bu 40 hane iki tarafın kimlik anahtarlarından üretilir — karşı tarafınkiyle aynı mı diye
-            başka bir kanaldan karşılaştır; anahtar depoda ilk görüldüğü gibi sabit.
+            {t('fingerprint.same')}
           </p>
         )}
-        <span className="sealed-band self-start">uçtan uca · x25519</span>
+        <span className="sealed-band self-start">{t('fingerprint.sealed')}</span>
       </div>
     </Modal>
   );

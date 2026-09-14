@@ -11,11 +11,13 @@ import TypingLine from './TypingLine';
 import ReplyBar from './ReplyBar';
 import { deleteForEveryone, DeletedRow, HoverActions } from './MsgDelete';
 import Composer from './Composer';
+import { useT } from '../i18n/I18nProvider';
 
 // stable ref: `?? []` in a zustand selector recreates it each call and loops React 19 (#185)
 const NO_MESSAGES: DisplayMessage[] = [];
 
 export default function ChatView({ channelId, channelName }: { channelId: string; channelName: string }) {
+  const { t } = useT();
   const messages = useChatStore((s) => s.messages[channelId] ?? NO_MESSAGES);
   const hasMore = useChatStore((s) => s.hasMore[channelId] ?? false);
   const loadHistory = useChatStore((s) => s.loadHistory);
@@ -144,7 +146,7 @@ export default function ChatView({ channelId, channelName }: { channelId: string
               {m.id === dividerId && (
                 <div className="my-1 flex items-center gap-2 px-4">
                   <div className="h-px flex-1 bg-brass-500" aria-hidden />
-                  <span className="plate !text-[10px] !tracking-[0.14em] text-brass-400">YENİ</span>
+                  <span className="plate !text-[10px] !tracking-[0.14em] text-brass-400">{t('chat.newDivider')}</span>
                   <div className="h-px flex-1 bg-brass-500" aria-hidden />
                 </div>
               )}

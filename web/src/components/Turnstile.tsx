@@ -10,6 +10,7 @@
 //   ...disabled={turnstileEnabled() && !tsToken} on submit
 //   ...include tsToken as turnstile_token in the register/login body.
 import { useEffect, useRef } from 'react';
+import { useT } from '../i18n/I18nProvider';
 
 const SITEKEY = (import.meta.env.VITE_TURNSTILE_SITEKEY as string | undefined) ?? '';
 const API_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
@@ -36,7 +37,7 @@ declare global {
 // module-level memo: multiple mounts (React 18 strict mode double-invokes
 // effects in dev) must not inject the script twice
 let apiPromise: Promise<TurnstileApi> | null = null;
-function loadTurnstileApi(): Promise<TurnstileApi> {
+function loadTurnstileApi(errNoApi: string, errLoad: string): Promise<TurnstileApi> {
   apiPromise ??= new Promise<TurnstileApi>((resolve, reject) => {
     if (window.turnstile) return resolve(window.turnstile);
     const script = document.createElement('script');
@@ -45,10 +46,10 @@ function loadTurnstileApi(): Promise<TurnstileApi> {
     script.onload = () =>
       window.turnstile
         ? resolve(window.turnstile)
-        : reject(new Error('turnstile: api yüklendi ama window.turnstile yok'));
+        : reject(new Error(errNoApi));
     script.onerror = () => {
       apiPromise = null; // allow a retry on the next mount
-      reject(new Error('turnstile: api yüklenemedi'));
+      reject(new Error(errLoad));
     };
     document.head.appendChild(script);
   });
@@ -62,6 +63,7 @@ interface TurnstileProps {
 }
 
 export default function Turnstile({ onToken }: TurnstileProps) {
+  const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const onTokenRef = useRef(onToken);
 
@@ -74,7 +76,7 @@ export default function Turnstile({ onToken }: TurnstileProps) {
     if (SITEKEY === '') return;
     let widgetId: string | null = null;
     let cancelled = false;
-    loadTurnstileApi()
+    loadTurnstileApi(t('turnstile.loadNoApi'), t('turnstile.loadFail'))
       .then((ts) => {
         if (cancelled || !containerRef.current) return;
         widgetId = ts.render(containerRef.current, {

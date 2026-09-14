@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { RoomContext } from '@livekit/components-react';
 import { AlertTriangle, Volume2 } from 'lucide-react';
+import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 import CallControls from './CallControls';
@@ -8,6 +9,7 @@ import CallStage from './CallStage';
 import CallQualityPicker from './CallQualityPicker';
 
 export default function VoiceRoom({ channelId, channelName }: { channelId: string; channelName: string }) {
+  const { t } = useT();
   const room = useVoiceStore((s) => s.room);
   const joined = useVoiceStore((s) => s.joinedChannelId);
   const leftChannelId = useVoiceStore((s) => s.leftChannelId);
@@ -37,22 +39,22 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
         <span className="font-display text-lg font-semibold uppercase tracking-[0.08em] text-paper-50">
           {channelName}
         </span>
-        <span className="sealed-band">uçtan uca · sframe</span>
+        <span className="sealed-band">{t('call.roomE2EE')}</span>
       </div>
       {needsRekey && (
         <div className="flex items-center gap-2 border-b border-lamp-600/40 bg-lamp-100/70 px-4 py-2 text-sm text-lamp-300">
           <AlertTriangle size={14} className="shrink-0 text-lamp-500" />
-          Bir üye çıkarıldı — sahip/admin kanal anahtarını yenileyene kadar oda kilitli.
+          {t('call.roomRekey')}
         </div>
       )}
       {error && <div className="border-b border-stamp-500/50 bg-stamp-100 px-4 py-2 text-sm text-stamp-400">{error}</div>}
       {!room ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-paper-500">odaya bağlanıyor…</div>
+        <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{t('call.roomConnecting')}</div>
       ) : (
         <RoomContext.Provider value={room}>
-          <CallStage emptyLabel="odada yalnızsın — mikrofon/kamera aç, başkaları katılınca burada görünür" />
+          <CallStage emptyLabel={t('call.roomEmpty')} />
           <CallQualityPicker />
-          <CallControls variant="room" onEnd={() => void leave()} endLabel="ayrıl" />
+          <CallControls variant="room" onEnd={() => void leave()} endLabel={t('call.leave')} />
         </RoomContext.Provider>
       )}
     </div>
