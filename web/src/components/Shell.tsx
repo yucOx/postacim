@@ -17,6 +17,7 @@ import PiPWidget from './PiPWidget';
 import VoicePip from './VoicePip';
 import SettingsModal from './SettingsModal';
 import Modal from './Modal';
+import LocalePicker from './LocalePicker';
 import { PigeonMark } from './Brand';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
@@ -250,6 +251,7 @@ export default function Shell() {
             <KeyRound size={13} />
             <span className="hidden md:inline">{t('shell.password')}</span>
           </button>
+          <LocalePicker variant="icon" />
           <button onClick={() => void logout()} className="btn-ghost !px-2 !py-1 !text-xs" title={t('shell.logoutTitle')}>
             <LogOut size={13} />
             <span className="hidden md:inline">{t('shell.logout')}</span>

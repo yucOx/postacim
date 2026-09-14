@@ -9,6 +9,7 @@ import PasswordInput, { passwordScore } from './PasswordInput';
 import Turnstile, { turnstileEnabled } from './Turnstile';
 import { PigeonMark, Postmark, SealMark } from './Brand';
 import { SponsorNote } from './SponsorNote';
+import LocalePicker from './LocalePicker';
 
 type Step = 'login' | 'register' | 'phrase' | 'forgot';
 
@@ -92,7 +93,11 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-10 bg-night-950 px-4 py-10 text-paper-100 lg:flex-row lg:gap-20">
+    <div className="relative flex min-h-screen flex-col items-center justify-center gap-10 bg-night-950 px-4 py-10 text-paper-100 lg:flex-row lg:gap-20">
+      {/* dil seçici — giriş ekranında daima erişilebilir (sağ üst köşe) */}
+      <div className="absolute right-3 top-3 z-20">
+        <LocalePicker variant="full" />
+      </div>
       {step === 'phrase' ? (
         <PhraseStep
           nick={nick.trim()}
