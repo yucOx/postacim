@@ -42,27 +42,24 @@ export default function CallView(): React.ReactNode {
       </div>
       {error && <div className="shrink-0 border-b border-stamp-500/50 bg-stamp-100 px-4 py-2 text-sm text-stamp-400">{error}</div>}
       {!room ? (
-        // bağlanmadan önce kompakt kutu — panel tüm yüksekliği kaplamasın
-        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-          <div className="flex w-full max-w-md flex-col items-center gap-3 rounded-md border border-night-700 bg-night-900/40 px-6 py-10 text-paper-500">
-            <PigeonMark size={30} className="text-brass-600" />
-            <p className="text-sm">vagona bağlanıyor…</p>
-          </div>
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-paper-500">
+          <PigeonMark size={30} className="text-brass-600" />
+          <p className="text-sm">vagona bağlanıyor…</p>
         </div>
       ) : (
         // CallStage + alt kontroller ana sütunda — CallStage flex-1 ile kalan
         // yüksekliği alır; min-h-0 kardeşler içermezse içerideki dikey
         // yerleşim viewport'a sığar
         <RoomContext.Provider value={room}>
-          {/* kompakt çağrı paneli: panel tüm yüksekliği kaplamasın —
-              ortalı, içerik ne olursa olsun sabit yükseklik; peer/akış
-              olmasa bile çerçeve hep aynı boyutta (Discord). */}
-          <div className="flex min-h-0 flex-1 items-stretch justify-center overflow-hidden p-4">
-            <div className="flex w-full max-w-5xl min-h-0 flex-col overflow-hidden rounded-lg border border-night-700 bg-night-900/30">
-              <CallStage />
-              <CallQualityPicker />
-              <CallControls variant="call" onEnd={() => void cancelCall()} endLabel="bitir" onMinimize={() => setPip(true)} />
-            </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {/* CallStage fragment döndürüyor; sarmalayıcı olmadan içerideki
+                flex-1 ebeveyne göre sıfır kalıp sahnenin yüksekliği içeriğe
+                göre şişer, viewport taşar. Sarmalayıcı flex-col: CallStage
+                parçaları (RemoteAudio, ShareAudio, ana div) direkt çocuk olur;
+                ana div flex-1'i kalan yeri kaplar. */}
+            <CallStage />
+            <CallQualityPicker />
+            <CallControls variant="call" onEnd={() => void cancelCall()} endLabel="bitir" onMinimize={() => setPip(true)} />
           </div>
         </RoomContext.Provider>
       )}
