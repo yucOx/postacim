@@ -169,6 +169,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const spotId = spotlight?.split(':')[1] ?? null;
 
   const toggleScreen = useVoiceStore((s) => s.toggleScreen);
+  const watchingStream = useVoiceStore((s) => s.watchingStream);
   // paylaşım görünümü yerleşimi: odak (büyük + sağ şerit) / yan yana eşit bölmeler
   const [shareLayout, setShareLayout] = useState<'focus' | 'side'>('focus');
   // izleyici yayın sesi: 0-1 + sessize alma (ekran paylaşımı sesi)
@@ -223,27 +224,23 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     setShareLayout('focus');
   };
 
-  // İZLENMEYEN uzak yayın izleyicide HİÇ render edilmez (içerik preview'ı bile
-  // değil) — yalnız yayıncının kendi döşemesinde "canlı" rozet butonu belirir;
-  // rozete tıklayınca izlenir, izlemeyi bırakınca yayın tamamen kaybolur ve
-  // rozet geri gelir. Bu yüzden kamera durumundan bağımsız çalışır.
+  // İZLENMEYEN uzak yayın artık çağrı sahnesinde hiç render edilmiyor —
+  // StreamPopout köşedeki Discord-tarzı küçük pencere ile gösteriyor; izle
+  // isteği pop-out'tan gelir (voiceStore.watchingStream abone olunur).
   const shareByIdentity = new Map(
     screens.filter((t) => !t.participant.isLocal).map((t) => [t.participant.identity, t]),
   );
-  const liveBadgeBtn = (identity: string): React.ReactNode => (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        watchScreen(identity);
-      }}
-      className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
-      title="yayını izle"
-    >
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-stamp-500" aria-hidden />
-      canlı — izle
-    </button>
-  );
+  // dışarıdan gelen izle isteği (StreamPopout) → spotlight/yerleşimi
+  // senkron tut; odaklı kişi odadan ayrılırsa set null'la
+  useEffect(() => {
+    if (watchingStream && shareByIdentity.has(watchingStream)) {
+      if (spotlight !== `screen:${watchingStream}`) watchScreen(watchingStream);
+    } else if (!watchingStream && spotlight?.startsWith('screen:')) {
+      unwatch();
+    }
+  // sharing değiştiğinde de tetiklensin (peer paylaşımı durdurmuş olabilir)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchingStream, shareByIdentity]);
 
   // yan yana düzende bir kameraya/avatara tıklamak o akışa odaklanıp odak
   // görünümüne döner — spotlight'i set etmek yetmez, side dalı odak dalından
@@ -321,7 +318,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       >
         <ParticipantTile trackRef={cam} className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
-        {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </div>
     ) : (
       <div
@@ -332,7 +328,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       >
         <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
-        {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </div>
     );
   };
@@ -598,7 +593,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                   </div>
                 )}
                 <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
-                {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
               </div>
             );
           })}

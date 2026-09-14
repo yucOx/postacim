@@ -52,6 +52,11 @@ interface VoiceState {
   /** pinned = the mini call widget floats above modals/menus too. Persisted. */
   pipPinned: boolean;
   setPipPinned: (v: boolean) => void;
+  /** peer identity whose screen share is being watched; null = nothing
+   *  watched (e.g. only cameras). StreamPopout sets/clears this; CallStage
+   *  subscribes to drive the focus layout. */
+  watchingStream: string | null;
+  setWatchingStream: (id: string | null) => void;
   join: (channelId: string) => Promise<void>;
   leave: () => Promise<void>;
   toggleMic: () => Promise<void>;
@@ -234,6 +239,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   pip: false,
   pipPos: loadPipPos(),
   pipPinned: loadPipPinned(),
+  watchingStream: null,
 
   setQuality: (q) => {
     try {
@@ -262,6 +268,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
     }
     set({ pipPinned: v });
   },
+
+  setWatchingStream: (id) => set({ watchingStream: id }),
 
   join: async (channelId) => {
     if (get().joinedChannelId === channelId && !get().isDmCall) return;

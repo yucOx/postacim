@@ -15,6 +15,7 @@ import IncomingCall from './IncomingCall';
 import CallView from './CallView';
 import PiPWidget from './PiPWidget';
 import VoicePip from './VoicePip';
+import StreamPopout from './StreamPopout';
 import SettingsModal from './SettingsModal';
 import Modal from './Modal';
 import { PigeonMark } from './Brand';
@@ -371,9 +372,15 @@ export default function Shell() {
       {notifModal && <SettingsModal onClose={() => setNotifModal(false)} />}
       {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
       {isDmCall && pip && <PiPWidget />}
-      {/* ongoing community call, minimized while browsing other rooms */}
-      {!isDmCall && joinedVoiceChannel && !(view === 'community' && channel?.type === 'voice' && activeChannelId === joinedVoiceChannel) && (
-        <VoicePip />
+      {/* topluluk ses odasındayken (aktif sesli oda = VoiceRoom sahneyi
+          gösterir), uzak ekran paylaşımı varsa Discord-tarzı pop-out
+          köşede; aksi hâlde eski VoicePip mini widget */}
+      {!isDmCall && joinedVoiceChannel && (
+        view === 'community' && channel?.type === 'voice' && activeChannelId === joinedVoiceChannel ? (
+          <StreamPopout />
+        ) : (
+          <VoicePip />
+        )
       )}
       <IncomingCall />
     </div>
