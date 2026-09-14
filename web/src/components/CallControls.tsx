@@ -3,8 +3,10 @@ import { Mic, MicOff, MonitorUp, PhoneOff, PictureInPicture2, Video, VideoOff } 
 import { useLocalParticipant } from '@livekit/components-react';
 import { useVoiceStore, type CallQuality, type ShareOpts } from '../state/voiceStore';
 import Modal from './Modal';
+import { useT } from '../i18n/I18nProvider';
 
 // diyalogdaki çözünürlük satırları; kalite ayarına göre ön seçilir
+// (etiketler sabit: 360p/480p… — sayısal, dile bağlı değil)
 const RES_ROWS: { h: number; w: number; label: string }[] = [
   { h: 360, w: 640, label: '360p' },
   { h: 480, w: 854, label: '480p' },
@@ -14,11 +16,8 @@ const RES_ROWS: { h: number; w: number; label: string }[] = [
 ];
 const FPS_ROWS: Array<ShareOpts['fps']> = [15, 30, 60];
 // kaynak ipucu — tarayıcının seçim ekranında o kategoriye ön seçilir
-const SURFACE_ROWS: { key: ShareOpts['surface']; label: string }[] = [
-  { key: 'monitor', label: 'tüm ekran' },
-  { key: 'window', label: 'pencere' },
-  { key: 'browser', label: 'sekme' },
-];
+// (etiketler useT ile çevrilir, aşağıda)
+const SURFACE_KEYS: ShareOpts['surface'][] = ['monitor', 'window', 'browser'];
 const QUALITY_TO_RES: Record<CallQuality, number> = { hizli: 360, dengeli: 720, yuksek: 1080 };
 
 /** Shared call control bar — DM calls and community voice rooms differ only
@@ -43,6 +42,7 @@ export default function CallControls({
   const startScreen = useVoiceStore((s) => s.startScreen);
   const toggleScreen = useVoiceStore((s) => s.toggleScreen);
   const local = useLocalParticipant();
+  const { t } = useT();
   // ekran paylaşımı öncesi detaylı yayın diyaloğu (Discord Go Live akışı):
   // kaynak ipucu + çözünürlük + fps + ses, sonra tarayıcıdan kaynak seçimi
   const [screenPrompt, setScreenPrompt] = useState(false);
@@ -62,28 +62,28 @@ export default function CallControls({
 
   return (
     <div className="flex items-center justify-center gap-2.5 border-t border-night-700 bg-night-900/80 px-4 py-3">
-      <button onClick={() => void toggleMic()} className={round(micOn)} title={micOn ? 'mikrofonu kapat' : 'mikrofonu aç'} aria-label={micOn ? 'mikrofonu kapat' : 'mikrofonu aç'} aria-pressed={micOn}>
+      <button onClick={() => void toggleMic()} className={round(micOn)} title={micOn ? t('call.micOn') : t('call.micOff')} aria-label={micOn ? t('call.micOn') : t('call.micOff')} aria-pressed={micOn}>
         {micOn ? <Mic size={18} /> : <MicOff size={18} />}
       </button>
-      <button onClick={() => void toggleCam()} className={round(camOn)} title={camOn ? 'kamerayı kapat' : 'kamerayı aç'} aria-label={camOn ? 'kamerayı kapat' : 'kamerayı aç'} aria-pressed={camOn}>
+      <button onClick={() => void toggleCam()} className={round(camOn)} title={camOn ? t('call.camOn') : t('call.camOff')} aria-label={camOn ? t('call.camOn') : t('call.camOff')} aria-pressed={camOn}>
         {camOn ? <Video size={18} /> : <VideoOff size={18} />}
       </button>
       <button
         onClick={() => (screenOn ? void toggleScreen() : setScreenPrompt(true))}
         className={round(screenOn)}
-        title={screenOn ? 'ekran paylaşımını durdur' : 'ekran paylaş'}
-        aria-label="ekran paylaş"
+        title={screenOn ? t('call.shareStop') : t('call.shareStart')}
+        aria-label={t('call.shareStart')}
         aria-pressed={screenOn}
       >
         <MonitorUp size={18} />
       </button>
       {variant === 'call' && onMinimize && (
-        <button onClick={onMinimize} className={round(true)} title="küçült — sohbete dön" aria-label="aramayı küçült">
+        <button onClick={onMinimize} className={round(true)} title={t('call.pipTitle')} aria-label={t('call.pipTitle')}>
           <PictureInPicture2 size={17} />
         </button>
       )}
       <span className="sealed-band mx-1 hidden sm:inline-flex">
-        {local.isMicrophoneEnabled ? 'uçtan uca · sframe' : 'mikrofon kapalı'}
+        {local.isMicrophoneEnabled ? 'uçtan uca · sframe' : t('call.micOff')}
       </span>
       <button onClick={onEnd} className="btn-stamp ml-1 !rounded-full" title={endLabel}>
         <PhoneOff size={16} />
@@ -91,33 +91,33 @@ export default function CallControls({
       </button>
 
       {screenPrompt && (
-        <Modal title="Ekran paylaşımı" onClose={() => setScreenPrompt(false)}>
+        <Modal title={t('call.screenPromptTitle')} onClose={() => setScreenPrompt(false)}>
           <div className="flex flex-col gap-3">
             <p className="text-xs text-paper-500">
-              ne paylaşacağın sonraki adımda tarayıcının seçim ekranında sorulur
+              {t('call.screenPromptHint')}
             </p>
             <div className="flex flex-col gap-1">
-              <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">kaynak</span>
+              <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">{t('call.sourceHint')}</span>
               <div className="flex gap-1.5">
-                {SURFACE_ROWS.map((s) => (
+                {SURFACE_KEYS.map((key) => (
                   <button
-                    key={s.key}
+                    key={key}
                     type="button"
-                    onClick={() => setSurface(s.key)}
+                    onClick={() => setSurface(key)}
                     className={`flex-1 rounded border px-2 py-1.5 text-xs transition-colors ${
-                      surface === s.key
+                      surface === key
                         ? 'border-lamp-500/70 bg-lamp-100/60 text-lamp-300'
                         : 'border-night-700 bg-night-800 text-paper-300 hover:border-brass-600'
                     }`}
-                    aria-pressed={surface === s.key}
+                    aria-pressed={surface === key}
                   >
-                    {s.label}
+                    {t(`call.${key === 'monitor' ? 'monitor' : key === 'window' ? 'window' : 'browser'}` as const)}
                   </button>
                 ))}
               </div>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">çözünürlük</span>
+              <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">{t('call.resolution')}</span>
               <div className="flex gap-1.5">
                 {RES_ROWS.map((r) => (
                   <button
@@ -137,7 +137,7 @@ export default function CallControls({
               </div>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">kare hızı</span>
+              <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">{t('call.fps')}</span>
               <div className="flex gap-1.5">
                 {FPS_ROWS.map((f) => (
                   <button
@@ -166,14 +166,14 @@ export default function CallControls({
               }`}
               aria-pressed={shareAudio}
             >
-              <span className="font-semibold">ses</span>
+              <span className="font-semibold">{t('call.audio')}</span>
               <span className="font-mono text-[10px] text-paper-500">
-                {shareAudio ? 'sekme/sistem sesi yayında' : 'sessiz yayın'}
+                {shareAudio ? t('call.audioOn') : t('call.audioOff')}
               </span>
             </button>
             <div className="flex gap-2">
               <button onClick={() => setScreenPrompt(false)} className="btn-ghost flex-1">
-                vazgeç
+                {t('call.cancel')}
               </button>
               <button
                 onClick={() => {
@@ -182,7 +182,7 @@ export default function CallControls({
                 }}
                 className="btn-lamp flex-1"
               >
-                yayını başlat
+                {t('call.goLive')}
               </button>
             </div>
           </div>

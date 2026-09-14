@@ -8,6 +8,8 @@ import { ToastContainer } from './components/Toast';
 import { SealMark } from './components/Brand';
 import { parseInviteLink, type ParsedInvite } from './crypto/invite';
 import { writeRoute } from './router';
+import { I18nProvider } from './i18n/I18nProvider';
+import { useI18nStore } from './i18n/store';
 
 export default function App() {
   const status = useAuthStore((s) => s.status);
@@ -50,10 +52,16 @@ export default function App() {
   } else {
     screen = <Shell />;
   }
+  // arayüz dili → <html lang> güncelle (ekran okuyucu + doğru font fallback)
+  const locale = useI18nStore((s) => s.locale);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
   return (
-    <>
+    <I18nProvider>
       {screen}
       <ToastContainer />
-    </>
+    </I18nProvider>
   );
 }
