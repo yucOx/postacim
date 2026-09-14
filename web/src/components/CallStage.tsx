@@ -74,6 +74,23 @@ const TILE_HIDE =
 const fit = (isScreen: boolean): string =>
   isScreen ? '[&_video]:object-contain' : '[&_video]:object-cover';
 
+// yayınun gerçek en-boy oranı — tile'ı görüntüye tam oturtmak için (Discord:
+// pencere görüntünün şeklini takip eder, kırpma/boş bant olmaz). Boyut
+// henüz bilinmiyorsa null → 16:9 varsayılanı kullanılır.
+function trackAspect(t: TrackReference): number | null {
+  const track = t.publication?.track;
+  if (!track) return null;
+  const dims = (track as unknown as { dimensions?: { width?: number; height?: number } }).dimensions;
+  if (dims?.width && dims?.height) return dims.width / dims.height;
+  try {
+    const s = (track as unknown as { mediaStreamTrack?: MediaStreamTrack }).mediaStreamTrack?.getSettings();
+    if (s?.width && s?.height) return s.width / s.height;
+  } catch {
+    // bazı tarayıcılar remote track'te getSettings'i boş döndürür — düş
+  }
+  return null;
+}
+
 interface TileProps {
   trackRef: TrackReference;
   onClick?: () => void;
@@ -358,14 +375,19 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     const cam = camByIdentity.get(p.identity);
     const focused = spotlight === `cam:${p.identity}`;
     const border = focused ? 'border-lamp-500/80' : 'border-brass-700/50';
+    const aspect = cam ? trackAspect(cam) : null;
     return cam ? (
       <div
         key={slotKey(p.identity)}
         onClick={() => toggleSpotlight('cam', p.identity)}
         title={focused ? 'büyütmeden çıkar' : 'büyüt'}
+        style={aspect ? { aspectRatio: `${aspect}` } : undefined}
         className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${border} ${TILE_HIDE}`}
       >
-        <ParticipantTile trackRef={cam} className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
+        <ParticipantTile
+          trackRef={cam}
+          className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+        />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
         {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </div>
@@ -488,18 +510,20 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       if (pVideos.length > 0) {
         return pVideos.map((v) => {
           const own = v.trackRef.participant.isLocal && v.isScreen;
+          const aspect = trackAspect(v.trackRef);
           return (
             <div
               key={v.key}
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               title="büyüt"
+              style={aspect ? { aspectRatio: `${aspect}` } : undefined}
               className={`relative h-full aspect-video shrink-0 cursor-pointer overflow-hidden rounded-md border ${
                 spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
               } bg-night-850 transition-colors ${TILE_HIDE}`}
             >
               <ParticipantTile
                 trackRef={v.trackRef}
-                className={`h-full w-full [&_video]:h-full [&_video]:w-full ${fit(v.isScreen)}`}
+                className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
               />
               <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
               {own && stopBtn(true)}
