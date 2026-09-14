@@ -148,6 +148,21 @@ class Hub {
       participants,
     });
   }
+
+  // --- /api/stats sayaçları (kapasite takibi) ---
+  openSockets(): number {
+    return this.clients.size;
+  }
+
+  voicePeers(): number {
+    let n = 0;
+    for (const byChannel of this.voice.values()) for (const users of byChannel.values()) n += users.size;
+    return n;
+  }
+
+  dmCallCount(): number {
+    return this.dmCalls.size;
+  }
 }
 
 export const hub = new Hub();

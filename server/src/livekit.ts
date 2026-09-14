@@ -45,3 +45,14 @@ export async function evictFromRooms(user: { id: string }, channelIds: string[])
     channelIds.map((cid) => svc.removeParticipant(`ch_${cid}`, user.id)),
   );
 }
+
+// Aggregate SFU load for /api/stats — room + participant totals. Callers
+// tolerate failure (SFU down must not break the stats endpoint).
+export async function livekitStats(): Promise<{ rooms: number; participants: number }> {
+  const svc = new RoomServiceClient(config.livekitUrl, config.livekitApiKey, config.livekitSecret);
+  const rooms = await svc.listRooms();
+  return {
+    rooms: rooms.length,
+    participants: rooms.reduce((n, r) => n + (r.numParticipants ?? 0), 0),
+  };
+}

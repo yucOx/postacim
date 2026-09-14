@@ -1,4 +1,7 @@
 port: 7880
+# Prometheus metrikleri (track/oda/bayt sayıları) — yalnız localhost'tan
+# erişilebilir; Netdata/scraper bu portu okur. Dışarıya açma!
+prometheus_port: 6789
 rtc:
   tcp_port: 7881
   port_range_start: 50000

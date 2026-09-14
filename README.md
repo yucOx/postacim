@@ -127,6 +127,33 @@ kırdığı için CI'da yakalanır.
 
 Güncelleme: `git pull && docker compose up -d --build`.
 
+### İzleme (kapasite takibi)
+
+Üç katman; "kaç kişi kaldırdığını" bilmek için hepsi birbirini tamamlar:
+
+1. **Uygulama sayaçları** — `GET /api/stats` (oturum gerekli, yalnız toplam
+   sayılar): kayıtlı kullanıcı, son 24 saatte açılan oturum, açık WS bağlantısı,
+   sesli peer, aktif DM araması, SFU oda + katılımcı sayısı. Kapasite merdiveni:
+   ~40 eşzamanlı görüşme → rahat; ~60 → varsayılan kaliteyi düşür; ~80+ →
+   LiveKit'i ayrı host'a taşı.
+2. **LiveKit metrikleri** — `livekit.yaml`'da `prometheus_port: 6789` açık;
+   `curl localhost:6789/metrics` (yalnız localhost — dışarıya açma). Track,
+   oda, bayt ve paket sayaçları.
+3. **Makine metrikleri (Netdata)** — tek komut kurulum, ~150 MB RAM: CPU, RAM,
+   disk IO, ağ, tüm Docker container'ları; eşik alarmı (ör. CPU %70 → Discord
+   webhook):
+   ```bash
+   docker run -d --name=netdata --hostname=$(hostname) \
+     -p 19999:19999 --cap-add SYS_PTRACE --security-opt apparmor=unconfined \
+     --device /proc:/host/proc:ro --device /sys:/host/sys:ro \
+     -v /var/run/docker.sock:/var/run/docker.sock:ro \
+     -v netdataconfig:/etc/netdata -v netdatalib:/var/lib/netdata \
+     -v netdatacache:/var/cache/netdata netdata/netdata
+   ```
+   Dashboard: `http://<sunucu-ip>:19999` — dışarıya açacaksan ters proxy arkasına
+   al (web nginx'ine `/netdata` eklemek yerine SSH tüneli önerilir:
+   `ssh -L 19999:localhost:19999 <sunucu>`).
+
 ### HTTPS/WSS (TLS overlay)
 
 Ağ üzerinde şifrelenmemiş bağlantı `auth_material` + oturum çerezini taşır — gizlilik
