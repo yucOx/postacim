@@ -30,7 +30,10 @@ services:
       LIVEKIT_URL: ${LIVEKIT_URL:-http://localhost/livekit}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_SECRET: ${LIVEKIT_SECRET:-pgv-dev-secret-please-change-me-0123456789abcdef}
-      SESSION_TTL_DAYS: 30
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      # ekran paylaşımı kill switch — .env'de SCREEN_SHARE=off ile kapatılır
+      SCREEN_SHARE: ${SCREEN_SHARE:-on}
+      REGISTER_RATE_PER_HOUR: ${REGISTER_RATE_PER_HOUR:-3}
     volumes:
       - ./data:/data
     expose:
@@ -50,6 +53,9 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
+      # bot-koruması (Turnstile) — .env'de VITE_TURNSTILE_SITEKEY girilirse derlenir
+      args:
+        VITE_TURNSTILE_SITEKEY: ${VITE_TURNSTILE_SITEKEY:-}
     ports:
       - "${WEB_PORT:-80}:80"
     # livekit runs on the host network; resolve it from the proxy container
