@@ -64,3 +64,30 @@ services:
     depends_on:
       - server
     restart: unless-stopped
+
+  # makine izleme — GRAFİKLER burada: http://localhost:19999 (yalnız localhost;
+  # dışarıdan ssh -L 19999:localhost:19999 tünelle). Sistem içlerini ifşa
+  # ettiği için domain'e asla açıkta oturtma.
+  netdata:
+    image: netdata/netdata
+    container_name: netdata
+    hostname: postacim
+    ports:
+      - "127.0.0.1:19999:19999"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - netdataconfig:/etc/netdata
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+    restart: unless-stopped
+
+volumes:
+  netdataconfig:
+  netdatalib:
+  netdatacache:

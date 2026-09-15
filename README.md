@@ -144,20 +144,13 @@ ayrıca `docker compose restart livekit` çalıştır.
 2. **LiveKit metrikleri** — `livekit.yaml`'da `prometheus_port: 6789` açık;
    `curl localhost:6789/metrics` (yalnız localhost — dışarıya açma). Track,
    oda, bayt ve paket sayaçları.
-3. **Makine metrikleri (Netdata)** — tek komut kurulum, ~150 MB RAM: CPU, RAM,
-   disk IO, ağ, tüm Docker container'ları; eşik alarmı (ör. CPU %70 → Discord
-   webhook):
-   ```bash
-   docker run -d --name=netdata --hostname=$(hostname) \
-     -p 19999:19999 --cap-add SYS_PTRACE --security-opt apparmor=unconfined \
-     --device /proc:/host/proc:ro --device /sys:/host/sys:ro \
-     -v /var/run/docker.sock:/var/run/docker.sock:ro \
-     -v netdataconfig:/etc/netdata -v netdatalib:/var/lib/netdata \
-     -v netdatacache:/var/cache/netdata netdata/netdata
-   ```
-   Dashboard: `http://<sunucu-ip>:19999` — dışarıya açacaksan ters proxy arkasına
-   al (web nginx'ine `/netdata` eklemek yerine SSH tüneli önerilir:
-   `ssh -L 19999:localhost:19999 <sunucu>`).
+3. **Makine metrikleri (Netdata)** — compose servisi, grafik dashboard'u:
+   `docker compose up -d netdata` → `http://localhost:19999` (**yalnız
+   127.0.0.1'e bağlı** — dış erişim yok). Uzaktan bakmak için SSH tüneli:
+   `ssh -L 19999:localhost:19999 <sunucu>`. CPU, RAM, disk IO, ağ ve tüm
+   Docker container'ları saniye bazında; eşik alarmı Netdata ayarlarından
+   (ör. CPU %70 → Discord webhook) bağlanır. Sistem içlerini ifşa ettiği
+   için **domain'e asla açıkta oturtma** — auth'suz subdomain bile olmasın.
 
 ### HTTPS/WSS (TLS overlay)
 
