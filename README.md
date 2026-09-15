@@ -127,6 +127,11 @@ kırdığı için CI'da yakalanır.
 
 Güncelleme: `git pull && docker compose up -d --build`.
 
+**Not:** `livekit/livekit.yaml` bind-mount'tur ve livekit servisi image'dan
+koştuğu için `up -d --build` config değişince onu **yeniden başlatmaz** —
+livekit config'ine dokunan güncellemelerden (ör. `prometheus_port`) sonra
+ayrıca `docker compose restart livekit` çalıştır.
+
 ### İzleme (kapasite takibi)
 
 Üç katman; "kaç kişi kaldırdığını" bilmek için hepsi birbirini tamamlar:
