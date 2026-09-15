@@ -127,6 +127,26 @@ kırdığı için CI'da yakalanır.
 
 Güncelleme: `git pull && docker compose up -d --build`.
 
+### Host nginx + certbot (elle kurulum, compose dışı)
+
+Varsayılan mod: docker servisleri yalnız `127.0.0.1`'de yayınlanır (`web` →
+`127.0.0.1:8080`, `server` → `127.0.0.1:4000`); dış dünyaya tek giriş host
+nginx'tir (`deploy/nginx-postacim.conf` — kurulum adımları dosyanın başında).
+XFF'yi yazan tek yer host nginx'tir (`$remote_addr` overwrite) — server
+`trustProxy:true` leftmost okuduğu için forged XFF rate-limit'i aşamaz.
+
+```bash
+sudo cp deploy/nginx-postacim.conf /etc/nginx/sites-available/postacim
+sudo ln -s /etc/nginx/sites-available/postacim /etc/nginx/sites-enabled/
+# server_name'i düzenle, sonra:
+sudo nginx -t && sudo systemctl reload nginx
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d postacim.example.com   # 443 + redirect otomatik
+```
+
+Host nginx'siz hızlı LAN modu: `.env`'de `WEB_HOST=0.0.0.0` — bu modda docker
+web'in nginx'i XFF'yi kendisi yazar, internete doğrudan açma.
+
 **Not:** `livekit/livekit.yaml` bind-mount'tur ve livekit servisi image'dan
 koştuğu için `up -d --build` config değişince onu **yeniden başlatmaz** —
 livekit config'ine dokunan güncellemelerden (ör. `prometheus_port`) sonra
