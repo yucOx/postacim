@@ -368,6 +368,14 @@ export default {
     placeholderReply: 'répondre à {name}…  (Entrée : envoyer)',
     placeholder: 'écrire un message chiffré…  (Entrée : envoyer, Maj+Entrée : ligne)',
   },
+  // Messages éphémères — sélecteur de minuterie dans le composer
+  ttl: {
+    menu: 'minuteur des messages éphémères',
+    off: 'désactivé',
+    hour: '1 heure',
+    day: '1 jour',
+    week: '1 semaine',
+  },
   reply: {
     cancel: 'abandonner la réponse',
     deletedSnippet: ' — message supprimé',
@@ -378,6 +386,7 @@ export default {
   },
   delete: {
     tombstone: 'ce message a été supprimé',
+    expired: 'expiré — message éphémère',
     forMe: 'supprimer pour moi',
     forAll: 'supprimer pour tout le monde',
     reply: 'répondre',

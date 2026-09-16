@@ -368,6 +368,14 @@ export default {
     placeholderReply: 'Antwort an {name}…  (Enter: senden)',
     placeholder: 'verschlüsselte nachricht schreiben…  (Enter: senden, Shift+Enter: zeile)',
   },
+  // verschwindende nachrichten — TTL-auswahl im eingabefeld
+  ttl: {
+    menu: 'zeit für verschwindende nachrichten',
+    off: 'aus',
+    hour: '1 stunde',
+    day: '1 tag',
+    week: '1 woche',
+  },
   reply: {
     cancel: 'antwort verwerfen',
     deletedSnippet: ' — gelöschte nachricht',
@@ -378,6 +386,7 @@ export default {
   },
   delete: {
     tombstone: 'diese nachricht wurde gelöscht',
+    expired: 'abgelaufen — verschwindende nachricht',
     forMe: 'für mich löschen',
     forAll: 'für alle löschen',
     reply: 'antworten',

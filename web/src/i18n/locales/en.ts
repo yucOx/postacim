@@ -371,6 +371,14 @@ export default {
     placeholderReply: 'reply to {name}…  (Enter: send)',
     placeholder: 'write an encrypted message…  (Enter: send, Shift+Enter: new line)',
   },
+  // Disappearing messages — composer TTL picker
+  ttl: {
+    menu: 'disappearing message timer',
+    off: 'off',
+    hour: '1 hour',
+    day: '1 day',
+    week: '1 week',
+  },
   reply: {
     cancel: 'discard reply',
     deletedSnippet: ' — deleted message',
@@ -381,6 +389,7 @@ export default {
   },
   delete: {
     tombstone: 'this message was deleted',
+    expired: 'expired — disappearing message',
     forMe: 'delete for me',
     forAll: 'delete for everyone',
     reply: 'reply',

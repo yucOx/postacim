@@ -17,6 +17,7 @@ import { deleteForEveryone, DeletedRow, HoverActions } from './MsgDelete';
 import Composer from './Composer';
 import Modal from './Modal';
 import SafetyModal from './SafetyModal';
+import { isExpired, useExpiryTick } from '../lib/ttl';
 import { ShieldCheck } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 
@@ -111,6 +112,9 @@ export default function DmChat({ dmId }: { dmId: string }) {
     () => messages.filter((m) => !hiddenIds.includes(m.id)),
     [messages, hiddenIds],
   );
+  // kaybolan mesajlar: süresi dolan satırlar tombstone'a döner — 30 sn'lik
+  // tick yalnız listede TTL'li mesaj varken kurulur
+  const tickNow = useExpiryTick(visible.some((m) => m.expiresAt != null));
 
   useEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView();
@@ -239,8 +243,8 @@ export default function DmChat({ dmId }: { dmId: string }) {
                   <div className="h-px flex-1 bg-brass-500" aria-hidden />
                 </div>
               )}
-              {m.deleted ? (
-                <DeletedRow nick={m.nick} sentAt={m.sentAt} />
+              {m.deleted || isExpired(m.expiresAt, tickNow) ? (
+                <DeletedRow nick={m.nick} sentAt={m.sentAt} expired={!m.deleted} />
               ) : (
                 <div className="group relative">
                   <MessageRow
@@ -281,6 +285,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
       {reply && <ReplyBar nick={reply.nick} body={reply.body} onCancel={() => setReply(null)} />}
       <TypingLine channelId={dmId} />
       <Composer
+        channelId={dmId}
         send={(body) => {
           const target = reply;
           setReply(null);
