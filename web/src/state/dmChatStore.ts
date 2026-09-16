@@ -3,7 +3,15 @@ import { api } from '../api/client';
 import type { ChatMessage } from '../api/types';
 import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
-import { decryptText, encryptText, nextSendIndex, type MsgScope } from '../crypto/message';
+import { decryptText, encryptText, nextSendIndex, type DhSendParams, type MsgScope } from '../crypto/message';
+import {
+  loadDhStep,
+  newDhEphemeral,
+  nextDhStep,
+  saveDhStep,
+  shouldDhStep,
+} from '../crypto/dhratchet';
+import { unb64 } from '../crypto/bytes';
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
 import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
@@ -17,6 +25,46 @@ const replays = new ReplayFilter();
 // dm channel ids are prefixed dm_/gdm_ — the kind picks endpoint + AAD scope
 const kindOf = (channelId: string): MsgScope => (channelId.startsWith('gdm_') ? 'gdm' : 'dm');
 const baseOf = (channelId: string): string => (kindOf(channelId) === 'gdm' ? '/gdms' : '/dms');
+
+// v4 adım ephemeral'ları — YALNIZ bellek (localStorage'a secret yazılmaz);
+// sayfa yenilenince ephemeral kaybolur → sonraki mesaj yeni DH adımı açar (FS).
+const ephCache = new Map<string, { publicKey: Uint8Array; privateKey: Uint8Array }>();
+
+// 1:1 DM için v4 DH adım parametreleri: karşı tarafın published kimlik X25519
+// anahtarı başlığa giden DH çıktısını belirler; anahtar yoksa v3'e düşülür
+// (imzalı simetrik ratchet). gdm 5c'ye kadar v3 kalır (alıcı kümesi çoklu).
+async function dhParamsFor(channelId: string, version: number, index: number): Promise<DhSendParams | undefined> {
+  if (kindOf(channelId) !== 'dm') return undefined;
+  const peerId = useAppStore.getState().dms.find((d) => d.id === channelId)?.peer.id;
+  if (!peerId) return undefined;
+  const peerPubOf = (): string | undefined => {
+    const app = useAppStore.getState();
+    return app.publicKeys[peerId] ?? app.friends.find((f) => f.id === peerId)?.public_key;
+  };
+  let peerPub = peerPubOf();
+  if (!peerPub) {
+    await useAppStore.getState().loadBootstrap();
+    peerPub = peerPubOf();
+  }
+  if (!peerPub) return undefined;
+  const ck = `${channelId}.${version}`;
+  const now = Date.now();
+  let step = loadDhStep(channelId, version);
+  let eph = ephCache.get(ck);
+  if (shouldDhStep(step, index, now, !!eph)) {
+    step = nextDhStep(step?.j ?? -1, index, now);
+    saveDhStep(channelId, version, step);
+    eph = newDhEphemeral();
+    ephCache.set(ck, eph);
+  }
+  return {
+    dhPriv: eph!.privateKey,
+    dhPub: eph!.publicKey,
+    dhStep: step!.j,
+    stepBase: step!.base,
+    peerStaticPub: unb64(peerPub),
+  };
+}
 
 function keyFor(channelId: string): { version: number; key: Uint8Array } | null {
   const app = useAppStore.getState();
@@ -110,6 +158,9 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
     };
   }
   try {
+    // v4 okuma yolu: yalnız 1:1 DM — alıcının kimlik private'ı başlıktaki
+    // ephemeral public ile DH çıktısını üretir (stateless türetim)
+    const myPriv = useAuthStore.getState().privateKey;
     return {
       id: raw.id,
       channelId: raw.channel_id,
@@ -129,6 +180,7 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
         raw.sender_id,
         // gönderen atfı: imza doğrulama + cutover bağlamı
         { signPublicKey: getSignKeys(raw.sender_id), sentAt: raw.sent_at },
+        ...(kind === 'dm' && myPriv ? [{ myPriv }] : []),
       ).body,
       ...expiry,
       ...meta,
@@ -225,10 +277,14 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
     const clientId = crypto.randomUUID();
     const clientSentAt = Date.now();
     const ttl = ttlSeconds(dmId);
+    // ratchet index'i per (channel, key_version) sayaçtan tüketilir; v4 DH adımı
+    // kararı bu index üzerinden verilir (step_base = adımın ilk index'i)
+    const index = nextSendIndex(dmId, keyInfo.version);
+    const dh = await dhParamsFor(dmId, keyInfo.version, index);
     const enc = encryptText(dmId, keyInfo.version, keyInfo.key, body, kindOf(dmId), { clientId, clientSentAt }, false, {
       senderId,
-      index: nextSendIndex(dmId, keyInfo.version),
-    }, { signPrivateKey });
+      index,
+    }, { signPrivateKey }, dh);
     set({ sending: true });
     try {
       await api(`${baseOf(dmId)}/${dmId}/messages`, {

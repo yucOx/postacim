@@ -1,5 +1,15 @@
 import { sodium } from './sodium';
-import { b64, unb64 } from './bytes';
+import { b64, toHex, unb64 } from './bytes';
+import {
+  DH_HEADER_LEN,
+  DH_STEP_MSGS,
+  chainSeed as ratchetChainSeed,
+  decodeDhHeader,
+  dhMsgKey,
+  dhShared,
+  dhStepRoot,
+  encodeDhHeader,
+} from './dhratchet';
 
 export interface PlainMessage {
   t: 'msg';
@@ -29,9 +39,12 @@ export const aad = (
   // v2: ratchet index'i de AAD'ye girer — aynı ciphertext başka bir zincir
   // pozisyonunda oynatılamaz
   ratchetIdx?: number,
+  // v4: DH ephemeral public hex de bağlanır — başlık takası imzada da düşer
+  dhPubHex?: string,
 ): string => {
   let s = `${scope}:${channelId}:v${version}`;
   if (ratchetIdx != null) s += `:i${ratchetIdx}`;
+  if (dhPubHex) s += `:d${dhPubHex}`;
   if (binding) s += `:${binding.clientId}:${binding.clientSentAt}`;
   return s;
 };
@@ -46,6 +59,8 @@ export const aad = (
 const PAD_MAGIC = 0x01;
 // v2: ratchet'li mesaj — magic dışında düzen aynı (uzunluk header + gövde + padding)
 const PAD_MAGIC_V2 = 0x02;
+// v4: DH ratchet'li mesaj — iç düzen aynı; dışa 40B DH header eklenir (bkz. dhratchet.ts)
+const PAD_MAGIC_V4 = 0x04;
 const HEADER_LEN = 5; // magic (1) + gövde uzunluğu LE (4)
 
 // header dahil toplam boyutu ait olduğu bucket'a yuvarlar
@@ -71,7 +86,8 @@ function paddedSize(total: number): number {
 // Forward secrecy dürüst sınırı: msg_key_i kullanıldıktan sonra atılır ve root_i'den
 // geriye (root_{i-1}, msg_key_{i-1}) türetilemez → güncel bir kök/msg anahtarı
 // sızs bile GEÇMİŞ mesajlar korunur. Buna karşılık ileriye doğru kökler her zaman
-// türetilebilir olduğundan gelecek korunmaz — bunu DH ratchet'ten alırdık, yok.
+// türetilebilir olduğundan gelecek korunmaz — DM yolu bunu v4 DH ratchet ile
+// kapatır (aşağıda); kanal/gdm 5c'ye kadar bu simetrik zincirde kalır.
 // (Epoch anahtarının kendisi sızarsa zincir baştan türetilebilir; bu riski
 // anahtar rotasyonu (epoch) sınırlar, ratchet değil.)
 const enc = new TextEncoder();
@@ -95,7 +111,7 @@ export function ratchetRoot(epochKey: Uint8Array, senderId: string, index: numbe
   const ck = `${b64(epochKey)}|${senderId}`;
   let roots = rootCache.get(ck);
   if (!roots) {
-    roots = [H(cat(epochKey, enc.encode('ratchet'), enc.encode(senderId)))];
+    roots = [ratchetChainSeed(epochKey, senderId)];
     rootCache.set(ck, roots);
   }
   for (let i = roots.length; i <= index; i++) roots[i] = H(cat(roots[i - 1]!, enc.encode('step')));
@@ -134,6 +150,27 @@ export interface SigContext {
   sentAt: number;
 }
 
+// --- v4: DH ratchet (Faz 5b — spec: docs/faz5-dh-ratchet-design.md) ---
+// ciphertext = DH header (40B: dh_pub ‖ j ‖ step_base, plaintext) ‖ AEAD ‖ [sig64].
+// Anahtar: step_root_j = H(chain_seed ‖ 'dh' ‖ u32LE(j) ‖ X25519(dh_priv, peer_static))
+//   → adım içi 'step'/'msg' zinciri. Gönderici ephemeral private'ı adım sonunda
+//   atılır → gönderici tarafı tam FS; alıcı başlıktaki dh_pub + kendi static
+//   private'ı ile stateless türetir. AAD'ye d<hex(dh_pub)> eklenir; imza girdisi
+//   header ‖ ct ‖ AAD'dir (başlık da gönderen atfı kapsamında).
+export interface DhSendParams {
+  dhPriv: Uint8Array;
+  dhPub: Uint8Array;
+  dhStep: number;
+  stepBase: number;
+  /** karşı tarafın kimlik X25519 public'i (bootstrap public_keys) */
+  peerStaticPub: Uint8Array;
+}
+
+export interface DhDecryptContext {
+  /** alıcının kimlik X25519 private'ı — başlıktaki dh_pub ile DH çıktısını üretir */
+  myPriv: Uint8Array;
+}
+
 // gönderici sayacı: index gizli değil (kaba kuvvetle zaten bilinir, zincir kökü
 // tahmin edilemez) — localStorage'da per (channel, key_version) basit sayı.
 // Gönderimde tüketilir; başarısız POST index'te boşluk bırakabilir, alıcı
@@ -159,6 +196,8 @@ export function encryptText(
   ratchet?: { senderId: string; index: number },
   // verilirse v3: AEAD çıktısına gönderenin Ed25519 imzası eklenir
   signer?: { signPrivateKey: Uint8Array },
+  // verilirse v4: DH ratchet — başlık taşınır, anahtar DH zincirinden gelir
+  dh?: DhSendParams,
 ): { nonce: string; ciphertext: string } {
   const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
   const msg: PlainMessage = { t: 'msg', body, sent: Date.now() };
@@ -167,12 +206,24 @@ export function encryptText(
   let payload = plain;
   if (!noPad) {
     payload = new Uint8Array(paddedSize(plain.length + HEADER_LEN));
-    payload[0] = ratchet ? PAD_MAGIC_V2 : PAD_MAGIC;
+    payload[0] = dh && ratchet ? PAD_MAGIC_V4 : ratchet ? PAD_MAGIC_V2 : PAD_MAGIC;
     new DataView(payload.buffer).setUint32(1, plain.length, true);
     payload.set(plain, HEADER_LEN);
   }
-  const aeadKey = ratchet ? ratchetMsgKey(key, ratchet.senderId, ratchet.index) : key;
-  const aadStr = aad(scope, channelId, version, binding, ratchet?.index);
+  const header = dh && ratchet ? encodeDhHeader(dh.dhPub, dh.dhStep, dh.stepBase) : null;
+  let aeadKey = ratchet ? ratchetMsgKey(key, ratchet.senderId, ratchet.index) : key;
+  let aadStr = aad(scope, channelId, version, binding, ratchet?.index);
+  if (dh && ratchet) {
+    const l = ratchet.index - dh.stepBase;
+    if (l < 0 || l >= DH_STEP_MSGS) throw new Error('v4: index adım dışında');
+    const stepRoot = dhStepRoot(
+      ratchetChainSeed(key, ratchet.senderId),
+      dhShared(dh.dhPriv, dh.peerStaticPub),
+      dh.dhStep,
+    );
+    aeadKey = dhMsgKey(stepRoot, l);
+    aadStr = aad(scope, channelId, version, binding, ratchet.index, toHex(dh.dhPub));
+  }
   const ct = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     payload,
     aadStr,
@@ -180,9 +231,12 @@ export function encryptText(
     nonce,
     aeadKey,
   );
-  if (!signer) return { nonce: b64(nonce), ciphertext: b64(ct) };
-  const sig = sodium.crypto_sign_detached(cat(ct, enc.encode(aadStr)), signer.signPrivateKey);
-  return { nonce: b64(nonce), ciphertext: b64(cat(ct, sig)) };
+  if (!signer) return { nonce: b64(nonce), ciphertext: b64(header ? cat(header, ct) : ct) };
+  const sig = sodium.crypto_sign_detached(
+    header ? cat(header, ct, enc.encode(aadStr)) : cat(ct, enc.encode(aadStr)),
+    signer.signPrivateKey,
+  );
+  return { nonce: b64(nonce), ciphertext: b64(header ? cat(header, ct, sig) : cat(ct, sig)) };
 }
 
 export class DecryptError extends Error {
@@ -203,6 +257,8 @@ export function decryptText(
   senderId?: string,
   // v3 doğrulama + cutover bağlamı; verilmezse imzasız mesajlar koşulsuz kabul
   sigCtx?: SigContext,
+  // v4 okuma yolu: alıcının kimlik private'ı — verilmezse v4 denenmez
+  dhCtx?: DhDecryptContext,
 ): PlainMessage {
   const nonce = unb64(nonceB64);
   const ct = unb64(ciphertextB64);
@@ -263,13 +319,59 @@ export function decryptText(
       return parseBody(opened.pt, opened.scanIdx);
     }
   }
+  // 3) v4: DH header (40B) ‖ ct ‖ [sig 64]. Başlıktaki dh_pub + alıcı static
+  //    private → DH çıktısı → adım kökü; l 0..DH_STEP_MSGS taraması. AAD'de
+  //    global index + dh_pub bağlıdır; imza girdisi header ‖ ct ‖ AAD'dir.
+  //    İmzalı/imzasız iki uzunluk denemesi — cutover kuralı v3 ile aynıdır.
+  if (dhCtx && senderId && ct.length >= DH_HEADER_LEN + 16) {
+    const seed = ratchetChainSeed(key, senderId);
+    const head = decodeDhHeader(ct);
+    if (head) {
+      let dhOut: Uint8Array;
+      try {
+        dhOut = dhShared(dhCtx.myPriv, head.dhPub);
+      } catch {
+        dhOut = new Uint8Array(0); // tüm-sıfır paylaşılan sır → tarama düşürür
+      }
+      if (dhOut.length === 32) {
+        const stepRoot = dhStepRoot(seed, dhOut, head.j);
+        for (const sigLen of [SIG_LEN, 0]) {
+          if (ct.length < DH_HEADER_LEN + sigLen + 16) continue;
+          const body = ct.slice(DH_HEADER_LEN, ct.length - sigLen);
+          const sig = sigLen ? ct.slice(ct.length - sigLen) : null;
+          for (let l = 0; l < DH_STEP_MSGS; l++) {
+            const idx = head.base + l;
+            const aadStr = aad(scope, channelId, version, binding, idx, toHex(head.dhPub));
+            const pt = tryOpen(dhMsgKey(stepRoot, l), aadStr, body);
+            if (!pt) continue;
+            if (sig) {
+              const candidates = sigCtx?.signPublicKey;
+              if (!candidates || candidates.length === 0) throw new DecryptError();
+              const signed = cat(ct.slice(0, DH_HEADER_LEN), body, enc.encode(aadStr));
+              const ok = candidates.some((pk) => {
+                try {
+                  return sodium.crypto_sign_verify_detached(sig, signed, pk);
+                } catch {
+                  return false;
+                }
+              });
+              if (!ok) throw new DecryptError();
+            } else if (sigCtx && sigCtx.sentAt >= SIGN_CUTOVER_MS) {
+              throw new DecryptError(); // imzasız v4 — cutover sonrası kabul edilmez
+            }
+            return parseBody(pt, idx);
+          }
+        }
+      }
+    }
+  }
   throw new DecryptError();
 }
 
-// header (v1: 0x01 / v2: 0x02 + uzunluk; eski: headersız) + JSON + scan çelişki kontrolü
+// header (v1: 0x01 / v2: 0x02 / v4: 0x04 + uzunluk; eski: headersız) + JSON + scan çelişki kontrolü
 function parseBody(pt: Uint8Array, scanIdx: number | null): PlainMessage {
   let body = pt;
-  if (pt.length >= HEADER_LEN && (pt[0] === PAD_MAGIC || pt[0] === PAD_MAGIC_V2)) {
+  if (pt.length >= HEADER_LEN && (pt[0] === PAD_MAGIC || pt[0] === PAD_MAGIC_V2 || pt[0] === PAD_MAGIC_V4)) {
     const len = new DataView(pt.buffer, pt.byteOffset, pt.byteLength).getUint32(1, true);
     body = pt.subarray(HEADER_LEN, HEADER_LEN + len);
   }

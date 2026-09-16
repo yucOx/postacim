@@ -1,0 +1,116 @@
+{
+  "spec": "docs/faz5-dh-ratchet-design.md",
+  "vectors_version": 1,
+  "kdf": "BLAKE2b-256 (crypto_generichash); etiketler utf8; X25519 crypto_scalarmult",
+  "inputs": {
+    "epoch_key_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "sender_id": "u_vektor",
+    "receiver_static_pub_hex": "7b0d47d93427f8311160781c7c733fd89f88970aef490d8aa0ee19a4cb8a1b14",
+    "receiver_static_priv_hex": "3333333333333333333333333333333333333333333333333333333333333333",
+    "dh_step_msgs": 100
+  },
+  "steps": [
+    {
+      "j": 0,
+      "eph_priv_hex": "6464646464646464646464646464646464646464646464646464646464646464",
+      "eph_pub_hex": "6b3d57762f8badb69433f9c6d060f85f5e5c6b6803a816d141c075f63541ad10",
+      "dh_out_hex": "15f11da6090056cf56b016c10cfa0ccb97139026e952331840a99516d4a88c49",
+      "step_root_hex": "bd94f24af5af53f92d013f471ff1a6627b6d80b2eb486f8c8541e6a791434d59",
+      "msg_keys": [
+        {
+          "l": 0,
+          "i": 0,
+          "root_hex": "bd94f24af5af53f92d013f471ff1a6627b6d80b2eb486f8c8541e6a791434d59",
+          "msg_key_hex": "328cde45bc504d46337cba60edda9000b740bffa1c133e538319f5fb8587bd45"
+        },
+        {
+          "l": 1,
+          "i": 1,
+          "root_hex": "fea37ab358b2488bb7091aed28ae47e0f174f5fe3982cd5cb757e70c35554395",
+          "msg_key_hex": "213b53ece766cf3d81bb92ae8112195acb71e1528f881451d025b72e069c2e61"
+        },
+        {
+          "l": 2,
+          "i": 2,
+          "root_hex": "4371877b287ab91ebcc7138a42aaf43aba27d4a97aec541af8038adb13e6b017",
+          "msg_key_hex": "0444ef674f7460b0d47c35ae30e3ad7d2fd909189e7dc4efeabcf7e70cb009e9"
+        }
+      ]
+    },
+    {
+      "j": 1,
+      "eph_priv_hex": "6565656565656565656565656565656565656565656565656565656565656565",
+      "eph_pub_hex": "fb41b1fcf75c1227fa08876056a5ed07ac44fe0c116ec2de80b8e523959d7824",
+      "dh_out_hex": "6335e14bfac4d06962823e8e6e0ffd90b5589555a4276650e2dfb76c0e37a34b",
+      "step_root_hex": "169f71f516d7145166e7b679e5c0887148e773620814323a55f03fd7138a3170",
+      "msg_keys": [
+        {
+          "l": 0,
+          "i": 100,
+          "root_hex": "169f71f516d7145166e7b679e5c0887148e773620814323a55f03fd7138a3170",
+          "msg_key_hex": "15a0913460f041a1e3a96d964369a9a726f3e57710736fd4846806c754816473"
+        },
+        {
+          "l": 1,
+          "i": 101,
+          "root_hex": "26cc23600b8933c5997157b8ad7653c2683a588193fc00b4f82953bc1cf462fb",
+          "msg_key_hex": "4391038b9bb3a244ce0e09ee76863075236b67dd3acb66a0f510ba7ee2db4901"
+        },
+        {
+          "l": 2,
+          "i": 102,
+          "root_hex": "18365fde7e2f98a789a95a0437f504cc1833d7877b0c3365b224aba6d865bfb3",
+          "msg_key_hex": "53f1dcd55b1789d01b6d44ab5fdf65f7c4399cfab596806586f239355444d681"
+        }
+      ]
+    },
+    {
+      "j": 2,
+      "eph_priv_hex": "6666666666666666666666666666666666666666666666666666666666666666",
+      "eph_pub_hex": "219e4d800da968d2a5fcb009c784f4746c7138edb9ee4844b739e830b05cf424",
+      "dh_out_hex": "6920ac7c44c4ace78462ba2a3050002a41477fd09a54d8921e108403e5a9544d",
+      "step_root_hex": "a6e12113ab968bb90c68a1e4ee59f6bc8484af355f3fa34b2ca0736adfe88fae",
+      "msg_keys": [
+        {
+          "l": 0,
+          "i": 200,
+          "root_hex": "a6e12113ab968bb90c68a1e4ee59f6bc8484af355f3fa34b2ca0736adfe88fae",
+          "msg_key_hex": "a39818d7f79356b1fe037645cd3367b685fb6a2c1ada8b3b9280c94abbff710f"
+        },
+        {
+          "l": 1,
+          "i": 201,
+          "root_hex": "39533bf88b96045b7d84d13016b3baf25d099e88b6342869435d8d63a95f5e2f",
+          "msg_key_hex": "e5d51dac48293e25339c88aabaa303cf13d531f99ae4c016217a1b2c3beb00f3"
+        },
+        {
+          "l": 2,
+          "i": 202,
+          "root_hex": "84aec787296356b1823ea08afa614893e4cd39b58f0f9d7fc2587cf55213165f",
+          "msg_key_hex": "d2ee79aed2fbb7f23f34d7c89a63ba1a399af9fdb89a37e81bdedcc5bd346b1b"
+        }
+      ]
+    }
+  ],
+  "aad_sample": {
+    "scope": "dm",
+    "channel_id": "dm_vektor",
+    "epoch_version": 1,
+    "i": 102,
+    "dh_pub_hex": "fb41b1fcf75c1227fa08876056a5ed07ac44fe0c116ec2de80b8e523959d7824",
+    "aad": "dm:dm_vektor:v1:i102:dfb41b1fcf75c1227fa08876056a5ed07ac44fe0c116ec2de80b8e523959d7824"
+  },
+  "message": {
+    "body": "vektör gövdesi",
+    "j": 1,
+    "step_base": 100,
+    "i": 102,
+    "dh_pub_hex": "fb41b1fcf75c1227fa08876056a5ed07ac44fe0c116ec2de80b8e523959d7824",
+    "nonce_b64": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV",
+    "ciphertext_b64": "+0Gx/PdcEif6CIdgVqXtB6xE/gwRbsLegLjlI5WdeCQBAAAAZAAAAE0W8w9jhh49Bdlm87Kc2E6oKiHgQq4EZsQXAw6tFmZET6qvjXTEOe1GX7XnA4FkS5KlfLqGcWw4OpONpp3nSZhm2Mvp7etaKluzbL871t6V+mfUpizwDCNKtbhrB29fIN/q4CmIAM8rrjp3Tme4jJi1uuiSV1mWkxs4FUkBrQXKybriA6euErvX8yi0uVUmgxV0BIcPwKqt7rCVPL4MHyYEFDlgGWNJCdufLZi6NPyCzbFSa6+MxoyiHg3144pwUeeroFuY69bQUUueg6DT1xnQ3zDKDVstldYV99P9OMIBdaD83O3zdH0TaReYB8M4rGFtBC+GqMqR/g3a+x9asTRSTctdBiABGBu5nLjDRso1NAE0km0EvN6T6vBCdwc6x5U0u4X1X65IIdZ80NJDX9ncIiGJNhFKb1YYfyYHJj4wWB1PalTUaHN4DFUkiQWZAQ==",
+    "aad": "dm:dm_vektor:v1:i102:dfb41b1fcf75c1227fa08876056a5ed07ac44fe0c116ec2de80b8e523959d7824",
+    "signer_seed_hex": "6666666666666666666666666666666666666666666666666666666666666666",
+    "signer_pub_hex": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746",
+    "sent": 1726400000000
+  }
+}
