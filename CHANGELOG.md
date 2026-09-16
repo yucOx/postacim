@@ -20,6 +20,14 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   manifest'i GitHub Release asset'i olarak yayınlanır; README "Doğrulama"
   bölümü ile self-host kullanıcısı sunucudan inen JS'i manifestle
   karşılaştırabilir (`2d1f8c2`)
+- **Faz 5b — DH ratchet (v4), DM yolu**: per-gönderici X25519 DH zinciri —
+  ephemeral public mesaj başlığında açık taşınır, adım 100 mesajda / 24
+  saatte bir yenilenir; gönderici state'i sızsa bile önceki adımlar ve
+  bir sonraki adımdan itibaren gelecek korunur (DM'de forward secrecy tam,
+  PCS yok — dürüst sınırlar README'de). Alıcı stateless: mesaj başlığından
+  zincir yeniden türetilebilir; v1/v2/v3 geçmiş aynen okunur (resarmlama
+  yok). KAT vektörleri + FS/PCS-lite sızıntı simülasyonu testleri
+  (`f8e8989`, `474a72f`)
 
 ### Önceki sprintler (özet)
 
