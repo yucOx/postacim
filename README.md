@@ -125,7 +125,9 @@ ikonundan erişilir. Yeni dil eklemek: `web/src/i18n/types.ts` union'ına kod,
 `locales/<kod>.ts` katalog dosyası; anahtar eksikliği `locale-parity` testini
 kırdığı için CI'da yakalanır.
 
-Güncelleme: `git pull && docker compose up -d --build`.
+Güncelleme: `./scripts/deploy.sh` (build + up + livekit restart + health
+kontrolleri tek komut; `.env` yoksa üretir, anahtar çiftini basar). Eşdeğeri:
+`git pull && docker compose up -d --build`.
 
 ### Host nginx + certbot (elle kurulum, compose dışı)
 
