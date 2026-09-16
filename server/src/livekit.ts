@@ -26,8 +26,12 @@ export async function mintVoiceToken(
   });
   // room-level resource caps (ilk günden sıkı: kullanıcı arttıkça gevşet)
   at.roomConfig = new RoomConfiguration({
-    // 6 vCPU SFU tavanı; %50 yükte 15'e düşürülür
-    maxParticipants: 25,
+    // 2 vCPU/3 GB hedefi: SFU 12 kişilik odada rahat, 12×11=132 stream
+    // sunucudan geçer. 25 kişilik oda 600 stream = CPU tavan. Aşılırsa
+    // LiveKit join'i reddeder (4xx — UI toast'a düşer).
+    // 12 soft = "rahat"; >12 = "performans düşer" uyarısı olarak da
+    // düşünülebilir ama burada hard sınır.
+    maxParticipants: 12,
     // boşalan oda 5 dk sonra kapanır — hayalet oda yok
     emptyTimeout: 300,
   });

@@ -1,6 +1,9 @@
 port: 7880
 # Prometheus metrikleri — yalnız localhost'tan
 prometheus_port: 6789
+# Düşük log seviyesi: sadece uyarı/hata. Debug modunda her RTP paket
+# olayı loglanır, 2 vCPU'da %5-10 CPU yükü.
+log_level: warn
 rtc:
   tcp_port: 7881
   port_range_start: 50000
@@ -8,6 +11,27 @@ rtc:
   # Public deploy — use_external_ip + node_ip ile ICE portlarını public IP'de bind eder
   use_external_ip: true
   node_ip: <VPS_IP>        # ← VPS'in dış IP'si (ör: 203.0.113.10)
+  # === 2 vCPU/3 GB RAM optimizasyonu (docs/NETWORKING.md §10) ===
+  # uplink cap: bir yayıncı 1.5 Mbps üzerinde gönderemesin. 4K kamera
+  # kullanan kullanıcı SFU'yu Nx kopyalama yüzünden boğar.
+  # 1.5 Mbps yeterli (720p VP8 + 128kbps Opus); Adaptive Stream
+  # viewport'a göre katman seçer.
+  publisher_max_bitrate: 1500000
+  # 2-katmanlı simulcast (default 3-katman = 3x paket işleme).
+  # 180p PiP + 720p ana ekran — Adaptive Stream bunu kullanır.
+  simulcast_layers:
+    - width: 320
+      height: 180
+      encoding:
+        maxBitrate: 150000
+    - width: 1280
+      height: 720
+      encoding:
+        maxBitrate: 1200000
 turn:
+  # Embedded TURN — global kitle, 4G/CGNAT erişilebilirliği için açık.
+  # E2EE sayesinde TURN operatörü (biz) içeriği göremez, sadece
+  # metadata. Kapatırsan bazı kullanıcılar (UDP engellenen ağlar) hiç
+  # bağlanamaz.
   enabled: true
   udp_port: 3478

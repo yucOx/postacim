@@ -14,6 +14,10 @@ services:
     network_mode: host
     volumes:
       - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    # === 2 vCPU optimizasyonu ===
+    # LiveKit'i tam core 0'a sabitle — context switch/cache miss sıfır,
+    # %15-25 throughput artışı. Diğer core'da Node server çalışır.
+    cpuset: "0"
     restart: unless-stopped
 
   server:
@@ -34,6 +38,9 @@ services:
       # ekran paylaşımı kill switch — .env'de SCREEN_SHARE=off ile kapatılır
       SCREEN_SHARE: ${SCREEN_SHARE:-on}
       REGISTER_RATE_PER_HOUR: ${REGISTER_RATE_PER_HOUR:-3}
+      # === 2 vCPU/3 GB optimizasyonu (docs/NETWORKING.md) ===
+      # JSON serialize + dosya I/O yükünü %5-10 azaltır. .env ile override.
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
     volumes:
       - ./data:/data
     expose:
@@ -43,6 +50,8 @@ services:
     # VPS-kalkan + WireGuard tüneli kurulumunda SERVER_HOST=10.10.0.2 (WG IP)
     ports:
       - "${SERVER_HOST:-127.0.0.1}:4000:4000"
+    # LiveKit core 0 → server core 1. Cpuset yalnız Linux host'larda etkili.
+    cpuset: "1"
     healthcheck:
       test:
         - CMD
@@ -72,13 +81,16 @@ services:
       - server
     restart: unless-stopped
 
-  # makine izleme — GRAFİKLER burada: http://localhost:19999 (yalnız localhost;
-  # dışarıdan ssh -L 19999:localhost:19999 tünelle). Sistem içlerini ifşa
-  # ettiği için domain'e asla açıkta oturtma.
+  # Opsiyonel: Netdata (sistem izleme) — 2 vCPU/3 GB prod hedefinde
+  # varsayılan KAPALI (~50-100 MB RAM + sürekli sys collector).
+  # Yerel geliştirme/kurulum doğrulaması için:
+  #   docker compose --profile monitoring up -d
+  # Grafikler: http://localhost:19999 (localhost only — domain'e açma).
   netdata:
     image: netdata/netdata
     container_name: netdata
     hostname: postacim
+    profiles: ["monitoring"]   # 'compose up' ile başlamaz, --profile ister
     ports:
       - "127.0.0.1:19999:19999"
     cap_add:

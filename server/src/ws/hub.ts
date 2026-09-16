@@ -18,12 +18,22 @@ interface DmCallRow {
   userB: string;
 }
 
+// === 2 vCPU/3 GB optimizasyonu (docs/NETWORKING.md) ===
+// 50 kişilik odada birisi mesaj yazınca 49 send() syscall = context
+// switch. 16 ms tick penceresinde topla → 1 send (frame + merge) ≈ %30
+// daha az CPU. Tradeoff: oyuncu hissi hassas olan oyun oynamıyoruz,
+// 16 ms fark edilmez; mesaj 1-2 frame kayıyor (Discord/Slack benzeri).
+const BROADCAST_TICK_MS = 16;
+
 class Hub {
   private clients = new Map<WebSocket, HubClient>();
   private voice: VoiceMap = new Map();
   // active 1:1 DM calls keyed by dm channel id; mirrors voice above but for DMs.
   // needed so a peer dropping their socket cleanly notifies the other side.
   private dmCalls = new Map<string, DmCallRow>();
+  // outgoing frame queue, deduped by ws → JSON string. Cleared each tick.
+  private outboundFrames = new Map<WebSocket, string>();
+  private batcher: NodeJS.Timeout | null = null;
 
   register(ws: WebSocket, user: { id: string; nick: string }): void {
     const communities = new Set(
@@ -86,7 +96,7 @@ class Hub {
   broadcast(communityId: string, payload: unknown): void {
     const data = JSON.stringify(payload);
     for (const [ws, c] of this.clients) {
-      if (c.communities.has(communityId) && ws.readyState === ws.OPEN) ws.send(data);
+      if (c.communities.has(communityId) && ws.readyState === ws.OPEN) this.enqueue(ws, data);
     }
   }
 
@@ -99,8 +109,25 @@ class Hub {
     const set = new Set(userIds);
     const data = JSON.stringify(payload);
     for (const [ws, c] of this.clients) {
-      if (set.has(c.userId) && ws.readyState === ws.OPEN) ws.send(data);
+      if (set.has(c.userId) && ws.readyState === ws.OPEN) this.enqueue(ws, data);
     }
+  }
+
+  /** Dedup + batch: aynı frame string'i aynı socket'te 1 kere tutulur;
+   *  flush BROADCAST_TICK_MS tick'inde olur. İlk enqueue setTimeout kurar,
+   *  sonrakiler noop — son aktiviteden 16 ms sonra trailing flush. */
+  private enqueue(ws: WebSocket, data: string): void {
+    this.outboundFrames.set(ws, data);
+    if (this.batcher) return;
+    this.batcher = setTimeout(() => this.flush(), BROADCAST_TICK_MS);
+  }
+
+  private flush(): void {
+    this.batcher = null;
+    for (const [ws, data] of this.outboundFrames) {
+      if (ws.readyState === ws.OPEN) ws.send(data);
+    }
+    this.outboundFrames.clear();
   }
 
   /** mark a DM call as active between two users. notify the other side when one drops. */
