@@ -112,6 +112,28 @@ export function ratchetMsgKey(epochKey: Uint8Array, senderId: string, index: num
 // bir epoch içinde bu kadar index'in ötesi "çözülemez" sayılır.
 const MAX_RATCHET_SCAN = 10_000;
 
+// --- gönderen atfı: Ed25519 imzalı mesajlar (v3) ---
+// signer verilirse AEAD çıktısına 64B detached imza eklenir: ciphertext ‖ sig.
+// İmza girdisi = ciphertext baytları ‖ utf8(AAD) — AAD zaten scope, kanal,
+// key_version, ratchet index ve client binding'i kapsar. Doğrulama, mesaj
+// açılmadan ÖNCE göndericinin published Ed25519 anahtarıyla yapılır: sunucu
+// sahte sender_id ile mesaj uyduramaz, ciphertext'i başka bağlama taşıyamaz.
+//
+// Geçiş dönemi: bu özellikten önceki mesajlar imzasızdır — SIGN_CUTOVER_MS'ten
+// eski sunucu zaman damgalı imzasız mesajlar kabul edilir, sonrakiler reddedilir.
+// (Sabit istemcide yaşar: dağıtım + 2 hafta hoşgörü.)
+export const SIGN_CUTOVER_MS = Date.parse('2026-10-01T00:00:00Z');
+const SIG_LEN = 64; // crypto_sign_BYTES
+
+export interface SigContext {
+  /** göndericinin anahtar defterindeki Ed25519 public key'leri (key değişimi
+   *  olabileceği için dizi — herhangi biri doğrularsa geçerli); null/boş =
+   *  gönderenin imza anahtarı bilinmiyor → imzalı mesaj reddedilir */
+  signPublicKey: Uint8Array[] | null;
+  /** sunucu zaman damgası — cutover kuralı buna bakar */
+  sentAt: number;
+}
+
 // gönderici sayacı: index gizli değil (kaba kuvvetle zaten bilinir, zincir kökü
 // tahmin edilemez) — localStorage'da per (channel, key_version) basit sayı.
 // Gönderimde tüketilir; başarısız POST index'te boşluk bırakabilir, alıcı
@@ -135,6 +157,8 @@ export function encryptText(
   // verilirse v2 (ratchet'li) format: msg_key_index ile şifreler, index'i hem
   // gövdeye hem AAD'ye bağlar
   ratchet?: { senderId: string; index: number },
+  // verilirse v3: AEAD çıktısına gönderenin Ed25519 imzası eklenir
+  signer?: { signPrivateKey: Uint8Array },
 ): { nonce: string; ciphertext: string } {
   const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
   const msg: PlainMessage = { t: 'msg', body, sent: Date.now() };
@@ -148,14 +172,17 @@ export function encryptText(
     payload.set(plain, HEADER_LEN);
   }
   const aeadKey = ratchet ? ratchetMsgKey(key, ratchet.senderId, ratchet.index) : key;
+  const aadStr = aad(scope, channelId, version, binding, ratchet?.index);
   const ct = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     payload,
-    aad(scope, channelId, version, binding, ratchet?.index),
+    aadStr,
     null,
     nonce,
     aeadKey,
   );
-  return { nonce: b64(nonce), ciphertext: b64(ct) };
+  if (!signer) return { nonce: b64(nonce), ciphertext: b64(ct) };
+  const sig = sodium.crypto_sign_detached(cat(ct, enc.encode(aadStr)), signer.signPrivateKey);
+  return { nonce: b64(nonce), ciphertext: b64(cat(ct, sig)) };
 }
 
 export class DecryptError extends Error {
@@ -174,15 +201,17 @@ export function decryptText(
   binding?: MsgBinding,
   // v2 mesajlar için göndericinin zincirini türetmek üzere user id
   senderId?: string,
+  // v3 doğrulama + cutover bağlamı; verilmezse imzasız mesajlar koşulsuz kabul
+  sigCtx?: SigContext,
 ): PlainMessage {
   const nonce = unb64(nonceB64);
   const ct = unb64(ciphertextB64);
-  const open = (k: Uint8Array, idx?: number): Uint8Array | null => {
+  const tryOpen = (k: Uint8Array, aadStr: string, bytes: Uint8Array): Uint8Array | null => {
     try {
       return sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
         null,
-        ct,
-        aad(scope, channelId, version, binding, idx),
+        bytes,
+        aadStr,
         nonce,
         k,
       );
@@ -190,20 +219,55 @@ export function decryptText(
       return null;
     }
   };
-  // 1) eski yol: epoch anahtarı (v1 ve headersız format)
-  let pt = open(key);
-  // 2) v2: index gövdenin içinde şifreli olduğundan alıcı onu deneyerek bulur —
-  //    aday index'ler 0'dan yukarı; AAD index'e bağlı olduğundan yalnız doğru
-  //    index MAC'ten geçer. Kökler önbellekte yoksa epoch anahtarından türetilir.
-  let scanIdx: number | null = null;
-  if (!pt && senderId) {
-    for (let i = 0; i <= MAX_RATCHET_SCAN && !pt; i++) {
-      pt = open(ratchetMsgKey(key, senderId, i), i);
-      if (pt) scanIdx = i;
+  // v1 (epoch anahtarı) + v2 (ratchet taraması) yolu: hangi AAD ile açıldığını
+  // da döner — v3 imzası tam bu AAD üzerinden doğrulanır
+  const openAll = (bytes: Uint8Array): { pt: Uint8Array; aadUsed: string; scanIdx: number | null } | null => {
+    const legacyAad = aad(scope, channelId, version, binding, undefined);
+    const legacy = tryOpen(key, legacyAad, bytes);
+    if (legacy) return { pt: legacy, aadUsed: legacyAad, scanIdx: null };
+    if (!senderId) return null;
+    // v2: index gövdenin içinde şifreli olduğundan alıcı onu deneyerek bulur —
+    // aday index'ler 0'dan yukarı; AAD index'e bağlı olduğundan yalnız doğru
+    // index MAC'ten geçer. Kökler önbellekte yoksa epoch anahtarından türetilir.
+    for (let i = 0; i <= MAX_RATCHET_SCAN; i++) {
+      const idxAad = aad(scope, channelId, version, binding, i);
+      const pt = tryOpen(ratchetMsgKey(key, senderId, i), idxAad, bytes);
+      if (pt) return { pt, aadUsed: idxAad, scanIdx: i };
+    }
+    return null;
+  };
+  // 1) imzasız yol: tam ciphertext (v1/v2). Cutover'dan sonra imzasız kabul edilmez.
+  const legacy = openAll(ct);
+  if (legacy) {
+    if (sigCtx && sigCtx.sentAt >= SIGN_CUTOVER_MS) throw new DecryptError();
+    return parseBody(legacy.pt, legacy.scanIdx);
+  }
+  // 2) v3: ciphertext ‖ signature — son 64B imza; gövde v1/v2 yollarından
+  //    biriyle açılır, imza göndericinin published anahtarıyla doğrulanır.
+  if (ct.length > SIG_LEN) {
+    const body = ct.slice(0, ct.length - SIG_LEN);
+    const sig = ct.slice(ct.length - SIG_LEN);
+    const opened = openAll(body);
+    if (opened) {
+      const candidates = sigCtx?.signPublicKey;
+      if (!candidates || candidates.length === 0) throw new DecryptError();
+      const signed = cat(body, enc.encode(opened.aadUsed));
+      const ok = candidates.some((pk) => {
+        try {
+          return sodium.crypto_sign_verify_detached(sig, signed, pk);
+        } catch {
+          return false;
+        }
+      });
+      if (!ok) throw new DecryptError();
+      return parseBody(opened.pt, opened.scanIdx);
     }
   }
-  if (!pt) throw new DecryptError();
-  // v1: magic 0x01 + uzunluk; v2: magic 0x02 + uzunluk; eski mesajlar header'sız direkt gövde
+  throw new DecryptError();
+}
+
+// header (v1: 0x01 / v2: 0x02 + uzunluk; eski: headersız) + JSON + scan çelişki kontrolü
+function parseBody(pt: Uint8Array, scanIdx: number | null): PlainMessage {
   let body = pt;
   if (pt.length >= HEADER_LEN && (pt[0] === PAD_MAGIC || pt[0] === PAD_MAGIC_V2)) {
     const len = new DataView(pt.buffer, pt.byteOffset, pt.byteLength).getUint32(1, true);

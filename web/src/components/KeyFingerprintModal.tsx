@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useAuthStore } from '../state/authStore';
 import { unb64 } from '../crypto/bytes';
 import { fingerprintPair, shortFingerprint } from '../crypto/fingerprint';
+import { getSignKeys } from '../lib/signkeys';
 import { ensurePinned, pinKey, type PinStatus } from '../lib/keypins';
 import Modal from './Modal';
 import { useT } from '../i18n/I18nProvider';
@@ -58,6 +59,7 @@ export default function KeyFingerprintModal({
 }): ReactNode {
   const { t } = useT();
   const myPublicKey = useAuthStore((s) => s.publicKey);
+  const mySignPublicKey = useAuthStore((s) => s.signPublicKey);
   const [status, setStatus] = useState<PinStatus | 'loading' | 'error'>('loading');
   const [peerKeyB64, setPeerKeyB64] = useState<string | null>(null);
   const [short, setShort] = useState<string | null>(null);
@@ -80,9 +82,12 @@ export default function KeyFingerprintModal({
         // TOFU: first sighting is stored silently; a change keeps the old pin
         const pinStatus = ensurePinned(peerId, key);
         const peerBytes = unb64(key);
+        // damga imza anahtarlarını da kapsar; karşı taraf birden çok yayınladıysa
+        // (anahtar yenilemesi) en güncel olanı esas alınır
+        const peerSign = getSignKeys(peerId)?.at(-1) ?? null;
         const [s, f] = await Promise.all([
           Promise.resolve(shortFingerprint(peerBytes)),
-          fingerprintPair(myPublicKey, peerBytes),
+          fingerprintPair(myPublicKey, peerBytes, mySignPublicKey, peerSign),
         ]);
         if (!alive) return;
         setPeerKeyB64(key);
@@ -96,7 +101,7 @@ export default function KeyFingerprintModal({
     return () => {
       alive = false;
     };
-  }, [peerId, peerPublicKeyB64, myPublicKey]);
+  }, [peerId, peerPublicKeyB64, myPublicKey, mySignPublicKey]);
 
   const trust = (): void => {
     if (!peerKeyB64) return;

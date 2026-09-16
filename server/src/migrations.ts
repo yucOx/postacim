@@ -330,4 +330,13 @@ ALTER TABLE messages ADD COLUMN reply_to INTEGER;
 ALTER TABLE dm_messages ADD COLUMN reply_to INTEGER;
 ALTER TABLE gdm_messages ADD COLUMN reply_to INTEGER;
 `,
+  // v15 — gönderen atfı: Ed25519 imza anahtarı. users.sign_public_key dağıtım
+  // kolonu (public key — plaintext invariant'ına aykırı değil); private yarısı
+  // istemcide key_blob v2 payload'ına eklenir (eski v1 blob'lar aynen açılır).
+  // key_log kayıtları da imza anahtarını taşır — yeni kayıtların entry_hash'i
+  // imza anahtarını kapsar, eski tek-key satırlar eski formülle doğrulanır.
+  `
+ALTER TABLE users ADD COLUMN sign_public_key TEXT;
+ALTER TABLE key_log ADD COLUMN sign_public_key TEXT;
+`,
 ];

@@ -18,6 +18,9 @@ export const registerSchema = {
     kdf_salt: { type: 'string', minLength: 32, maxLength: 32, pattern: '^[0-9a-f]{32}$' },
     auth_material: b64Schema(44, 44),
     public_key: b64Schema(44, 44),
+    // Ed25519 imza anahtarı (gönderen atfı) — bu özellikten önceki istemciler
+    // göndermez; sonradan POST /keys/sign ile yayınlanır
+    sign_public_key: { type: 'string', minLength: 44, maxLength: 44 },
     key_blob: b64Schema(48, 1024),
     // optional: required only when the server has TURNSTILE_SECRET (enforced in
     // the route — schemas can't express "required iff env")

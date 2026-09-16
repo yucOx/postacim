@@ -27,13 +27,33 @@ const groupDigits = (digits: string): string => digits.replace(/(\d{5})(?=\d)/g,
  * 40 digits carry ~133 bits of displayed entropy — Signal uses 60 digits
  * (~199 bits), but that exceeds what a 128-bit X25519 key can back; 8 groups
  * still compare easily by eye or when read aloud.
+ *
+ * v2: gönderen atfı imza anahtarları (Ed25519) da kapsama girer — iki tarafın
+ * imza anahtarı da biliniyorsa digest, sıralı X25519 çiftine sıralı Ed25519
+ * çifti eklenerek hesaplanır. Eksik imza anahtarı (özellik öncesi hesap) ×
+ * var olan karışımı tanımsızdır: damga ancak iki tarafta aynı girdi kümesiyle
+ * eşleşir; imza anahtarı sonradan yayınlanan hesapta damga değişir (bilinçli —
+ * key değişimi damgayı da değiştirmeli).
  */
-export async function fingerprintPair(myPublicKey: Uint8Array, peerPublicKey: Uint8Array): Promise<string> {
+export async function fingerprintPair(
+  myPublicKey: Uint8Array,
+  peerPublicKey: Uint8Array,
+  mySignPublicKey?: Uint8Array | null,
+  peerSignPublicKey?: Uint8Array | null,
+): Promise<string> {
   const [a, b] =
     compareBytes(myPublicKey, peerPublicKey) <= 0
       ? [myPublicKey, peerPublicKey]
       : [peerPublicKey, myPublicKey];
-  const digest = await sha256(concat(a, b));
+  let material = concat(a, b);
+  if (mySignPublicKey && peerSignPublicKey) {
+    const [s, t] =
+      compareBytes(mySignPublicKey, peerSignPublicKey) <= 0
+        ? [mySignPublicKey, peerSignPublicKey]
+        : [peerSignPublicKey, mySignPublicKey];
+    material = concat(material, s, t);
+  }
+  const digest = await sha256(material);
   let n = 0n;
   for (const byte of digest) n = (n << 8n) | BigInt(byte);
   return groupDigits((n % 10n ** 40n).toString().padStart(40, '0'));

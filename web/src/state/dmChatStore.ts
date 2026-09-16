@@ -7,6 +7,7 @@ import { decryptText, encryptText, nextSendIndex, type MsgScope } from '../crypt
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
 import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
+import { getSignKeys } from '../lib/signkeys';
 import { onServerEvent } from '../ws/socket';
 
 // dm_/gdm_ ids never collide with chatStore's channel ids — separate filter is safe
@@ -111,7 +112,18 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
       sentAt: raw.sent_at,
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
-      body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, kind, bind, raw.sender_id).body,
+      body: decryptText(
+        raw.channel_id,
+        raw.key_version,
+        key,
+        raw.nonce,
+        raw.ciphertext,
+        kind,
+        bind,
+        raw.sender_id,
+        // gönderen atfı: imza doğrulama + cutover bağlamı
+        { signPublicKey: getSignKeys(raw.sender_id), sentAt: raw.sent_at },
+      ).body,
       ...meta,
     };
   } catch {
@@ -194,13 +206,20 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
     }
     const senderId = useAuthStore.getState().user?.id;
     if (!senderId) throw new Error('oturum yok');
+    // gönderen atfı: imza anahtarı yoksa üretip yayınla (eski hesap ilk mesajda)
+    let signPrivateKey = useAuthStore.getState().signPrivateKey;
+    if (!signPrivateKey) {
+      await useAuthStore.getState().ensureSignIdentity();
+      signPrivateKey = useAuthStore.getState().signPrivateKey;
+    }
+    if (!signPrivateKey) throw new Error('imza anahtarı yok');
     // replay hardening: client id rides the AAD and the body as one logical message
     const clientId = crypto.randomUUID();
     const clientSentAt = Date.now();
     const enc = encryptText(dmId, keyInfo.version, keyInfo.key, body, kindOf(dmId), { clientId, clientSentAt }, false, {
       senderId,
       index: nextSendIndex(dmId, keyInfo.version),
-    });
+    }, { signPrivateKey });
     set({ sending: true });
     try {
       await api(`${baseOf(dmId)}/${dmId}/messages`, {

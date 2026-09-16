@@ -20,21 +20,22 @@ Akış: tarayıcı `web/` nginx'den yüklenir → `/api/*` server'a, `/ws` WS'e,
 3. KEK, X25519 private key blob'unu açar: `key_blob` = nonce(24) ‖ XChaCha20-Poly1305(privateKey), AAD `postacim/v1/identity` (`crypto/identity.ts`)
 4. Private key, kanal anahtarlarının **sealed-box** (`crypto_box_seal`) wrapped_key satırlarını açar (`unwrapMyKey`)
 5. Kanal anahtarı (32B rastgele) → mesaj: **XChaCha20-Poly1305**, AAD = `scope:channelId:v<key_version>` + opsiyonel client binding (`crypto/message.ts`). Scope: `ch` (topluluk kanalı) / `dm` / `gdm`. Per-gönderici ratchet: `msg_key_i = H(root_i)`, zincir `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir — güncel kök sızarsa geçmiş korunur; plaintext boyut bucket padding'li (magic `0x01`/`0x02` v2 ratchet'li)
+6. Gönderen atfı: v3 mesaj = AEAD çıktısı ‖ Ed25519 detached imza (imza girdisi = ciphertext baytları ‖ utf8(AAD) — AAD epok, index, binding'i kapsar). Alıcı, açmadan ÖNCE göndericinin anahtar defterinden gelen imza public key'iyle doğrular (`lib/signkeys.ts`); `SIGN_CUTOVER_MS`'ten sonraki imzasız mesajlar reddedilir. Eski hesaplar ilk açılışta/imza anahtarı yoksa ilk gönderimde Ed25519 çifti üretip `POST /keys/sign` ile yayınlar (blob v2 rewrap KEK RAM'deyken)
 6. Client binding: UUID + client timestamp AAD'ye girer, sunucu `client_id` + `sent_at_client` kolonlarında echo eder → bant dışı tekrar oynatma ve timestamp sahteciliği tespit edilebilir (`lib/replay.ts` istemcide dedupe eder)
 7. Ses/görüntü: aynı kanal anahtarı → LiveKit **SFrame** (HKDF türevi). DM araması aynı DM anahtarını kullanır
 8. Epoklar: her sarma yeni `key_version`; eski satırlar kalır → rotasyon öncesi geçmiş okunur. Üye çıkarma = `needs_rekey` → kanal donar, staff rotate edene kadar yazı/ses/davet/üye ekleme kapalı
-9. BIP-39 kurtarma: 12 kelime → aynı Argon2id zinciri (`crypto/recovery.ts`) → identity blob ikinci kez sarılır (`recovery_blob`). Şifre kaybı hesap kaybı değil; ikisi de kaybolursa hesap kurtarılamaz
-10. Cihaz kilidi (ops.): WebAuthn PRF'ten cihaz KEK'i → private key + auth_material XChaCha20 ile sarılıp IndexedDB'ye (`pgv-device`, `crypto/devicekey.ts`) — F5'te parmak izi/PIN, şifre akışı fallback
-11. Anahtar defteri: kayıtta public key `key_log`'a append-only satır düşer; istemci boot'ta `GET /keys/log` ile zinciri doğrular, kendi kaydını kontrol eder, head'i localStorage'a yazar (`lib/keytransparency.ts`)
+9. BIP-39 kurtarma: 12 kelime → aynı Argon2id zinciri (`crypto/recovery.ts`) → identity blob ikinci kez sarılır (`recovery_blob`). Şifre kaybı hesap kaybı değil; ikisi de kaybolursa hesap kurtarılamaz. v1 kurtarma blob'u imza private key taşımaz → kurtarma sonrası yeni imza kimliği üretilir (deftere yeni satır — kanıtlı key değişimi)
+10. Cihaz kilidi (ops.): WebAuthn PRF'ten cihaz KEK'i → private key'ler + auth_material XChaCha20 ile sarılıp IndexedDB'ye (`pgv-device`, `crypto/devicekey.ts`) — F5'te parmak izi/PIN, şifre akışı fallback. Cihaz payload'u `sk` (Ed25519 private) içerir; eski kayıtlarda yoksa açılışta tamamlanır
+11. Anahtar defteri: kayıtta public key + imza public key `key_log`'a append-only satır düşer; istemci boot'ta `GET /keys/log` ile zinciri doğrular, kendi kaydını kontrol eder, head'i localStorage'a yazar (`lib/keytransparency.ts`); doğrulanmış zincirdeki imza anahtarları `lib/signkeys.ts` haritasına beslenir (artımlı tazeleme: `loadBootstrap` tetikli)
 
 ## DB şeması
 
-Kaynak: `server/src/migrations.ts` (v1–v13, sıralı, `schema_version` tablosuyla takip). Tüm tablolar `server/src/db.ts` açar (WAL, FK açık).
+Kaynak: `server/src/migrations.ts` (v1–v15, sıralı, `schema_version` tablosuyla takip). Tüm tablolar `server/src/db.ts` açar (WAL, FK açık).
 
 | Tablo | Kolonlar | Amaç | Yazan/okuyan route'lar |
 |---|---|---|---|
-| `users` | `id` TEXT PK · `nick` TEXT UNIQUE NOCASE · `kdf_salt` TEXT · `verifier` TEXT · `public_key` TEXT · `key_blob` TEXT · `created_at` INT · `recovery_salt`/`recovery_blob`/`recovery_verifier` TEXT (n) · `avatar_data` BLOB (n) · `avatar_updated_at` INT (n) | Kimlik + argon2id verifier + KEK altında sarılı private key blob; kurtarma ikinci sarma; küçük avatar | auth (register/login/password/recovery/recover), users (pubkey/avatar/me DELETE) |
-| `key_log` | `id` INT PK AUTOINC · `user_id` TEXT (bilinçli FK değil — kanıt hesap silinse de kalır) · `public_key` TEXT · `prev_hash`/`entry_hash` TEXT · `created_at` INT · `idx_key_log_user` | Append-only public key defteri; `entry_hash = sha256(prev_hash ‖ '\x00' ‖ user_id ‖ '\x00' ‖ public_key)`, genesis 64×'0' | keys (appendKeyLog — tek yazı yolu, yalnız INSERT), auth (register), boot (backfill), users (me DELETE dokunmaz) |
+| `users` | `id` TEXT PK · `nick` TEXT UNIQUE NOCASE · `kdf_salt` TEXT · `verifier` TEXT · `public_key` TEXT · `sign_public_key` TEXT (n) · `key_blob` TEXT · `created_at` INT · `recovery_salt`/`recovery_blob`/`recovery_verifier` TEXT (n) · `avatar_data` BLOB (n) · `avatar_updated_at` INT (n) | Kimlik + argon2id verifier + KEK altında sarılı private key blob'ları (v2 blob: X25519 + Ed25519 private); imza public key dağıtım kolonu; kurtarma ikinci sarma; küçük avatar | auth (register/login/password/recovery/recover), keys (sign), users (pubkey/avatar/me DELETE) |
+| `key_log` | `id` INT PK AUTOINC · `user_id` TEXT (bilinçli FK değil — kanıt hesap silinse de kalır) · `public_key` TEXT · `sign_public_key` TEXT (n) · `prev_hash`/`entry_hash` TEXT · `created_at` INT · `idx_key_log_user` | Append-only public key defteri; `entry_hash = sha256(prev_hash ‖ '\x00' ‖ user_id ‖ '\x00' ‖ public_key)` (imza anahtarı varsa sonuna `‖ '\x00' ‖ sign_public_key`), genesis 64×'0' | keys (appendKeyLog — tek yazı yolu, yalnız INSERT), auth (register), boot (backfill), users (me DELETE dokunmaz) |
 | `sessions` | `token_hash` TEXT PK (sha256) · `user_id` FK · `expires_at` INT · `created_at` INT | Oturum tokenları — ham token hiçbir yerde durmaz | auth (login/logout/password/recover), tüm auth hook (`index.ts`), janitor `pruneSessions` saatlik |
 | `communities` | `id` TEXT PK · `name` TEXT · `owner_id` FK · `created_at` INT · `join_kdf_salt`/`join_verifier` TEXT (n) | Topluluk + opsiyonel katılım şifresi argon2 verifier'ı | communities (create/join-password), bootstrap |
 | `members` | (`community_id`,`user_id`) PK · `role` CHECK(owner/admin/member) · `joined_at` INT | Üyelik + rol | communities (members/admins/bans/join-requests/approve), invites complete, access.ts |
@@ -182,6 +183,7 @@ README "Medya: kalite, limitler ve optimizasyon" bölümünde.
 | Uç | Amaç | Auth | Limit |
 |---|---|---|---|
 | GET `/keys/log?after=&limit=` | defter sayfalama (limit 1–500, default 200) + her sayfada güncel head; istemce `entry_hash`'leri yeniden hesaplayıp zinciri doğrular | hayır | 30/dk (anonim IP kovası) |
+| POST `/keys/sign` | imza anahtarı yayınla: Ed25519 public key deftere yazılır; opsiyonel `key_blob` (v2 rewrap) yalnız `auth_material` doğrulanınca güncellenir — yalnız çerez ele geçiren oturum mağdur adına imza kimliği yayınlayamaz | evet | 5/sa |
 
 Ayrıca: GET `/api/health` → `{"ok":true}` (public).
 
@@ -235,11 +237,11 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `crypto/argon2.ts` | Argon2id (64 MiB, t=3) → 64B: authMaterial + KEK |
 | `crypto/bip39.ts` + `bip39-words.ts` | 12 kelime üretim (128-bit entropi + checksum), doğrulama, quiz konumları; kelime listesi |
 | `crypto/bytes.ts` | b64/hex/concat/randomBytes yardımcıları |
-| `crypto/fingerprint.ts` | 40 haneli safety number (iki X25519 key sıralı hash) + 16 hex'lik kısa iz |
-| `crypto/identity.ts` | X25519 keypair; blob seal/open (KEK altında); sealed-box wrap/unwrap |
+| `crypto/fingerprint.ts` | 40 haneli safety number (sıralı X25519 çifti; iki tarafın Ed25519 anahtarı da biliniyorsa sıralı imza çifti de kapsanır — v2 damga) + 16 hex'lik kısa iz |
+| `crypto/identity.ts` | X25519 keypair + Ed25519 imza keypair; blob seal/open (KEK altında; payload v1 = X25519 private, v2 = 0x02 ‖ X25519 ‖ Ed25519); sealed-box wrap/unwrap |
 | `crypto/invite.ts` | davet linki kur/ayrıştır (`#/davet/<code>/<eph-priv>` fragment); ephemeral anahtarla açma |
 | `crypto/joinpw.ts` | katılım şifresi JW anahtarı altında kanal anahtarı seal/open |
-| `crypto/message.ts` | XChaCha20-Poly1305 mesaj AEAD; AAD = scope + kanal + epok + client binding; per-gönderici ratchet zinciri (msg_key_i) + boyut bucket padding |
+| `crypto/message.ts` | XChaCha20-Poly1305 mesaj AEAD; AAD = scope + kanal + epok + client binding; per-gönderici ratchet zinciri (msg_key_i) + boyut bucket padding; v3: AEAD çıktısına Ed25519 imza eklenir + cutover politika |
 | `crypto/devicekey.ts` | WebAuthn PRF cihaz kilidi: passkey üret/enroll, cihaz KEK türetimi, blob sar/çöz, IndexedDB `pgv-device` |
 | `crypto/recovery.ts` | kurtarma ifadesinden Argon2id anahtar türetme (şifre yoluyla aynı zincir) |
 | `crypto/sodium.ts` | libsodium hazır olma sözü (WASM) |
@@ -260,6 +262,7 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `lib/format.ts` | saat/gün biçimleme (tr-TR) |
 | `lib/keypins.ts` | TOFU public-key pin store — sunucu anahtar değişimini yakalar |
 | `lib/keytransparency.ts` | anahtar defteri: zincir doğrulama, head localStorage, kendi kayıt kontrolü, head damga formatı |
+| `lib/signkeys.ts` | gönderen atfı: doğrulanmış defterden Ed25519 public key haritası (kullanıcı başına çoklu — key yenilemesi), artımlı tazeleme; imzalı mesaj doğrulaması yalnız bu haritadan beslenir |
 | `lib/nick.ts` | userId → nick çözümleyici (tüm bilinen kaynaklardan) |
 | `lib/replay.ts` | client_id dedupe — sunucu ciphertext'i yeni satır olarak yeniden enjekte edemez |
 | `lib/safety.ts` | 30 haneli safety number (sıralı public key hash) |

@@ -27,6 +27,8 @@ export interface DevicePayload {
   am: string;
   /** X25519 private key */
   pk: string;
+  /** Ed25519 private key (gönderen atfı) — eski kayıtlarda yoktur */
+  sk?: string;
 }
 
 export interface DeviceRecord {
@@ -44,6 +46,8 @@ export interface DeviceUnlock {
   /** b64 — /auth/login body'sine doğrudan gider */
   authMaterial: string;
   privateKey: Uint8Array;
+  /** eski kayıtlarda yok — authStore imza kimliğini sonra tamamlar */
+  signPrivateKey: Uint8Array | null;
 }
 
 // --- WebAuthn arayüzü: gerçek tarayıcı impl'i + testlerde sahte impl ---
@@ -260,11 +264,15 @@ export async function enrollDeviceUnlock(
   user: { id: string; nick: string },
   authMaterial: Uint8Array,
   privateKey: Uint8Array,
+  signPrivateKey?: Uint8Array | null,
 ): Promise<void> {
   const prfSalt = randomBytes(32);
   const { credentialId, prf } = await agent.create(prfSalt, user.nick, user.id);
   const deviceKek = deriveDeviceKek(prf);
-  const blob = sealDeviceBlob({ am: b64(authMaterial), pk: b64(privateKey) }, deviceKek);
+  const blob = sealDeviceBlob(
+    { am: b64(authMaterial), pk: b64(privateKey), ...(signPrivateKey ? { sk: b64(signPrivateKey) } : {}) },
+    deviceKek,
+  );
   await saveDeviceRecord({ nick: user.nick, credentialId: b64(credentialId), prfSalt: b64(prfSalt), blob });
 }
 
@@ -280,7 +288,12 @@ export async function unlockWithPasskey(
   try {
     const { prf } = await agent.assert(unb64(rec.prfSalt));
     const payload = openDeviceBlob(rec.blob, deriveDeviceKek(prf));
-    return { nick: rec.nick, authMaterial: payload.am, privateKey: unb64(payload.pk) };
+    return {
+      nick: rec.nick,
+      authMaterial: payload.am,
+      privateKey: unb64(payload.pk),
+      signPrivateKey: payload.sk ? unb64(payload.sk) : null,
+    };
   } catch {
     return null;
   }

@@ -9,12 +9,15 @@
 // gossip gerektirir — bu bir 'denetim kanalı'dır: zincir bütünlüğü + head
 // parmak izinin bant dışı karşılaştırması + kendi kaydı kontrolü.
 import { api } from '../api/client';
-import { toHex } from '../crypto/bytes';
+import { toHex, unb64 } from '../crypto/bytes';
+import { ingestSignKeys } from './signkeys';
 
 export interface KeyLogEntry {
   id: number;
   user_id: string;
   public_key: string;
+  /** Ed25519 imza anahtarı (gönderen atfı) — v15 sonrası kayıtlarda var */
+  sign_public_key: string | null;
   prev_hash: string;
   entry_hash: string;
   created_at: number;
@@ -28,14 +31,19 @@ export const GENESIS_HASH = '0'.repeat(64);
 const STORAGE_KEY = 'pgv.keylog.head';
 const PAGE_LIMIT = 500;
 
-/** sunucuyla aynı formül: sha256(prev_hash || '\x00' || user_id || '\x00' || public_key) */
+/** sunucuyla aynı formül: sha256(prev_hash || '\x00' || user_id || '\x00' || public_key)
+ *  — imza anahtarı varsa sonuna '\x00' ‖ sign_public eklenir */
 export async function entryHash(
   prevHash: string,
   userId: string,
   publicKey: string,
+  signPublicKey?: string | null,
 ): Promise<string> {
-  const data = new TextEncoder().encode(`${prevHash}\x00${userId}\x00${publicKey}`);
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+  let data = `${prevHash}\x00${userId}\x00${publicKey}`;
+  if (signPublicKey) data += `\x00${signPublicKey}`;
+  const digest = new Uint8Array(
+    await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data)),
+  );
   return toHex(digest);
 }
 
@@ -82,7 +90,7 @@ export async function verifyChain(
   for (const e of entries) {
     if (e.id !== prevId + 1) return { ok: false, error: 'anahtar defteri kayıt numaraları kopuk — atlama var' };
     if (e.prev_hash !== prevHash) return { ok: false, error: 'anahtar defteri zinciri kopuk' };
-    if ((await entryHash(e.prev_hash, e.user_id, e.public_key)) !== e.entry_hash) {
+    if ((await entryHash(e.prev_hash, e.user_id, e.public_key, e.sign_public_key)) !== e.entry_hash) {
       return { ok: false, error: "anahtar defteri kaydının hash'i doğrulanamıyor" };
     }
     prevHash = e.entry_hash;
@@ -155,6 +163,9 @@ export async function syncKeyLog(opts: {
   const { entries, head: serverHead } = await fetchFullLog();
   const v = await verifyChain(entries, stored);
   if (!v.ok) return { ok: false, warning: v.error };
+  // doğrulanmış zincirdeki imza anahtarları gönderen doğrulamasına beslenir —
+  // yalnız zincir bütünlüğü kanıtlanmış kayıtlar güven kaynağıdır
+  ingestSignKeys(entries);
   // doğrulanan zincirin ucu ile sunucunun beyan ettiği head aynı olmalı
   const chainHead = v.head;
   if (

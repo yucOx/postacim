@@ -8,6 +8,7 @@ import { generateIdentity, unwrapMyKey, wrapKeyFor } from '../crypto/identity';
 import { sealJoinKey } from '../crypto/joinpw';
 import { buildInviteLink } from '../crypto/invite';
 import { onServerEvent } from '../ws/socket';
+import { refreshSignKeys } from '../lib/signkeys';
 
 export interface Channel {
   id: string;
@@ -184,6 +185,8 @@ export const useAppStore = create<AppState>((set, get) => {
       dms?: DmInfo[];
       gdms?: GdmInfo[];
     }>('/bootstrap');
+    // imza anahtarı haritası defterden beslenir — yeni üye/kayıt sonrası tazele
+    void refreshSignKeys();
     const { communities, keys } = unwrapBootstrap(data.communities, get().channelKeys);
     // DM/GDM keys: unwrap into a separate epoch map (ids never collide: dm_/gdm_ prefixes)
     const { publicKey, privateKey } = useAuthStore.getState();

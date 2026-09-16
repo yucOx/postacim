@@ -7,6 +7,7 @@ import { decryptText, encryptText, nextSendIndex } from '../crypto/message';
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
 import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
+import { getSignKeys, refreshSignKeys } from '../lib/signkeys';
 import { onServerEvent } from '../ws/socket';
 
 // server replay sightings for this session; channel ids never collide with dmChatStore's
@@ -99,7 +100,18 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       sentAt: raw.sent_at,
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
-      body: decryptText(raw.channel_id, raw.key_version, key, raw.nonce, raw.ciphertext, 'ch', bind, raw.sender_id).body,
+      body: decryptText(
+        raw.channel_id,
+        raw.key_version,
+        key,
+        raw.nonce,
+        raw.ciphertext,
+        'ch',
+        bind,
+        raw.sender_id,
+        // gönderen atfı: imza doğrulama + cutover bağlamı
+        { signPublicKey: getSignKeys(raw.sender_id), sentAt: raw.sent_at },
+      ).body,
       ...meta,
     };
   } catch {
@@ -191,6 +203,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const senderId = useAuthStore.getState().user?.id;
       if (!senderId) throw new Error('oturum yok');
+      // gönderen atfı: imza anahtarı yoksa üretip yayınla (eski hesap ilk mesajda)
+      let signPrivateKey = useAuthStore.getState().signPrivateKey;
+      if (!signPrivateKey) {
+        await useAuthStore.getState().ensureSignIdentity();
+        signPrivateKey = useAuthStore.getState().signPrivateKey;
+      }
+      if (!signPrivateKey) throw new Error('imza anahtarı yok');
       // replay hardening: one client id per logical message, reused across the
       // retry loop (a 409 means the server never stored the earlier attempt)
       const clientId = crypto.randomUUID();
@@ -203,7 +222,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const enc = encryptText(channelId, version, key, body, 'ch', { clientId, clientSentAt }, false, {
           senderId,
           index,
-        });
+        }, { signPrivateKey });
         try {
           await api(`/channels/${channelId}/messages`, {
             method: 'POST',
@@ -320,10 +339,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: { ...s.messages, [raw.channel_id]: insertSorted(s.messages[raw.channel_id] ?? [], display) },
         sealAt: amSender(display) ? { ...s.sealAt, [display.id]: Date.now() } : s.sealAt,
       }));
-      // opportunistic: if we lack this epoch's key (recent rotation), fetch it once
+      // opportunistic: if we lack this epoch's key (recent rotation), fetch it once;
+      // yeni üyelerin imza anahtarı için de defteri tazele
       const app = useAppStore.getState();
-      if (display.body === null && !app.channelKeys[raw.channel_id]?.[raw.key_version]) {
-        void app.loadBootstrap();
+      if (display.body === null && raw.sent_at > Date.now() - 3_600_000) {
+        if (!app.channelKeys[raw.channel_id]?.[raw.key_version]) void app.loadBootstrap();
+        else void refreshSignKeys();
       }
       // chime + OS toast for messages in rooms we're not looking at
       if (!amSender(display) && !(app.view === 'community' && app.activeChannelId === raw.channel_id)) {

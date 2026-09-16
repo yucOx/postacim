@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { b64, unb64, randomBytes } from './bytes';
 import { deriveKeys, newKdfSaltHex } from './argon2';
-import { generateIdentity, openIdentityBlob, sealIdentityBlob, wrapKeyFor, unwrapMyKey } from './identity';
+import {
+  generateIdentity,
+  generateSignIdentity,
+  openIdentityBlob,
+  sealIdentityBlob,
+  signPublicKeyFromPrivate,
+  wrapKeyFor,
+  unwrapMyKey,
+} from './identity';
 import { encryptText, decryptText } from './message';
 import { generateMnemonic, validateMnemonic } from './bip39';
 import { deriveRecoveryKeys } from './recovery';
@@ -49,8 +57,25 @@ describe('identity seal/wrap', () => {
     const { kek: kek1 } = await deriveKeys('a', newKdfSaltHex());
     const { kek: kek2 } = await deriveKeys('b', newKdfSaltHex());
     const blob = sealIdentityBlob(id.privateKey, kek1);
-    expect(openIdentityBlob(blob, kek1)).toEqual(id.privateKey);
+    expect(openIdentityBlob(blob, kek1)).toEqual({ privateKey: id.privateKey, signPrivateKey: null });
     expect(() => openIdentityBlob(blob, kek2)).toThrow();
+  });
+  it('v2 blob carries the sign key; wrong KEK still rejected', async () => {
+    const id = generateIdentity();
+    const sign = generateSignIdentity();
+    const { kek } = await deriveKeys('a', newKdfSaltHex());
+    const { kek: kek2 } = await deriveKeys('b', newKdfSaltHex());
+    const blob = sealIdentityBlob(id.privateKey, kek, sign.signPrivateKey);
+    expect(openIdentityBlob(blob, kek)).toEqual({ privateKey: id.privateKey, signPrivateKey: sign.signPrivateKey });
+    expect(signPublicKeyFromPrivate(sign.signPrivateKey)).toEqual(sign.signPublicKey);
+    expect(() => openIdentityBlob(blob, kek2)).toThrow();
+  });
+  it('v1 blob (eski istemci) aynen açılır — imza anahtarı yok', async () => {
+    const id = generateIdentity();
+    const { kek } = await deriveKeys('a', newKdfSaltHex());
+    // v1 = salt private key payload'u; eski seal çağrısıyla üretilir
+    const blob = sealIdentityBlob(id.privateKey, kek);
+    expect(openIdentityBlob(blob, kek).signPrivateKey).toBeNull();
   });
   it('sealed channel key unwraps only for the holder', () => {
     const holder = generateIdentity();

@@ -25,6 +25,7 @@ interface RegisterBody {
   kdf_salt: string;
   auth_material: string;
   public_key: string;
+  sign_public_key?: string;
   key_blob: string;
   turnstile_token?: string;
   recovery?: {
@@ -182,21 +183,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         // kaydı olmayan yayılmış bir public key kalmasın
         const tx = db.transaction(() => {
           db.prepare(
-            `INSERT INTO users(id, nick, kdf_salt, verifier, public_key, key_blob, recovery_salt, recovery_blob, recovery_verifier, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO users(id, nick, kdf_salt, verifier, public_key, sign_public_key, key_blob, recovery_salt, recovery_blob, recovery_verifier, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).run(
             id,
             body.nick,
             body.kdf_salt,
             verifier,
             body.public_key,
+            body.sign_public_key ?? null,
             body.key_blob,
             rec?.kdf_salt ?? null,
             rec?.blob ?? null,
             recVerifier,
             Date.now(),
           );
-          appendKeyLog(id, body.public_key);
+          appendKeyLog(id, body.public_key, body.sign_public_key);
         });
         tx();
         const token = issueSession(id);

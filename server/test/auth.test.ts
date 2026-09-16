@@ -222,7 +222,7 @@ describe('BIP-39 recovery', () => {
       public_key: string;
     };
     expect(pub).toBe(b64(id.publicKey));
-    const priv = openIdentityBlob(blob, rec.kek);
+    const { privateKey: priv } = openIdentityBlob(blob, rec.kek);
     expect(b64(priv)).toBe(b64(id.privateKey));
 
     // finish with a new password → session issued, old ones dead

@@ -72,7 +72,7 @@ export async function startServer(
 export async function makeUser(baseUrl: string, nickPrefix: string) {
   const { b64 } = await import('../../web/src/crypto/bytes');
   const { deriveKeys, newKdfSaltHex } = await import('../../web/src/crypto/argon2');
-  const { generateIdentity, sealIdentityBlob } = await import('../../web/src/crypto/identity');
+  const { generateIdentity, generateSignIdentity, sealIdentityBlob } = await import('../../web/src/crypto/identity');
   const { sodiumReady } = await import('../../web/src/crypto/sodium');
   await sodiumReady;
 
@@ -81,6 +81,7 @@ export async function makeUser(baseUrl: string, nickPrefix: string) {
   const salt = newKdfSaltHex();
   const { authMaterial, kek } = await deriveKeys(password, salt);
   const id = generateIdentity();
+  const sign = generateSignIdentity();
   const ip = `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
   const r = await fetch(`${baseUrl}/auth/register`, {
     method: 'POST',
@@ -90,7 +91,8 @@ export async function makeUser(baseUrl: string, nickPrefix: string) {
       kdf_salt: salt,
       auth_material: b64(authMaterial),
       public_key: b64(id.publicKey),
-      key_blob: sealIdentityBlob(id.privateKey, kek),
+      sign_public_key: b64(sign.signPublicKey),
+      key_blob: sealIdentityBlob(id.privateKey, kek, sign.signPrivateKey),
     }),
   });
   if (r.status !== 201) throw new Error(`register ${nick}: ${r.status}`);
@@ -100,6 +102,7 @@ export async function makeUser(baseUrl: string, nickPrefix: string) {
     password,
     salt,
     id,
+    sign,
     ip,
     token: json.token,
     userId: json.user.id,

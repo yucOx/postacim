@@ -9,9 +9,30 @@ describe('fingerprintPair', () => {
   // known answer, computed independently: SHA-256 over 0x00*32 || 0x01*32
   // (already sorted), full digest mod 10^40
   const KNOWN = '74632 21564 06016 86687 05006 83227 20538 64435';
+  // v2 known answer: SHA-256 over 0x00*32 || 0x01*32 || 0x02*32 || 0xff*32
+  // (her çift kendi içinde sıralı), full digest mod 10^40
+  const signA = new Uint8Array(32).fill(0xff);
+  const signB = new Uint8Array(32).fill(0x02);
+  const KNOWN_V2 = '02054 03219 18549 67459 69417 71802 46520 92720';
 
   it('matches the known vector for fixed keys', async () => {
     expect(await fingerprintPair(keyA, keyB)).toBe(KNOWN);
+  });
+
+  it('v2: imza anahtarları biliniyorsa damga genişletilmiş girdiden gelir', async () => {
+    expect(await fingerprintPair(keyA, keyB, signA, signB)).toBe(KNOWN_V2);
+  });
+
+  it('v2 bilinen vektör de sıra invariant — her iki taraf aynı sayıyı bulur', async () => {
+    expect(await fingerprintPair(keyA, keyB, signA, signB)).toBe(
+      await fingerprintPair(keyB, keyA, signB, signA),
+    );
+  });
+
+  it('imza anahtarı eksikse eski (v1) damga korunur', async () => {
+    expect(await fingerprintPair(keyA, keyB, null, null)).toBe(KNOWN);
+    expect(await fingerprintPair(keyA, keyB, signA, null)).toBe(KNOWN);
+    expect(await fingerprintPair(keyA, keyB, null, signB)).toBe(KNOWN);
   });
 
   it('is order-invariant — both peers compute the same number', async () => {

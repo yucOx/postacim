@@ -21,15 +21,24 @@ const keyOf = (i: number): string => {
 /** n satırlık geçerli zincir; userIds[i]/keys[i] ayarlanabilir */
 async function makeChain(
   n: number,
-  opts: { userIds?: string[]; keys?: string[] } = {},
+  opts: { userIds?: string[]; keys?: string[]; signs?: (string | null)[] } = {},
 ): Promise<KeyLogEntry[]> {
   const out: KeyLogEntry[] = [];
   let prev = GENESIS_HASH;
   for (let i = 0; i < n; i++) {
     const userId = opts.userIds?.[i] ?? `user-${i}`;
     const publicKey = opts.keys?.[i] ?? keyOf(i);
-    const hash = await entryHash(prev, userId, publicKey);
-    out.push({ id: i + 1, user_id: userId, public_key: publicKey, prev_hash: prev, entry_hash: hash, created_at: 0 });
+    const sign = opts.signs?.[i] ?? null;
+    const hash = await entryHash(prev, userId, publicKey, sign);
+    out.push({
+      id: i + 1,
+      user_id: userId,
+      public_key: publicKey,
+      sign_public_key: sign,
+      prev_hash: prev,
+      entry_hash: hash,
+      created_at: 0,
+    });
     prev = hash;
   }
   return out;
@@ -85,6 +94,17 @@ describe('verifyChain', () => {
     const chain = await makeChain(3);
     const r = await verifyChain(chain, { id: 9, entry_hash: '0'.repeat(64) });
     expect(r.ok).toBe(false);
+  });
+
+  it('imza anahtarlı kayıtlar genişletilmiş formülle doğrulanır', async () => {
+    const chain = await makeChain(2, { signs: [keyOf(50), null] });
+    expect((await verifyChain(chain, null)).ok).toBe(true);
+  });
+
+  it('imza anahtarı sonradan değiştirilen kayıt reddedilir', async () => {
+    const chain = await makeChain(2, { signs: [keyOf(50), null] });
+    chain[0]!.sign_public_key = keyOf(51); // hash girdisi artık uyuşmaz
+    expect((await verifyChain(chain, null)).ok).toBe(false);
   });
 });
 
