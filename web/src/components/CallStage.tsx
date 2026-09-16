@@ -511,7 +511,16 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   // kaybolmaz
   if (focusedKey && (focusedVideo || focusPerson)) {
     const slotFor = (p: Participant): React.ReactNode => {
-      const pVideos = allVideos.filter((v) => v.identity === p.identity && v.key !== focusedKey);
+      // Şeritte hangi videolar gösterilir:
+      //  - focused bir SCREEN ise, o kişinin kendi screen'i atlanır (büyük
+      //    alanda zaten var — şeritte tekrarlanmasın). Kamerası kalır.
+      //  - focused bir CAM ise, o kişinin kamerası da ŞERİTTE GÖRÜNÜR
+      //    (büyük alan + şerit aynı anda; LiveKit tek track'ten 2 video
+      //    elementi besler, Adaptive Stream aynı katmanı paylaşır).
+      const focusedIsScreen = spotKind === 'screen';
+      const pVideos = allVideos.filter(
+        (v) => v.identity === p.identity && !(focusedIsScreen && v.key === focusedKey),
+      );
       if (pVideos.length > 0) {
         return pVideos.map((v) => {
           const own = v.trackRef.participant.isLocal && v.isScreen;
