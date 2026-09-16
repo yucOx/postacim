@@ -73,6 +73,48 @@ docker compose up -d --build  # livekit + server + web
 - Doğrulama: `curl http://localhost/api/health` → `{"ok":true}`
 - Veritabanı: `./data/` volume — yedekle/sil, her şey orada
 
+### Doğrulama: JS integrity (release manifest)
+
+Web JS'i sunucudan dağıtılır; kötü bir sunucu değişmiş JS ile anahtar çalabilir
+(bkz. [Tehdit modeli](#tehdit-modeli-ve-bilinen-sınırlar)). Bu sınır
+**azaltılır**: her `v*` tag'inde CI, web bundle'ın SHA-256 manifest'ini GitHub
+Release asset'i olarak yayınlar — `INTEGRITY.txt` (`sha256sum -c` biçimi) ve
+`INTEGRITY.sri.txt` (SRI: `sha256-<base64>`, `integrity=""` özniteliği için).
+Kendi sunucunun yaydığı dosyaları manifestle karşılaştır:
+
+```bash
+TAG=vX.Y.Z                                        # GitHub Releases'deki tag
+BASE=https://github.com/yucOx/postacim/releases/download/$TAG
+
+# 1) Manifest'i GitHub'dan al — sunucundan DEĞİL (bant dışı kanal şart)
+curl -fsSLO "$BASE/INTEGRITY.txt"
+
+# 2) Sunucunun yaydığı her dosyayı manifest listesine göre indir
+mkdir -p dist-check && cd dist-check
+while read -r _ path; do
+    mkdir -p "$(dirname "$path")"
+    curl -fsS "https://<sunucunuz>/${path#./}" -o "$path"
+done < ../INTEGRITY.txt
+
+# 3) Karşılaştır — tüm satırlar OK olmalı
+sha256sum -c ../INTEGRITY.txt
+```
+
+- `FAILED` satırı, sunucunun release derlemesinden farklı (veya değiştirilmiş)
+  JS yaydığını gösterir.
+- `INTEGRITY.sri.txt`, dosyaları başka bir origin'den
+  `<script integrity="...">` ile yükleyenler içindir.
+- Kendi fork'unu derleyenler aynı listeyi `npm run integrity` ile yerelde
+  üretip kendi derlemesini doğrular.
+
+**Dürüst sınır:** bu karşılaştırma JS trust'ı azaltır, kapatmaz. Kötü sunucu
+manifest'i de değiştirebilir — sunucudan gelen bir manifest kanıt değildir;
+karşılaştırma manifest'i GitHub Release üzerinden alarak yapılmalı. Derleme
+reproducible değildir: manifest belirli bir release derlemesine aittir, aynı
+kaynağın iki ortamda bit-bit aynı çıktısı garanti edilmez. Tarayıcı uzantısı
+(manifest v3, yalnız hash kontrolü) opsiyonel artı olarak roadmap'te durur —
+karar kullanıcıda.
+
 ### Prod VPS: state'i repodan ayır (önerilen)
 
 Public sunucuda gerçek secret'lar (`LIVEKIT_SECRET`, `node_ip`) repoya
@@ -302,7 +344,7 @@ npm test    # 190 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 
 - **Model**: sunucu kör ama kötü olabilir; ağ pasif dinleyici değildir (TLS overlay ile).
 - **Forward secrecy kısmi** — per-gönderici simetrik ratchet: zincir kökü/msg_key sızarsa geçmiş korunur (geri türetim yok). Dürüst sınır: **epoch anahtarının kendisi** sızarsa zincir baştan türetilebilir (sender_id açık) — o riski epok rotasyonu sınırlar. Signal tarzı DH ratchet/MLS bekleyen kurul kararı.
-- **Web JS trust** — uygulama JS'i sunucudan dağıtılır; kötü niyetli/gözden geçirilmemiş sunucu değişmiş JS ile KEK'i çalabilir. Signed release/ayrı origin olmadan tarayıcı E2EE'de kapatılamaz. (KEK artık memory-only: reload'da şifre yeniden istenir; opsiyonel passkey cihaz kilidi blob'u cihaz donanımından türeyen anahtarla saklar — zararlı JS ancak aktif WebAuthn onayıyla kullanır, çalıp götüremez.)
+- **Web JS trust** — uygulama JS'i sunucudan dağıtılır; kötü niyetli/gözden geçirilmemiş sunucu değişmiş JS ile KEK'i çalabilir. Signed release/ayrı origin olmadan tarayıcı E2EE'de kapatılamaz — Faz 4 azaltımı: her `v*` tag'inde bundle SHA manifest'i GitHub Release'de yayınlanır, sunucudan inen JS ile karşılaştırılabilir ([Doğrulama](#doğrulama-js-integrity-release-manifest)); tam kapanmaz — kötü sunucu manifest'i de değiştirebilir. (KEK artık memory-only: reload'da şifre yeniden istenir; opsiyonel passkey cihaz kilidi blob'u cihaz donanımından türeyen anahtarla saklar — zararlı JS ancak aktif WebAuthn onayıyla kullanır, çalıp götüremez.)
 - **Sansür/sıralama** — kör sunucu mesaj gizleyebilir, sıralamayı ve timestamp'i manipüle edebilir (client timestamp + UUID AAD'ye bağlı, tespit edilebilir; gizleme engellenemez).
 - **Metadata** — sosyal graf (kim kiminle), zamanlama, mesaj boyutu (bucket padding'iyle seviyesi indirilir), presence, çağrı katılım/mute durumu sunucuda görünür.
 - **IP metadata** — istemcinin IP'si sunucuya görünür (TLS arkasında), sunucunun IP'si DNS/sertifika kayıtlarından çıkar. İkisi de Tor onion service ile kapatılır: [deploy/tor-hidden-service.md](deploy/tor-hidden-service.md) (v3 onion rehberi — https-onion önerilen; düz http onion varyantında oturum çerezi `Secure=false` üretmek zorunda kalınır, kararın bedeli rehberde yazılı).
@@ -335,7 +377,7 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 - [x] Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik)
 - [x] Faz 2 — kaybolan mesajlar (disappearing messages)
 - [x] Faz 3 — Tor hidden service rehberi (IP metadata)
-- [ ] Faz 4 — signed release / reproducible build (JS trust azaltma)
+- [x] Faz 4 — signed release / reproducible build (JS trust azaltma)
 - [ ] Faz 5 — DH ratchet / MLS (tam forward secrecy; önce araştırma sprinti)
 - [ ] Faz 6 — key transparency gossip (anti-forking)
 - [ ] Faz 7 — çoklu cihaz (Faz 5 sonrası)

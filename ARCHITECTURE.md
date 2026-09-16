@@ -230,6 +230,40 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 
 İstemci kablo dağılımı: `appStore.wireEvents` (bootstrap yenileme + üyelik olayları), `chatStore` (`message:new`/`message:deleted`), `dmChatStore` (`dm:message`/`gdm:message`/`message:deleted`), `voiceStore` (`voice:update`, `channel:rotated`, tüm `call:*`). Mesaj frame'lerinin `message` payload'u (`message:new`, `dm:message`, `gdm:message`) `expires_at` taşır (ms epoch; null = TTL kapalı); canlı dağıtımda süresi çoktan geçmiş frame sunucu tarafından yayınlanmaz.
 
+## Dağıtım bütünlüğü
+
+Web istemcisi sunucudan JS olarak dağıtılır — sunucu dağıttığı koda müdahale
+edebilir (README tehdit modeli: Web JS trust). Faz 4 azaltımı: bundle hash
+manifest'inin üretimi ve bağımsız kanaldan yayını.
+
+**Üretim.** `scripts/bundle-hashes.sh` (`npm run integrity`) `web/dist`
+altındaki tüm dosyaların SHA-256'sını iki biçimde yazar: `INTEGRITY.txt`
+(`sha256sum -c` uyumlu satırlar) ve `INTEGRITY.sri.txt` (SRI biçimi: her satır
+`sha256-<base64>  <path>` — tarayıcı `integrity=""` özniteliği aynı değeri
+kullanır). SRI satırları `INTEGRITY.txt`'ten türetilir: aynı hash'in base64
+kodlaması, ayrı hesap yok. `.github/workflows/release.yml` `v*` tag push'ında
+web bundle'ı derler, manifest'i üretir ve GitHub Release asset'i olarak
+yükler (`gh release create/upload`, `permissions: contents: write`; tag
+mevcutsa `--clobber` upload).
+
+**Neyi kanıtlar.** Manifest, belirli bir release derlemesinin dosya-bazlı
+SHA-256 özetlerini sunucudan bağımsız bir kanaldan (GitHub Release) yayınlar.
+Self-host operatörü, sunucusuna gitmiş image'ın o derlemeyle aynı JS'i
+yayınladığını doğrulayabilir (README "Doğrulama"); sapan satır `FAILED`
+olarak tespit edilir. CHANGELOG.md + tag eşleşmesi, hangi JS'in hangi kaynak
+ağacına karşılık geldiğini bağlar.
+
+**Neyi kanıtlamaz.** (1) Kötü sunucu, manifest'li de manifest'siz de değişmiş
+JS servis edebilir — kontrolün değeri manifest'in bant dışı kanaldan
+(GitHub) alınmasına bağlıdır; sunucunun kendisinden gelen manifest kanıt
+değildir. (2) Derleme reproducible değildir: aynı kaynak iki ortamda bit-bit
+aynı çıktıyı vermeyebilir (Vite/sürüm/ortam farkları) — manifest tek bir
+release derlemesine aittir, kaynaktan yeniden üretemez. (3) Tag, GitHub
+hesabının ve push erişiminin bütünlüğüne dayanır; tag şu an imzasızdır —
+signed tag ek bir katman olurdu. (4) Her istemciye farklı JS servis etme
+(targeting) bu kontrolün dışındadır; manifest yalnız tüm kullanıcılara aynı
+içeriğin yayıldığı varsayımıyla anlamlıdır.
+
 ## Modül haritası
 
 ### web/src

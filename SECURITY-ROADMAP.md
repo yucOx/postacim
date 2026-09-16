@@ -103,7 +103,7 @@ haritası" satırı eklendi.
 - Test yok (doküman fazı) — ancak `.env.example`'a onion varyantı notu
   + README gizlilik bölümü güncellemesi şart.
 
-## Faz 4 — Signed release / reproducible build (JS trust azaltma)
+## Faz 4 — Signed release / reproducible build (JS trust azaltma) — tamamlandı (2d1f8c2)
 
 **Kapatır:** "Web JS trust — sunucu değişmiş JS anahtar çalabilir"
 (sınır **azaltılır**, tam kapanmaz — dürüst ifade kalır).
