@@ -39,9 +39,10 @@ services:
     expose:
       - "4000"
     # host nginx (deploy/nginx-postacim.conf) /api + /ws'yi buraya propler —
-    # 127.0.0.1'e bağlı: dış dünyadan bypass imkansız, yalnız host içi
+    # 127.0.0.1'e bağlı: dış dünyadan bypass imkansız, yalnız host içi.
+    # VPS-kalkan + WireGuard tüneli kurulumunda SERVER_HOST=10.10.0.2 (WG IP)
     ports:
-      - "127.0.0.1:4000:4000"
+      - "${SERVER_HOST:-127.0.0.1}:4000:4000"
     healthcheck:
       test:
         - CMD
