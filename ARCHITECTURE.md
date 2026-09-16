@@ -9,6 +9,7 @@ Kod tabanının teknik referansı. Ürün vaadi ve tehdit modeli: [README.md](RE
 | `web/` | React 19 + Vite + Zustand + libsodium (WASM) + hash-wasm | Tüm kripto tarayıcıda: anahtar türetme, sarma, mesaj şifreleme. Sunucuya yalnız opak blob |
 | `server/` | Node 22 + Fastify + better-sqlite3 (WAL) | Oturum, üyelik, rate limit, sarılı anahtar dağıtımı, WS hub, LiveKit token. İçerik asla görmez |
 | `livekit/` | LiveKit SFU (Docker) | Sesli/görüntülü medya rölesi. SFrame E2EE (HKDF → kanal anahtarı) — SFU bayt görür, çözemez |
+| güvenlik yol haritası | [SIGNAL-PARITY-PROMPT.md](SIGNAL-PARITY-PROMPT.md) | Signal-parite programı (8 faz): Ed25519 imzalı mesajlar → disappearing → Tor rehberi → signed release → ratchet/MLS → key gossip → çoklu cihaz → audit hazırlığı. Her faz kendi docs + negatif testini getirir |
 
 Akış: tarayıcı `web/` nginx'den yüklenir → `/api/*` server'a, `/ws` WS'e, `/livekit` SFU'ya reverse proxy. Oturum httpOnly `pgv_session` çereziyle taşınır (Bearer da kabul — testler/betikler). Canlı olaylar `/ws` üzerinden; mesaj gövdesi WS'te de şifreli gider.
 

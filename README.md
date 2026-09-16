@@ -324,7 +324,17 @@ npm test    # 173 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Test turu — otomatik test + CI (bugün: 19 dosya, 173 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
 
-**Sıradaki (kurul kararı):** MLS/DH-ratchet (forward secrecy tamamlaması) · anahtar defteri gossip · Onion/Tor rehberi · çoklu cihaz (MLS sonrası)
+**Sıradaki — güvenlik yol haritası** ([SIGNAL-PARITY-PROMPT.md](SIGNAL-PARITY-PROMPT.md)):
+kripto/gizlilikte Signal paritesine 8 fazlı program.
+
+- [ ] Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik)
+- [ ] Faz 2 — kaybolan mesajlar (disappearing messages)
+- [ ] Faz 3 — Tor hidden service rehberi (IP metadata)
+- [ ] Faz 4 — signed release / reproducible build (JS trust azaltma)
+- [ ] Faz 5 — DH ratchet / MLS (tam forward secrecy; önce araştırma sprinti)
+- [ ] Faz 6 — key transparency gossip (anti-forking)
+- [ ] Faz 7 — çoklu cihaz (Faz 5 sonrası)
+- [ ] Faz 8 — threat model revizyonu + dış audit hazırlığı (v1.0.0)
 
 ## Katkıda bulunma
 
