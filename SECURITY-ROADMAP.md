@@ -68,11 +68,12 @@ haritası" satırı eklendi.
 - ARCHITECTURE: anahtar yaşam döngüsüne imza adımı; README kripto tablosu
   + bilinen sınırlar güncelle.
 
-## Faz 2 — Kaybolan mesajlar (disappearing messages)
+## Faz 2 — Kaybolan mesajlar (disappearing messages) — tamamlandı (3501b02)
 
 **Kapatır:** UX/gizlilik beklentisi (Signal'in en çok kullanılan özelliği).
 
-- Migration v15: üç mesaj tablosuna da `expires_at INT` (null = kapalı).
+- Migration v16 (v15 imza fazına denk geldi): üç mesaj tablosuna da
+  `expires_at INT` (null = kapalı).
 - Client: composer'a TTL seçici (kapalı/1 sa/1 gün/1 hafta) — seçim
   kanal/DM başına hatırlanır (zustand + localStorage).
 - TTL **AAD'ye girmez** (sunucu kolonundan okunur; imza kapsamı dışıdır —

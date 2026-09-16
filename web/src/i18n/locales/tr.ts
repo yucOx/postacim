@@ -396,6 +396,14 @@ export default {
     placeholderReply: '{name} kişisine yanıt yaz…  (Enter: gönder)',
     placeholder: 'şifreli mesaj yaz…  (Enter: gönder, Shift+Enter: satır)',
   },
+  // Kaybolan mesajlar — composer TTL seçici
+  ttl: {
+    menu: 'kaybolan mesaj süresi',
+    off: 'kapalı',
+    hour: '1 saat',
+    day: '1 gün',
+    week: '1 hafta',
+  },
   // ReplyBar
   reply: {
     cancel: 'yanıtı bırak',
@@ -409,6 +417,7 @@ export default {
   // MsgDelete (silinmiş satır + hover eylemler)
   delete: {
     tombstone: 'bu mesaj silindi',
+    expired: 'süresi doldu — kaybolan mesaj',
     forMe: 'benim için sil',
     forAll: 'herkes için sil',
     reply: 'yanıtla',

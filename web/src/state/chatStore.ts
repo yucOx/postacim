@@ -8,6 +8,7 @@ import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
 import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
 import { getSignKeys, refreshSignKeys } from '../lib/signkeys';
+import { ttlSeconds } from './ttlStore';
 import { onServerEvent } from '../ws/socket';
 
 // server replay sightings for this session; channel ids never collide with dmChatStore's
@@ -26,6 +27,8 @@ export interface DisplayMessage {
   body: string | null;
   /** tombstone: deleted for everyone — body is always null */
   deleted?: boolean;
+  /** kaybolan mesaj TTL'i (ms epoch); absent = kapalı — sunucu metadata'sı */
+  expiresAt?: number | null;
   /** reply target in the same channel; nick = target sender's nick */
   replyTo?: { id: number; nick: string } | null;
   /** grouped reaction chips as served by history / kept live by reaction:update */
@@ -56,6 +59,7 @@ function metaOf(raw: ChatMessage): Pick<DisplayMessage, 'replyTo' | 'reactions'>
 
 function toDisplay(raw: ChatMessage): DisplayMessage {
   const meta = metaOf(raw);
+  const expiry = { expiresAt: raw.expires_at ?? undefined };
   // tombstone row: the server kept the placeholder and wiped the content
   if (raw.deleted) {
     return {
@@ -68,6 +72,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
       deleted: true,
+      ...expiry,
       ...meta,
     };
   }
@@ -89,6 +94,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
+      ...expiry,
       ...meta,
     };
   try {
@@ -112,6 +118,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
         // gönderen atfı: imza doğrulama + cutover bağlamı
         { signPublicKey: getSignKeys(raw.sender_id), sentAt: raw.sent_at },
       ).body,
+      ...expiry,
       ...meta,
     };
   } catch {
@@ -124,6 +131,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
       clientId: raw.client_id ?? undefined,
       clientSentAt: raw.sent_at_client ?? undefined,
       body: null,
+      ...expiry,
       ...meta,
     };
   }
@@ -214,6 +222,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // retry loop (a 409 means the server never stored the earlier attempt)
       const clientId = crypto.randomUUID();
       const clientSentAt = Date.now();
+      const ttl = ttlSeconds(channelId);
       // encrypt + POST; on 409 (key rotated mid-flight) refresh keys and retry once
       for (let attempt = 0; ; attempt++) {
         // ratchet index'i per (channel, key_version) sayaçtan tüket; 409 ile
@@ -231,6 +240,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...enc,
               client_id: clientId,
               sent_at_client: clientSentAt,
+              // kaybolan mesajlar: seçili TTL varsa expires_at body'ye eklenir
+              // (AAD dışı sunucu metadata'sı)
+              ...(ttl > 0 ? { expires_at: Date.now() + ttl * 1000 } : {}),
               ...(replyTo ? { reply_to: replyTo } : {}),
             },
           });

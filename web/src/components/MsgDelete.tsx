@@ -14,8 +14,17 @@ export async function deleteForEveryone(channelId: string, messageId: number): P
   await api(`/messages/${scopeOf(channelId)}/${channelId}/${messageId}`, { method: 'DELETE' });
 }
 
-/** muted placeholder rendered in place of a tombstoned message */
-export function DeletedRow({ nick, sentAt }: { nick: string; sentAt: number }) {
+/** muted placeholder rendered in place of a tombstoned message (or one whose
+ *  disappearing-message TTL has run out) */
+export function DeletedRow({
+  nick,
+  sentAt,
+  expired = false,
+}: {
+  nick: string;
+  sentAt: number;
+  expired?: boolean;
+}) {
   const { t } = useT();
   return (
     <div className="flex gap-3 px-4 pt-3 pb-0.5">
@@ -32,7 +41,7 @@ export function DeletedRow({ nick, sentAt }: { nick: string; sentAt: number }) {
           <span className="text-sm font-semibold text-paper-500">{nick}</span>
           <span className="font-mono text-[10px] text-paper-500">{formatTime(sentAt)}</span>
         </div>
-        <p className="text-sm italic text-paper-500">{t('delete.tombstone')}</p>
+        <p className="text-sm italic text-paper-500">{t(expired ? 'delete.expired' : 'delete.tombstone')}</p>
       </div>
     </div>
   );

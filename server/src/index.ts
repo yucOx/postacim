@@ -28,6 +28,7 @@ import { gdmRoutes } from './routes/gdms.js';
 import { userRoutes } from './routes/users.js';
 import { keyRoutes, backfillKeyLog } from './routes/keys.js';
 import { attachWs } from './ws/index.js';
+import { expireExpiredMessages } from './lib/expire.js';
 
 export const app = Fastify({
   // we sit behind nginx, which OVERWRITES X-Forwarded-For with $remote_addr
@@ -121,7 +122,11 @@ attachWs(app);
 
 const start = async (): Promise<void> => {
   pruneSessions();
-  setInterval(pruneSessions, 3_600_000).unref();
+  expireExpiredMessages();
+  setInterval(() => {
+    pruneSessions();
+    expireExpiredMessages();
+  }, config.messageTtlSweepMs).unref();
   await app.listen({ port: config.port, host: '0.0.0.0' });
   // docker stop / systemd restart — close sockets and the DB handle cleanly
   for (const sig of ['SIGTERM', 'SIGINT'] as const) {

@@ -339,4 +339,15 @@ ALTER TABLE gdm_messages ADD COLUMN reply_to INTEGER;
 ALTER TABLE users ADD COLUMN sign_public_key TEXT;
 ALTER TABLE key_log ADD COLUMN sign_public_key TEXT;
 `,
+  // v16 — kaybolan mesajlar: göndericinin seçtiği TTL, satır başına
+  // `expires_at` (ms epoch; NULL = TTL kapalı). Sunucu için bilinçli olarak
+  // görünür metadata — imza/AAD kapsamı DIŞI (değişken metadata; bkz.
+  // README "Bilinen sınırlar"). Yaşam döngüsü: canlı dağıtımda süresi geçmiş
+  // frame reddedilir + saatlik janitor süresi geçen satırı tombstone'a çevirir
+  // (nonce/ciphertext NULL); v12 tombstone mekanizmasını aynen kullanır.
+  `
+ALTER TABLE messages ADD COLUMN expires_at INTEGER;
+ALTER TABLE dm_messages ADD COLUMN expires_at INTEGER;
+ALTER TABLE gdm_messages ADD COLUMN expires_at INTEGER;
+`,
 ];

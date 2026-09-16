@@ -30,7 +30,7 @@ Akış: tarayıcı `web/` nginx'den yüklenir → `/api/*` server'a, `/ws` WS'e,
 
 ## DB şeması
 
-Kaynak: `server/src/migrations.ts` (v1–v15, sıralı, `schema_version` tablosuyla takip). Tüm tablolar `server/src/db.ts` açar (WAL, FK açık).
+Kaynak: `server/src/migrations.ts` (v1–v16, sıralı, `schema_version` tablosuyla takip). Tüm tablolar `server/src/db.ts` açar (WAL, FK açık).
 
 | Tablo | Kolonlar | Amaç | Yazan/okuyan route'lar |
 |---|---|---|---|
@@ -42,7 +42,7 @@ Kaynak: `server/src/migrations.ts` (v1–v15, sıralı, `schema_version` tablosu
 | `bans` | (`community_id`,`user_id`) PK · `banned_by` TEXT · `created_at` INT | Kalıcı ban — davet/başvuru/üye ekleme kapısı | communities (bans), invites (redeem kontrolü) |
 | `channels` | `id` TEXT PK · `community_id` FK · `name` TEXT · `type` CHECK(text/voice) · `key_version` INT · `needs_rekey` INT · `created_at` INT · UNIQUE(community,name,type) | Kanal + anahtar epoku + rekey dondurma bayrağı | channels (rotate), communities (channels), messages, voice, invites |
 | `wrapped_channel_keys` | (`channel_id`,`user_id`,`key_version`) PK · `wrapped_key` TEXT | Üyeye sealed-box sarılı kanal anahtarı, epok başına | communities/channels/invites/bootstrap, voice (varlık kanıtı) |
-| `messages` | `id` INT PK AUTOINC · `channel_id` FK · `sender_id` FK · `key_version` INT · `nonce`/`ciphertext` TEXT (n) · `sent_at` INT · `client_id` TEXT (n) · `sent_at_client` INT (n) · `deleted` INT · `deleted_by` TEXT (n) · `deleted_at` INT (n) | Topluluk kanalı mesajları; silinen satır tombstone — içerik silinir, satır kalır | messages (GET/POST), messageDel (`ch`), users (me DELETE) |
+| `messages` | `id` INT PK AUTOINC · `channel_id` FK · `sender_id` FK · `key_version` INT · `nonce`/`ciphertext` TEXT (n) · `sent_at` INT · `client_id` TEXT (n) · `sent_at_client` INT (n) · `deleted` INT · `deleted_by` TEXT (n) · `deleted_at` INT (n) · `expires_at` INT (n — kaybolan mesaj TTL'i, ms epoch; NULL = kapalı) | Topluluk kanalı mesajları; silinen satır tombstone — içerik silinir, satır kalır; süresi dolan satır janitor'da tombstone'a çevrilir | messages (GET/POST), messageDel (`ch`), users (me DELETE) |
 | `invites` | `id` TEXT PK · `community_id` FK · `code` TEXT UNIQUE · `target_user_id` TEXT (n) · `max_uses` INT (n) · `uses` INT · `expires_at` INT (n) · `created_by` TEXT · `created_at` INT | Açık/hedefli davet linki + limitler | invites (create/list/delete/peek/complete), communities (kick/ban temizliği) |
 | `invite_keys` | (`invite_id`,`channel_id`) PK · `key_version` INT · `wrapped_key` TEXT | Davetle dağıtılan anahtar seti (ephemeral veya hedef kimliğine sarılı) | invites (create/peek/complete), channels rotate (eski epok siler) |
 | `join_requests` | (`community_id`,`user_id`) PK · `status` CHECK(pending/denied) · `created_at` INT | Ad bilerek başvuru; red sonrası tekrar başvurulur | communities (join-requests/approve/deny), bootstrap (sayaç) |
@@ -51,7 +51,7 @@ Kaynak: `server/src/migrations.ts` (v1–v15, sıralı, `schema_version` tablosu
 | `friends` | (`user_a`,`user_b`) PK · `created_at` INT | Kabul edilmiş arkadaşlık — DM kapısı | friends (accept/remove), dms/gdms (areFriends kontrolü), bootstrap |
 | `dm_channels` | `id` TEXT PK · `user_a`/`user_b` FK · `key_version` INT · `created_at` INT · UNIQUE(user_a,user_b) | 1:1 DM kanalı | dms (create/list/messages/call-token), social.ts |
 | `dm_keys` | (`channel_id`,`user_id`,`key_version`) PK · `wrapped_key` TEXT | DM anahtarının iki kimliğe sarması | dms, bootstrap |
-| `dm_messages` | `messages` ile aynı kolon seti (kanal `dm_channels`, `sender_id` FK'sız) | DM mesajları | dms (GET/POST), messageDel (`dm`), users (me DELETE) |
+| `dm_messages` | `messages` ile aynı kolon seti + `expires_at` (kanal `dm_channels`, `sender_id` FK'sız) | DM mesajları | dms (GET/POST), messageDel (`dm`), users (me DELETE) |
 | `gdm_channels` | `id` TEXT PK (`gdm_*`) · `name` TEXT · `creator_id` FK · `key_version` INT · `created_at` INT | Grup DM; üye ekleme/ayrılma rekey zorunlu | gdms (create/members/leave) |
 | `gdm_members` | (`channel_id`,`user_id`) PK · `added_at` INT | Grup üyeliği | gdms, users (me DELETE — creator devri) |
 | `gdm_keys` | (`channel_id`,`user_id`,`key_version`) PK · `wrapped_key` TEXT | Grup anahtar epok sarmaları | gdms (create/members/leave), bootstrap |
@@ -60,6 +60,8 @@ Kaynak: `server/src/migrations.ts` (v1–v15, sıralı, `schema_version` tablosu
 ## API referansı
 
 Tümü `/api` önekli. `index.ts` auth hook'u: `PUBLIC_PATHS` dışında her şey oturum ister (Bearer veya çerez). Rate limit kovaları: oturumlu istek kullanıcı başına (token hash), anonim istek IP başına; IP = `clientIp` (CF arkasında `CF-Connecting-IP`).
+
+Mesaj gönderim uçları (kanal/DM/grup) opsiyonel `expires_at` kabul eder — kaybolan mesaj TTL'i: `null` = kapalı; gelecek ms epoch, tavan 30 gün (`lib/ttl.ts`); geçmiş/tavan üstü 400. History GET'leri ve WS mesaj frame'leri bu alanı echo eder; TTL AAD'ye girmez (sunucu metadata'sı). Süresi dolan satırlar saatlik janitor'da tombstone'a çevrilir (`lib/expire.ts`, `MESSAGE_TTL_SWEEP_MS` env ile aralık ayarlanır).
 
 ### Auth (`routes/auth.ts`) — açık uçlar public
 
@@ -226,7 +228,7 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `call:accepted` / `call:declined` / `call:cancelled` | `channel_id` | arama yanıtları |
 | `call:ended` | `channel_id`, `reason` (`declined`\|`cancelled`\|`peer_disconnected`) | arama kapandı — socket düşüşünde de hub üretir |
 
-İstemci kablo dağılımı: `appStore.wireEvents` (bootstrap yenileme + üyelik olayları), `chatStore` (`message:new`/`message:deleted`), `dmChatStore` (`dm:message`/`gdm:message`/`message:deleted`), `voiceStore` (`voice:update`, `channel:rotated`, tüm `call:*`).
+İstemci kablo dağılımı: `appStore.wireEvents` (bootstrap yenileme + üyelik olayları), `chatStore` (`message:new`/`message:deleted`), `dmChatStore` (`dm:message`/`gdm:message`/`message:deleted`), `voiceStore` (`voice:update`, `channel:rotated`, tüm `call:*`). Mesaj frame'lerinin `message` payload'u (`message:new`, `dm:message`, `gdm:message`) `expires_at` taşır (ms epoch; null = TTL kapalı); canlı dağıtımda süresi çoktan geçmiş frame sunucu tarafından yayınlanmaz.
 
 ## Modül haritası
 
@@ -249,6 +251,8 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `state/appStore.ts` | bootstrap hidrasyonu, topluluk/kanal seçimi, üye/rol/davet/başvuru yönetimi, WS kabloları |
 | `state/chatStore.ts` | kanal geçmişi + sayfalama + canlı mesaj akışı, anahtar açma |
 | `state/dmChatStore.ts` | DM + grup DM sohbet state'i, gizli mesaj filtresi |
+| `state/ttlStore.ts` | kaybolan mesaj TTL tercihi — kanal/DM başına (localStorage `pgv_msg_ttl`); gönderimde `expires_at` üretir |
+| `lib/ttl.ts` | TTL seçenekleri + `isExpired`/`useExpiryTick` — süresi dolan satırların tombstone render'ı için 30 sn'lik tick |
 | `state/voiceStore.ts` | LiveKit bağlantısı, SFrame E2EE, ses durumu, 1:1 arama akışı (zil/kabul/PiP) |
 | `state/joinStore.ts` | davet/başvuru katılım akışı (link ayrıştırma, şifre kanıtı, anahtar sarma) |
 | `state/hiddenStore.ts` | "benim için sil" — yalnız istemcide mesaj gizleme (localStorage) |
@@ -276,7 +280,7 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `components/ServerRail.tsx` | sol dikey topluluk rayı |
 | `components/ChannelSidebar.tsx` | topluluk kanal listesi + rekey şeridi |
 | `components/DmSidebar.tsx` / `DmHome.tsx` / `DmChat.tsx` | DM ana yüzeyleri |
-| `components/ChatView.tsx` / `MessageRow.tsx` / `Composer.tsx` | topluluk sohbeti, mesaj satırı, yazma alanı |
+| `components/ChatView.tsx` / `MessageRow.tsx` / `Composer.tsx` | topluluk sohbeti, mesaj satırı, yazma alanı + kaybolan-mesaj TTL seçici |
 | `components/MemberList.tsx` | üye listesi + ekleme/rol/ban eylemleri |
 | `components/CommunitySettings.tsx` | ⚙️ ayarlar: admin/ban/davet/şifre/rotate |
 | `components/VoiceRoom.tsx` | topluluk sesli odası (LiveKit) |
@@ -321,3 +325,5 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `ws/index.ts` | WS upgrade + auth-first-frame (10 sn'de 4004 timeout) + voice_state/call sinyal işleme |
 | `lib/access.ts` | üyelik/rol/kanal/topluluk erişim sorguları (isStaff, needsRekey) |
 | `lib/social.ts` | arkadaş/DM yardımcıları (areFriends, findDmByPair, dm id üretimi) |
+| `lib/ttl.ts` | kaybolan mesaj TTL doğrulaması (`parseExpiresAt`, 30 gün tavan) + `isExpired` |
+| `lib/expire.ts` | janitor süpürmesi: `expires_at < now` satırları v12 tombstone'a çevirir |

@@ -42,6 +42,8 @@ export interface ChatMessage {
   /** reply target (same channel); reply_nick = target sender's nick (plaintext metadata) */
   reply_to?: number | null;
   reply_nick?: string | null;
+  /** kaybolan mesaj TTL'i (ms epoch); null = kapalı — sunucu metadata'sı, AAD dışı */
+  expires_at?: number | null;
   /** grouped reactions as served by history GET; [] when none */
   reactions?: { emoji: string; count: number; me: boolean }[];
 }

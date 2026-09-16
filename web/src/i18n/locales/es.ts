@@ -368,6 +368,14 @@ export default {
     placeholderReply: 'responder a {name}…  (Enter: enviar)',
     placeholder: 'escribe un mensaje cifrado…  (Enter: enviar, Shift+Enter: línea)',
   },
+  // Mensajes efímeros — selector de TTL en el compositor
+  ttl: {
+    menu: 'temporizador de mensajes efímeros',
+    off: 'desactivado',
+    hour: '1 hora',
+    day: '1 día',
+    week: '1 semana',
+  },
   reply: {
     cancel: 'descartar respuesta',
     deletedSnippet: ' — mensaje eliminado',
@@ -378,6 +386,7 @@ export default {
   },
   delete: {
     tombstone: 'este mensaje fue eliminado',
+    expired: 'expirado — mensaje efímero',
     forMe: 'borrar para mí',
     forAll: 'borrar para todos',
     reply: 'responder',
