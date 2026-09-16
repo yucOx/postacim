@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { db } from '../db.js';
 import { getChannel, memberRole } from '../lib/access.js';
 import { reactionsFor } from '../lib/reactions.js';
+import { isExpired, parseExpiresAt } from '../lib/ttl.js';
 import { hub } from '../ws/hub.js';
 
 interface PostBody {
@@ -11,6 +12,8 @@ interface PostBody {
   client_id?: string;
   sent_at_client?: number;
   reply_to?: number;
+  /** kaybolan mesaj TTL'i — null/absent = kapalı; sunucu metadata'sı (AAD dışı) */
+  expires_at?: number | null;
 }
 
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -42,7 +45,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 100);
     const rows = db
       .prepare(
-        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client, m.deleted, m.reply_to, ru.nick AS reply_nick
+        `SELECT m.id, m.channel_id, m.sender_id, u.nick, m.key_version, m.nonce, m.ciphertext, m.sent_at, m.client_id, m.sent_at_client, m.deleted, m.reply_to, m.expires_at, ru.nick AS reply_nick
          FROM messages m
          JOIN users u ON u.id = m.sender_id
          LEFT JOIN messages r ON r.id = m.reply_to
@@ -89,6 +92,12 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       if (hasBinding && !validBinding(body.client_id, body.sent_at_client)) {
         return reply.code(400).send({ error: 'geçersiz mesaj verisi' });
       }
+      const now = Date.now();
+      // kaybolan mesajlar: null = kapalı; süresi geçmiş veya tavan üstü reddedilir
+      const expiresAt = parseExpiresAt(body.expires_at, now);
+      if (expiresAt === undefined) {
+        return reply.code(400).send({ error: 'geçersiz mesaj verisi' });
+      }
       // cevap hedefi aynı kanalda olmalı — id tablolar arasında çakışabildiği
       // için kanal dışından gelen id reddedilir (tombstone hedef olabilir,
       // sorun değil)
@@ -110,12 +119,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       }
       const clientId = hasBinding ? body.client_id ?? null : null;
       const sentAtClient = hasBinding ? body.sent_at_client ?? null : null;
-      const now = Date.now();
       const info = db
         .prepare(
-          'INSERT INTO messages(channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client, reply_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO messages(channel_id, sender_id, key_version, nonce, ciphertext, sent_at, client_id, sent_at_client, reply_to, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         )
-        .run(id, req.user.id, body.key_version, body.nonce, body.ciphertext, now, clientId, sentAtClient, replyTo);
+        .run(id, req.user.id, body.key_version, body.nonce, body.ciphertext, now, clientId, sentAtClient, replyTo, expiresAt);
       const message = {
         id: Number(info.lastInsertRowid),
         channel_id: id,
@@ -129,9 +137,14 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
         sent_at_client: sentAtClient,
         reply_to: replyTo,
         reply_nick: replyNick,
+        expires_at: expiresAt,
         reactions: [],
       };
-      hub.broadcast(channel.community_id, { type: 'message:new', channel_id: id, message });
+      // canlı dağıtım: süresi çoktan geçmiş bir mesaj frame olarak dağıtılmaz
+      // (validation normalde bunu engeller — savunma derinliği)
+      if (!isExpired(expiresAt, Date.now())) {
+        hub.broadcast(channel.community_id, { type: 'message:new', channel_id: id, message });
+      }
       return reply.code(201).send({ id: message.id, sent_at: now });
     },
   );

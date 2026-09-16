@@ -50,6 +50,8 @@ export const config = {
     process.env.TURNSTILE_VERIFY_URL ?? 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
   /** dev/testing knob — keep 3 in production */
   registerRatePerHour: num(process.env.REGISTER_RATE_PER_HOUR, 3),
+  /** kaybolan mesajlar janitor süpürme aralığı (ms); testlerde kısaltılır */
+  messageTtlSweepMs: num(process.env.MESSAGE_TTL_SWEEP_MS, 3_600_000),
   /** dev/testing knob — keep 10 in production: login geri çekilmesindeki
    *  pencere içi cezasız hata hakkı (LOGIN_FAIL_FREE) */
   loginFailFree: num(process.env.LOGIN_FAIL_FREE, 10),
