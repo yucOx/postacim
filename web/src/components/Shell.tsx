@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, KeyRound, LogOut, Menu, ShieldCheck } from 'lucide-react';
+import { Bell, LogOut, Menu, Settings as SettingsIcon } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
 import { wsConnect, wsDisconnect, onWsStatus, type WsStatus } from '../ws/socket';
@@ -16,14 +16,12 @@ import CallView from './CallView';
 import PiPWidget from './PiPWidget';
 import VoicePip from './VoicePip';
 import SettingsModal from './SettingsModal';
-import Modal from './Modal';
 import LocalePicker from './LocalePicker';
 import { PigeonMark } from './Brand';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import DeviceLockModal from './DeviceLockModal';
 import { deviceOfferDeclined, deviceUnlockSupported, hasDeviceUnlock } from '../crypto/devicekey';
-import { generateMnemonic, quizPositions } from '../crypto/bip39';
 import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { useTypingStore } from '../state/typingStore';
@@ -34,67 +32,12 @@ import { useVoiceStore } from '../state/voiceStore';
 import { useSecurityStore } from '../state/securityStore';
 import { readRoute } from '../router';
 
-function PasswordModal({ onClose }: { onClose: () => void }) {
-  const changePassword = useAuthStore((s) => s.changePassword);
-  const logout = useAuthStore((s) => s.logout);
-  const [oldPw, setOldPw] = useState('');
-  const [newPw, setNewPw] = useState('');
-  const [newPw2, setNewPw2] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-
-  const submit = async (): Promise<void> => {
-    if (newPw !== newPw2) {
-      setError('yeni şifreler eşleşmiyor');
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await changePassword(oldPw, newPw);
-      setDone(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'hata');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal title="Şifre değiştir" onClose={onClose}>
-      {done ? (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-lamp-300">
-            şifre güncellendi — tüm oturumlar kapandı, yeni şifrenle tekrar giriş yap
-          </p>
-          <button onClick={() => void logout().finally(onClose)} className="btn-lamp">
-            giriş ekranına dön
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <input type="password" autoFocus value={oldPw} onChange={(e) => setOldPw(e.target.value)} placeholder="eski şifre" className="input" />
-          <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="yeni şifre" minLength={6} className="input" />
-          <input type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} placeholder="yeni şifre (tekrar)" minLength={6} className="input" />
-          {error && <p className="text-sm text-stamp-400">{error}</p>}
-          <button onClick={() => void submit()} disabled={busy || !oldPw || newPw.length < 6} className="btn-lamp">
-            {busy ? 'güncelleniyor…' : 'değiştir'}
-          </button>
-        </div>
-      )}
-    </Modal>
-  );
-}
-
 export default function Shell() {
   const { t } = useT();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const [pwModal, setPwModal] = useState(false);
-  const [recModal, setRecModal] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
-  const [notifModal, setNotifModal] = useState(false);
+  const [settingsModal, setSettingsModal] = useState(false);
   const [deviceOffer, setDeviceOffer] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const loaded = useAppStore((s) => s.loaded);
@@ -233,23 +176,13 @@ export default function Shell() {
             <span className="hidden sm:inline">{user?.nick}</span>
           </button>
           <button
-            onClick={() => setNotifModal(true)}
+            onClick={() => setSettingsModal(true)}
             className="btn-ghost !px-2 !py-1 !text-xs"
-            title={t('shell.notifSettingsTitle')}
+            title={t('settings.title')}
+            aria-label={t('settings.title')}
           >
-            <Bell size={13} />
-          </button>
-          <button
-            onClick={() => setRecModal(true)}
-            className="btn-ghost !px-2 !py-1 !text-xs"
-            title={t('shell.recoveryTitle')}
-          >
-            <ShieldCheck size={13} />
-            <span className="hidden md:inline">{t('shell.recovery')}</span>
-          </button>
-          <button onClick={() => setPwModal(true)} className="btn-ghost !px-2 !py-1 !text-xs" title={t('shell.passwordTitle')}>
-            <KeyRound size={13} />
-            <span className="hidden md:inline">{t('shell.password')}</span>
+            <SettingsIcon size={13} />
+            <span className="hidden md:inline">{t('settings.title')}</span>
           </button>
           <LocalePicker variant="icon" />
           <button onClick={() => void logout()} className="btn-ghost !px-2 !py-1 !text-xs" title={t('shell.logoutTitle')}>
@@ -368,10 +301,8 @@ export default function Shell() {
         </div>
       )}
 
-      {pwModal && <PasswordModal onClose={() => setPwModal(false)} />}
-      {recModal && <RecoveryModal onClose={() => setRecModal(false)} />}
       {profileModal && <ProfileModal onClose={() => setProfileModal(false)} />}
-      {notifModal && <SettingsModal onClose={() => setNotifModal(false)} />}
+      {settingsModal && <SettingsModal onClose={() => setSettingsModal(false)} />}
       {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
       {isDmCall && pip && <PiPWidget />}
       {/* ongoing community call, minimized while browsing other rooms */}
@@ -380,113 +311,5 @@ export default function Shell() {
       )}
       <IncomingCall />
     </div>
-  );
-}
-
-// Attach a recovery phrase to a logged-in account (created before the ritual).
-function RecoveryModal({ onClose }: { onClose: () => void }) {
-  const { t } = useT();
-  const setupRecovery = useAuthStore((s) => s.setupRecovery);
-  const [phase, setPhase] = useState<'show' | 'quiz' | 'done'>('show');
-  const [words, setWords] = useState<string[] | null>(null);
-  useEffect(() => {
-    void generateMnemonic().then(setWords);
-  }, []);
-  const [quiz] = useState(() => quizPositions());
-  const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const quizOk =
-    !!words && quiz.every((i) => (answers[i] ?? '').trim().toLowerCase() === words[i]?.toLowerCase());
-
-  const download = (): void => {
-    if (!words) return;
-    const txt =
-      `postacim kurtarma ifadesi\n\n${words.join(' ')}\n\n` +
-      `Bu 12 kelime hesabını geri getiren tek şeydir. Kimselerle paylaşma,\n` +
-      `ekran görüntüsü alma. Kağıda yaz, kilitli bir yerde sakla.\n`;
-    const url = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'postacim-kurtarma.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const finish = async (): Promise<void> => {
-    if (!words) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await setupRecovery(words);
-      setPhase('done');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('recovery.fail'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal title={t('recovery.title')} onClose={onClose}>
-      {phase === 'show' && (
-        <div className="flex flex-col gap-3">
-          <p className="text-xs text-paper-500">{t('recovery.intro')}</p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {(words ?? Array.from({ length: 12 }, () => '…')).map((w, i) => (
-              <div
-                key={i}
-                className="flex items-baseline gap-1 rounded-sm border border-brass-700/40 bg-paper-50 px-1.5 py-1 text-night-950"
-              >
-                <span className="font-display text-[9px] font-semibold text-brass-700">{i + 1}</span>
-                <span className="select-all font-mono text-xs font-medium">{w}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={download} className="btn-ghost flex-1">
-              {t('recovery.download')}
-            </button>
-            <button onClick={() => setPhase('quiz')} disabled={!words} className="btn-lamp flex-1">
-              {t('recovery.savedContinue')}
-            </button>
-          </div>
-        </div>
-      )}
-      {phase === 'quiz' && (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-paper-300">{t('recovery.positionsPrompt', { positions: quiz.map((i) => i + 1).join(', ') })}</p>
-          {quiz.map((i) => (
-            <label key={i} className="flex items-center gap-2 text-sm">
-              <span className="w-14 shrink-0 text-paper-500">{t('recovery.wordLabel', { n: i + 1 })}</span>
-              <input
-                value={answers[i] ?? ''}
-                onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))}
-                className="input font-mono"
-                spellCheck={false}
-              />
-            </label>
-          ))}
-          <button onClick={() => void finish()} disabled={!quizOk || busy} className="btn-lamp">
-            {busy ? t('recovery.saving') : t('recovery.save')}
-          </button>
-          <button
-            onClick={() => setPhase('show')}
-            className="text-xs text-paper-500 transition-colors hover:text-paper-300"
-          >
-            {t('recovery.backToWords')}
-          </button>
-        </div>
-      )}
-      {phase === 'done' && (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-lamp-300">{t('recovery.success')}</p>
-          <button onClick={onClose} className="btn-lamp">
-            {t('recovery.ok')}
-          </button>
-        </div>
-      )}
-      {error && <p className="mt-2 text-sm text-stamp-400">{error}</p>}
-    </Modal>
   );
 }
