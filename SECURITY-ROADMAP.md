@@ -44,7 +44,7 @@ Yol haritası repo'da yaşıyor; README "Durum → Sıradaki" bölümü bu faz
 listesiyle değiştirildi; ARCHITECTURE genel akış tablosuna "güvenlik yol
 haritası" satırı eklendi.
 
-## Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik) — tamamlandı
+## Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik) — tamamlandı (9294cc3)
 
 **Kapatır:** "Gönderen atfı kriptografik değil — sender_id sunucu kolonu."
 
