@@ -148,7 +148,8 @@ describe('expires_at kabul + WS frame alanı', () => {
       key_version: 1,
       nonce: NONCE,
       ciphertext: CT,
-      expires_at: Date.now() + MAX_MESSAGE_TTL_MS + 1,
+      // +1 dk: süreçler arası saat kayması tavanın hemen üstünü yutmasın
+      expires_at: Date.now() + MAX_MESSAGE_TTL_MS + 60_000,
     });
     expect(far.status).toBe(400);
     const junk = await member.call('POST', `/channels/${chId}/messages`, {
@@ -220,7 +221,7 @@ describe('DM + GDM expires_at', () => {
 
 // --- janitor: kendi sunucusu — kısa süpürme aralığı env ile ---
 describe('janitor tombstone süpürmesi', () => {
-  it('süresi geçen satır tombstone olur; TTL'siz komşu dokunulmaz', async () => {
+  it("süresi geçen satır tombstone olur; TTL'siz komşu dokunulmaz", async () => {
     const srv2 = await startServer({ env: { MESSAGE_TTL_SWEEP_MS: '150' } });
     try {
       const u = await makeUser(srv2.baseUrl, 'jw');
