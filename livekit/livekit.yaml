@@ -10,7 +10,7 @@ rtc:
   port_range_end: 50100
   # Public deploy — use_external_ip + node_ip ile ICE portlarını public IP'de bind eder
   use_external_ip: true
-  node_ip: VPS_IP<        # ← VPS'in dış IP'si (ör: 203.0.113.10)
+  node_ip: 31.57.77.212        # ← VPS'in dış IP'si (ör: 203.0.113.10)
   # === 2 vCPU/3 GB RAM optimizasyonu (docs/NETWORKING.md §10) ===
 
 turn:
