@@ -1,0 +1,30 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  integrity-manifest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # web bundle derle + INTEGRITY.txt / INTEGRITY.sri.txt üret (scripts/bundle-hashes.sh)
+      - run: npm run integrity
+      - name: Manifest'i GitHub Release asset'i olarak yayınla
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --clobber \
+              web/dist/INTEGRITY.txt web/dist/INTEGRITY.sri.txt
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+              web/dist/INTEGRITY.txt web/dist/INTEGRITY.sri.txt
+          fi
