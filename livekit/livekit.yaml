@@ -1,14 +1,13 @@
 port: 7880
-# Prometheus metrikleri (track/oda/bayt sayıları) — yalnız localhost'tan
-# erişilebilir; Netdata/scraper bu portu okur. Dışarıya açma!
+# Prometheus metrikleri — yalnız localhost'tan
 prometheus_port: 6789
 rtc:
   tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50100
-  # LAN/dev; set true + external_ip for public NAT deployments
-  use_external_ip: false
+  # Public deploy — use_external_ip + node_ip ile ICE portlarını public IP'de bind eder
+  use_external_ip: true
+  node_ip: <VPS_IP>        # ← VPS'in dış IP'si (ör: 203.0.113.10)
 turn:
-  # embedded TURN covers symmetric-NAT cases where direct ICE fails
   enabled: true
   udp_port: 3478
