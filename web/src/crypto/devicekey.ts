@@ -19,7 +19,7 @@ const DEVICE_KEK_CTX = 'devkek01';
 const DB_NAME = 'pgv-device';
 const STORE = 'device';
 const KEY = 'device';
-const DECLINE_KEY = 'postacim.device-decline';
+const DECLINE_KEY = 'postaci.device-decline';
 
 /** cihaz KEK'i ile sarılan yük — her ikisi de b64 */
 export interface DevicePayload {
