@@ -88,7 +88,7 @@ haritası" satırı eklendi.
 - PRIVACY.md: "TTL'li mesajların süresi sunucu için görünür metadata'dır"
   cümlesi eklenir.
 
-## Faz 3 — Tor hidden service rehberi (IP metadata kapanışı)
+## Faz 3 — Tor hidden service rehberi (IP metadata kapanışı) — tamamlandı (f0d8b43)
 
 **Kapatır:** "Onion/Tor rehberi" roadmap maddesi; istemci IP'si metadata.
 

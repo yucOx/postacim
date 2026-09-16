@@ -305,6 +305,8 @@ npm test    # 190 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - **Web JS trust** — uygulama JS'i sunucudan dağıtılır; kötü niyetli/gözden geçirilmemiş sunucu değişmiş JS ile KEK'i çalabilir. Signed release/ayrı origin olmadan tarayıcı E2EE'de kapatılamaz. (KEK artık memory-only: reload'da şifre yeniden istenir; opsiyonel passkey cihaz kilidi blob'u cihaz donanımından türeyen anahtarla saklar — zararlı JS ancak aktif WebAuthn onayıyla kullanır, çalıp götüremez.)
 - **Sansür/sıralama** — kör sunucu mesaj gizleyebilir, sıralamayı ve timestamp'i manipüle edebilir (client timestamp + UUID AAD'ye bağlı, tespit edilebilir; gizleme engellenemez).
 - **Metadata** — sosyal graf (kim kiminle), zamanlama, mesaj boyutu (bucket padding'iyle seviyesi indirilir), presence, çağrı katılım/mute durumu sunucuda görünür.
+- **IP metadata** — istemcinin IP'si sunucuya görünür (TLS arkasında), sunucunun IP'si DNS/sertifika kayıtlarından çıkar. İkisi de Tor onion service ile kapatılır: [deploy/tor-hidden-service.md](deploy/tor-hidden-service.md) (v3 onion rehberi — https-onion önerilen; düz http onion varyantında oturum çerezi `Secure=false` üretmek zorunda kalınır, kararın bedeli rehberde yazılı).
+- **WebRTC medya Tor'dan geçmez** — sesli/görüntülü arama ve ekran paylaşımı UDP (LiveKit ICE) taşır; Tor SOCKS üzerinden akmaz. Mesajlaşma onion'da tam çalışır; aramada medya doğrudan gider (tarafların IP'si çağrı esnasında açılır — dürüst bedel) ya da kapalı moda alınır: `SCREEN_SHARE=off` + medya portları kapalı. Detay: [deploy/tor-hidden-service.md §7](deploy/tor-hidden-service.md).
 - **Ses/görüntü gönderen atfı** — metin mesajları Ed25519 imzalıdır; SFrame medya çerçeveleri üyeliği kanıtlar ama gönderen kimliğini kanıtlamaz (SFU içinde per-sender imza yok).
 - **Nick enumeration** — login/kurtarma pseudo-salt ile kapalı; kalan kanal kayıt sırasındaki "nick alınmış" (rate-limited).
 - **Public key doğrulama** — sunucu üye public key'lerini dağıtır. Katmanlar: TOFU keypin + güvenlik numarası (bant dışı) + anahtar defteri (append-only hash zinciri: kendi kayıt kontrolü + head damgası). Tam anti-forking istemciler arası gossip gerektirir — head damgası bant dışı karşılaştırılınca view-splitting yakalanır; gossip roadmap'te.
@@ -332,7 +334,7 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 
 - [x] Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik)
 - [x] Faz 2 — kaybolan mesajlar (disappearing messages)
-- [ ] Faz 3 — Tor hidden service rehberi (IP metadata)
+- [x] Faz 3 — Tor hidden service rehberi (IP metadata)
 - [ ] Faz 4 — signed release / reproducible build (JS trust azaltma)
 - [ ] Faz 5 — DH ratchet / MLS (tam forward secrecy; önce araştırma sprinti)
 - [ ] Faz 6 — key transparency gossip (anti-forking)
