@@ -22,3 +22,6 @@ data/
 
 # logs
 *.log
+
+# Let's Encrypt çalışma dizinleri (özel anahtar içerir)
+certbot/
