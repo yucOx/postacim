@@ -194,7 +194,20 @@ async function connectRoom(
   const worker = new E2EEWorker();
   // adaptiveStream + dynacast: receivers auto-switch to the simulcast layer their
   // bandwidth supports and unused layers stop being published — fastest transfer
-  const room = new Room({ adaptiveStream: true, dynacast: true, encryption: { keyProvider, worker } });
+  const room = new Room({
+    adaptiveStream: true,
+    dynacast: true,
+    encryption: { keyProvider, worker },
+    // 2 vCPU/3 GB VPS için uplink sınırı (docs/NETWORKING.md §10). Server
+    // tarafı v1.x bu alanları kabul etmiyor; client-side cap uyguluyoruz
+    // (manipüle edilebilir ama gizlilik için sorun değil — SFrame zaten
+    // içeriği şifreli, sadece SFU CPU'su için). 1.5 Mbps = 720p VP8 + 128kbps
+    // Opus; 4K gönderen kullanıcı encoder'ı 1.5 Mbps'ye sıkıştırır.
+    publishDefaults: {
+      videoEncoding: { maxBitrate: 1_500_000 },
+      screenShareEncoding: { maxBitrate: 1_500_000 },
+    },
+  });
   room.on(RoomEvent.EncryptionError, () => {
     useVoiceStore.setState({ error: 'E2EE hatası: anahtarlar uyuşmuyor' });
   });

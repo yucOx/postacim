@@ -249,38 +249,120 @@ server'ı SRTP anahtarını görebilir, kayıt yapabilir.
 
 ## 10. postacim konfigürasyonu — `livekit/livekit.yaml`
 
+**Gerçek yapılandırma (prod, 2 vCPU / 3 GB RAM hedefi):**
+
 ```yaml
 port: 7880                    # signaling (HTTPS + WSS)
+prometheus_port: 6789         # localhost-only metrik
+log_level: warn               # üretim: info/debug değil, uyarı/hata yeter
 rtc:
   tcp_port: 7881              # ICE TCP fallback
   port_range_start: 50000     # RTP/RTCP UDP port aralığı
   port_range_end: 50100       # 101 port → max ~50 eşzamanlı yayın
-  use_external_ip: false      # kendi dış IP'mizi biliyoruz, STUN gereksiz
+  use_external_ip: true       # public deploy için ICE candidate'larında VPS IP'si duyurulur
+  node_ip: <VPS_IP>           # ← VPS'in dış IP'si (ör: 203.0.113.10)
 turn:
   enabled: true               # NAT'lı kullanıcılar için embedded TURN
   udp_port: 3478
 ```
 
-**Neden 50000-50100 = 101 port?**
+**Sıralama: önce server (maxParticipants 12) → LiveKit (RTC config) → client (publishDefaults).**
+
+### 10.1 Server tarafı sınırlar (token grants)
+
+`server/src/livekit.ts` `mintVoiceToken` her kullanıcıya şu sınırları koyar:
+
+```typescript
+at.roomConfig = new RoomConfiguration({
+  maxParticipants: 12,     // 2 vCPU/3 GB hedefi: 12×11=132 stream sınır
+  emptyTimeout: 300,       // boşalan oda 5 dk sonra kapanır
+});
+at.addGrant({
+  roomJoin: true,
+  canPublish: true,
+  canSubscribe: true,
+  canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE],  // SCREEN_SHARE=off
+});
+```
+
+**12 nasıl hesaplandı:** 12×11=132 downtrack = 2 vCPU SFU'nun rahat çalışma
+tavanı. 25 kişilik oda 600 stream ederdi → CPU tavanı aşılır, LiveKit
+join'i reddeder (4xx — UI toast'a düşer).
+
+### 10.2 LiveKit v1.x'te olmayan alanlar
+
+LiveKit server image `v1.13.1` (ve v1.x ailesi) şu alanları **kabul etmez**:
+
+- `rtc.publisher_max_bitrate` — v2.x'te eklendi
+- `rtc.simulcast_layers` — v2.x'te eklendi
+
+Bu sınırlar **client tarafında** uygulanır (`web/src/state/voiceStore.ts`):
+
+```typescript
+const room = new Room({
+  adaptiveStream: true, dynacast: true, encryption: { keyProvider, worker },
+  publishDefaults: {
+    videoEncoding: { maxBitrate: 1_500_000 },       // 1.5 Mbps uplink cap
+    screenShareEncoding: { maxBitrate: 1_500_000 },
+  },
+});
+```
+
+`adaptiveStream` + `dynacast` zaten simulcast'in işini yapar (viewport'taki
+tile yüksek çözünürlük alır, görünmeyen düşük; Dynacast unused layer'ları
+kapatır). **Server'da tanımlamaya gerek yok, client otomatik yapıyor.**
+
+> Client tarafı cap manipüle edilebilir ama gizlilik için sorun değil —
+> SFrame zaten içeriği şifreli, sadece SFU CPU'su için sınır.
+
+### 10.3 Neden 50000-50100 = 101 port?
 
 Her yayın (audio + video track = birden fazla RTP stream) bir UDP port
 çifti kullanır (RTP + RTCP). 101 port = pratikte ~50 eşzamanlı
 yayıncı. Daha fazlası için `port_range_end: 50300` yap. UDP port
 havuzu = aynı anda kaç kişi **yayın** yapabilir (alıcılar paylaşır).
 
-**Neden `use_external_ip: false`?**
+### 10.4 Neden `use_external_ip: true + node_ip`?
 
-LAN veya kendi sunucumuzda dış IP zaten biliniyor. STUN'a sormaya
-gerek yok. Public deployda (`use_external_ip: true + external_ip: ...`)
-arkasında NAT varsa zorunlu.
+`use_external_ip: true` olmadan LiveKit kendini `0.0.0.0`'da başlatır ve
+logda `rtc.portICERange: [50000, 50100]` görünür ama gerçekte portlar
+**ihtiyaç oldukça dinamik bind** olur. External IP set edilince ilk peer
+geldiğinde 50000-50100/udp otomatik açılır ve STUN doğru cevap verir.
 
-**Neden TURN açık?**
+> `node_ip` placeholder olarak repo'da duruyor, prod'da **gerçek VPS
+> IP'si** ile değiştirilmeli (deploy/nginx-postacim.conf ve
+> `vps-fresh-install.md` §3'e bak).
+
+### 10.5 Neden TURN açık?
 
 Aynı şehirde bile, bazı ISP'ler (özellikle Türkiye'de bazı mobil
 operatörler) **UDP'yi engelliyor** veya kısıtlıyor. STUN başarısız
 olunca TURN tek çare. TURN açık olması **gizliliği bozmaz** çünkü
 E2EE var. TURN açık olmaması **erişilebilirliği bozar** çünkü bazı
 kullanıcılar bağlanamaz.
+
+### 10.6 Performans: CPU pinning
+
+`docker-compose.yml`:
+
+```yaml
+services:
+  livekit:
+    cpuset: "0"      # tam core 0
+  server:
+    cpuset: "1"      # tam core 1
+```
+
+Linux context switch + cache miss sıfırlanır, %15-25 throughput artışı
+(bedava). Web (nginx:alpine) hafif, paylaşımlı kalabilir.
+
+### 10.7 Performans: log seviyesi + broadcast tick
+
+- `LOG_LEVEL=warn` (`.env` + `server/src/index.ts`) — JSON serialize + I/O %5-10 azalır
+- `server/src/ws/hub.ts` broadcast tick (16 ms pencerede toplama + dedup) — 50 kişilik
+  odada 2500 mesaj/sn yerine 50×16ms = 800 broadcast/sn
+- Netdata **prod'da kapalı** (`profiles: [monitoring]`), ~50-100 MB RAM kurtarır;
+  geliştirme için `docker compose --profile monitoring up -d`
 
 ---
 

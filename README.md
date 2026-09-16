@@ -110,11 +110,33 @@ docker compose up -d --build  # livekit + server + web
 Sunucu tarafı (token ile zorlanır — UI'ı aşamaz):
 
 - **Oda limitleri** her ses token'ına gömülü (`RoomConfiguration`): oda başına
-  25 katılımcı, boşalan oda 5 dakikada kapanır. Yük artarsa `maxParticipants`
-  önce 15'e düşürülür, sonra LiveKit ayrı host'a taşınır.
+  12 katılımcı (2 vCPU/3 GB hedefi, 12×11=132 downtrack), boşalan oda
+  5 dakikada kapanır. Yük artarsa önce `maxParticipants` düşürülür, sonra
+  LiveKit ayrı host'a taşınır.
 - **`SCREEN_SHARE=off`** kill switch (yukarıda) — token grant seviyesinde.
 - E2EE (SFrame) stream başına ~%10 encoder/decoder CPU maliyeti koyar; gizlilik
   vaadinin bilinçli bedelidir, kaldırılamaz.
+
+### 2 vCPU / 3 GB hedef optimizasyonları
+
+2 vCPU/3 GB RAM VPS'te 50-80 ses → 120-150 ses, 30-50 video → 60-80 video:
+
+- **CPU pinning** (`docker-compose.yml` `cpuset: "0"`/`"1"`) — LiveKit core 0,
+  server core 1; context switch + cache miss sıfır, %15-25 throughput artışı
+- **WS broadcast batching** (`server/src/ws/hub.ts`, 16 ms tick + dedup) — 50 kişilik
+  odada 2500 broadcast/sn yerine ~800 broadcast/sn
+- **LOG_LEVEL=warn** (`.env` + `server/src/index.ts`) — JSON serialize + I/O %5-10 azalır
+- **Publisher cap 1.5 Mbps** (`web/src/state/voiceStore.ts` `publishDefaults.videoEncoding.maxBitrate`)
+  — 4K yayınlayan encoder 1.5 Mbps'ye sıkışır, SFU CPU korunur; gizlilik etkisi yok
+  (SFrame zaten içeriği şifreli)
+- **Netdata prod'da kapalı** (`docker-compose.yml` `profiles: [monitoring]`) — 50-100 MB RAM
+  kurtarır; geliştirme için `docker compose --profile monitoring up -d`
+- **TURN açık** (global kitle, 4G/CGNAT erişim için) — E2EE sayesinde gizlilik etkisi yok
+  (TURN operatörü sadece metadata görür, içerik göremez)
+
+> LiveKit v1.13.x server'da `publisher_max_bitrate` ve `simulcast_layers` alanları
+> **yok** (v2.x'te eklendi); bu yüzden uplink sınırı ve simulcast **client tarafında**
+> uygulanır (publishDefaults + adaptiveStream + dynacast).
 
 ### Arayüz dili (i18n)
 

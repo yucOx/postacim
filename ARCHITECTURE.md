@@ -119,11 +119,15 @@ Tümü `/api` önekli. `index.ts` auth hook'u: `PUBLIC_PATHS` dışında her şe
 | POST `/channels/:id/voice-token` | LiveKit oda token'ı (`ch_<id>` odası, 15 dk TTL); sarılı anahtar varlığı kanıt | evet |
 
 Token içeriği kaynak limitlerini taşır (`livekit.ts`): `RoomConfiguration`
-(maxParticipants 25, emptyTimeout 300 sn) ve `SCREEN_SHARE=off` iken
+(`maxParticipants: 12`, 2 vCPU/3 GB hedefi — 12×11=132 downtrack sınırı;
+`emptyTimeout: 300 sn`) ve `SCREEN_SHARE=off` iken
 `canPublishSources: [camera, microphone]` — ekran paylaşımı sunucu tarafından
 fiziksel engellenir. İstemci tarafı yayın optimizasyonları (simulcast+dynacast+
 adaptiveStream, ekran VP9, contentHint) `web/src/state/voiceStore.ts`'te;
-ayrıntı README "Medya: kalite, limitler ve optimizasyon" bölümünde.
+ayrıca `publishDefaults.videoEncoding.maxBitrate: 1_500_000` ile uplink
+1.5 Mbps'de sınırlı (4K yayınlayan kullanıcı encoder'ı 1.5 Mbps'ye
+sıkıştırır, gizlilik için sorun yok — SFrame içeriği şifreli). Ayrıntı
+README "Medya: kalite, limitler ve optimizasyon" bölümünde.
 
 ### Davetler (`routes/invites.ts`)
 
