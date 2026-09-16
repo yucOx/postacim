@@ -71,6 +71,26 @@ docker compose up -d --build  # livekit + server + web
 - Doğrulama: `curl http://localhost/api/health` → `{"ok":true}`
 - Veritabanı: `./data/` volume — yedekle/sil, her şey orada
 
+### Prod VPS: state'i repodan ayır (önerilen)
+
+Public sunucuda gerçek secret'lar (`LIVEKIT_SECRET`, `node_ip`) repoya
+girmez — gitignored `.env` ve `livekit/livekit.yaml`, `/etc/postacim/`
+altında tutulur, her `git pull` sonrası post-merge hook otomatik restore
+eder:
+
+```bash
+sudo cp .env.example /etc/postacim/.env && sudo chmod 600 /etc/postacim/.env
+sudo cp livekit/livekit.yaml.example /etc/postacim/livekit.yaml
+# /etc/postacim/* dosyalarını kendi değerlerinle düzenle, sonra:
+bash scripts/deploy-state.sh restore   # state'i repoya kopyala + diff raporu
+docker compose up -d --build
+```
+
+- `scripts/deploy-state.sh status|diff|restore` — state kontrolü,
+  `.env.example` ile alan farkı raporu (yeni env alanı geldiğinde uyarır)
+- Post-merge hook kurulumu ve sıfırdan VPS kurulumu:
+  [deploy/vps-fresh-install.md](deploy/vps-fresh-install.md)
+
 **`.env` ayarları:**
 - `LIVEKIT_URL` — tarayıcının LiveKit'e ulaşabildiği adres. Web proxy'si `/livekit`
   yolunu SFU'ya ilettiği için aynı origin kullanılır: sunucu makinesinde
@@ -79,7 +99,7 @@ docker compose up -d --build  # livekit + server + web
 - `LIVEKIT_API_KEY` / `LIVEKIT_SECRET` — LiveKit ile server'ın ortak anahtarı;
   prod için güçlü çift üret: `docker run --rm livekit/livekit-server:v1.13.1 generate-keys`
   (bilinen örnek değerlerde sunucu açılmayı reddeder)
-- `WEB_PORT` — web'in yayın portu (default 80)
+- `WEB_PORT` — web'in yayın portu (default 8080)
 - `SCREEN_SHARE` — `off` yapılırsa ses token'larından ekran paylaşım izni
   (`screen_share` publish kaynağı) düşer: istemci UI'ı yine de görebilir ama
   yayın LiveKit'te fiziksel olarak reddedilir. Acil durum kill switch'i —
@@ -171,10 +191,12 @@ sudo certbot --nginx -d postacim.example.com   # 443 + redirect otomatik
 Host nginx'siz hızlı LAN modu: `.env`'de `WEB_HOST=0.0.0.0` — bu modda docker
 web'in nginx'i XFF'yi kendisi yazar, internete doğrudan açma.
 
-**Not:** `livekit/livekit.yaml` bind-mount'tur ve livekit servisi image'dan
-koştuğu için `up -d --build` config değişince onu **yeniden başlatmaz** —
-livekit config'ine dokunan güncellemelerden (ör. `prometheus_port`) sonra
-ayrıca `docker compose restart livekit` çalıştır.
+**Not:** `livekit/livekit.yaml` gitignored state'tir (şablon:
+`livekit/livekit.yaml.example`; prod'da `/etc/postacim/livekit.yaml`) ve
+bind-mount'tur; livekit servisi image'dan koştuğu için `up -d --build`
+config değişince onu **yeniden başlatmaz** — livekit config'ine dokunan
+güncellemelerden (ör. `prometheus_port`) sonra ayrıca
+`docker compose restart livekit` çalıştır.
 
 ### İzleme (kapasite takibi)
 
@@ -188,9 +210,11 @@ ayrıca `docker compose restart livekit` çalıştır.
 2. **LiveKit metrikleri** — `livekit.yaml`'da `prometheus_port: 6789` açık;
    `curl localhost:6789/metrics` (yalnız localhost — dışarıya açma). Track,
    oda, bayt ve paket sayaçları.
-3. **Makine metrikleri (Netdata)** — compose servisi, grafik dashboard'u:
-   `docker compose up -d netdata` → `http://localhost:19999` (**yalnız
-   127.0.0.1'e bağlı** — dış erişim yok). Uzaktan bakmak için SSH tüneli:
+3. **Makine metrikleri (Netdata, opsiyonel)** — compose profili, grafik
+   dashboard'u: `docker compose --profile monitoring up -d` →
+   `http://localhost:19999` (**yalnız 127.0.0.1'e bağlı** — dış erişim yok).
+   2 vCPU/3 GB prod hedefinde varsayılan kapalıdır (~50-100 MB RAM). Uzaktan
+   bakmak için SSH tüneli:
    `ssh -L 19999:localhost:19999 <sunucu>`. CPU, RAM, disk IO, ağ ve tüm
    Docker container'ları saniye bazında; eşik alarmı Netdata ayarlarından
    (ör. CPU %70 → Discord webhook) bağlanır. Sistem içlerini ifşa ettiği
@@ -231,7 +255,7 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Otomatik testler
 
 ```bash
-npm test    # 153 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 173 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
 ```
 
 - `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
@@ -297,7 +321,22 @@ npm test    # 153 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Sprint 1 — bütünlük: per-user limitler, pending rekey, LiveKit eviction, oturum düşürme
 - [x] Sprint 2 — TLS/HSTS + CSP + httpOnly çerez + WS dayanıklılık
 - [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
-- [x] Test turu — 105 otomatik test + CI
+- [x] Test turu — otomatik test + CI (bugün: 19 dosya, 173 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
 
 **Sıradaki (kurul kararı):** MLS/DH-ratchet (forward secrecy tamamlaması) · anahtar defteri gossip · Onion/Tor rehberi · çoklu cihaz (MLS sonrası)
+
+## Katkıda bulunma
+
+Geliştirme kurulumu, test akışı, i18n parite kuralı ve PR beklentileri:
+[CONTRIBUTING.md](CONTRIBUTING.md). Güvenlik açığı bildirimi (özel kanal):
+[SECURITY.md](SECURITY.md) — lütfen güvenlik sorunlarını public issue
+olarak açmayın.
+
+## Lisans
+
+[AGPL-3.0-or-later](LICENSE) — GPLv3'ün ağ kullanımına kapalı türevi:
+bu sunucunun değiştirilmiş bir sürümünü hizmet olarak işletirseniz,
+kaynak kodunu kullanıcılarına sunmak zorundasınız. Gizlilik aracının
+sunucu varyantının kapanmaması bilinçli bir tercihtir (Signal'in izlediği
+yol). © 2026 yuxor.ltd
