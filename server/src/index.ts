@@ -36,7 +36,10 @@ export const app = Fastify({
   // the proxy every caller shares one IP and per-IP limits collapse.
   trustProxy: true,
   logger: {
-    level: 'info',
+    // LOG_LEVEL env: 'info' default (geliştirme), 'warn' önerilir (prod).
+    // 2 vCPU/3 GB hedefinde debug/info düşürülmeli — JSON serialize + I/O
+    // %5-10 azalır.
+    level: process.env.LOG_LEVEL ?? 'info',
     // PRIVACY: log yalnız yöntem+yol taşır. Default seriyalayıcı url'yi
     // query'siz değil yazıyor (?nick=... gibi hassas parametreler düşer) ve
     // remoteAddress (istemci IP'si) ekliyordu — ikisini de sansürledik.
