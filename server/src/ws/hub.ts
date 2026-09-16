@@ -31,8 +31,12 @@ class Hub {
   // active 1:1 DM calls keyed by dm channel id; mirrors voice above but for DMs.
   // needed so a peer dropping their socket cleanly notifies the other side.
   private dmCalls = new Map<string, DmCallRow>();
-  // outgoing frame queue, deduped by ws → JSON string. Cleared each tick.
-  private outboundFrames = new Map<WebSocket, string>();
+  // outgoing frame queues: ws → frames pending this tick. Set keeps insertion
+  // order and drops true duplicates (same payload twice) WITHOUT losing
+  // distinct events — a Map<ws, string> would let the last event overwrite
+  // earlier ones sent in the same 16 ms window (message loss, caught by
+  // reactions.test.ts: rapid add→remove delivered only "remove").
+  private outboundFrames = new Map<WebSocket, Set<string>>();
   private batcher: NodeJS.Timeout | null = null;
 
   register(ws: WebSocket, user: { id: string; nick: string }): void {
@@ -113,19 +117,27 @@ class Hub {
     }
   }
 
-  /** Dedup + batch: aynı frame string'i aynı socket'te 1 kere tutulur;
-   *  flush BROADCAST_TICK_MS tick'inde olur. İlk enqueue setTimeout kurar,
-   *  sonrakiler noop — son aktiviteden 16 ms sonra trailing flush. */
+  /** Dedup + batch: identical frame strings on the same socket collapse; every
+   *  distinct frame is kept in order and flushed on the BROADCAST_TICK_MS tick.
+   *  First enqueue schedules the timer; later ones just queue (trailing flush
+   *  ~16 ms after first activity). */
   private enqueue(ws: WebSocket, data: string): void {
-    this.outboundFrames.set(ws, data);
+    let frames = this.outboundFrames.get(ws);
+    if (!frames) {
+      frames = new Set();
+      this.outboundFrames.set(ws, frames);
+    }
+    frames.add(data);
     if (this.batcher) return;
     this.batcher = setTimeout(() => this.flush(), BROADCAST_TICK_MS);
   }
 
   private flush(): void {
     this.batcher = null;
-    for (const [ws, data] of this.outboundFrames) {
-      if (ws.readyState === ws.OPEN) ws.send(data);
+    for (const [ws, frames] of this.outboundFrames) {
+      if (ws.readyState === ws.OPEN) {
+        for (const data of frames) ws.send(data);
+      }
     }
     this.outboundFrames.clear();
   }
