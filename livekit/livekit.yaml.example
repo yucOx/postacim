@@ -1,22 +1,117 @@
+# postacim — LiveKit (medya sunucusu / SFU) konfigürasyon şablonu
+#
+# Bu dosya, sıfırdan LiveKit kurulumu için hazır şablondur. Her alan:
+#   1. Neyi kontrol eder
+#   2. Varsayılan değer (compose tarafında sağlanır, bu dosyaya yazılmaz)
+#   3. Örnek/önerilen gerçek değer
+#   4. Doğrulama komutu (varsa)
+#
+# Kullanım:
+#   sudo cp livekit/livekit.yaml.example /etc/postacim/livekit.yaml
+#   # aşağıdaki <VPS_IP> ve diğer placeholder'ları kendi değerlerinle değiştir
+#   # ardından VPS'te: scripts/deploy-state.sh restore
+#
+# !!! DİKKAT !!!
+# - node_ip <VPS_IP> gerçek VPS dış IP'si olmalı. Yanlışsa ICE candidate'ları
+#   yanlış IP duyurur → medya bağlantısı kurulamaz.
+# - use_external_ip: false (LAN/lokal) veya true (public deploy) seçimi
+#   doğru olmalı. Public deploy'da use_external_ip=false → ICE portları
+#   50000-50100/udp dinamik bind olur, STUN cevapları tutarsız olur.
+# - Bu dosyada `rtc` ve `turn` nested bloklar. Aynı yapıyı koru — flat
+#   format LiveKit tarafından reddedilir.
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Signaling
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# HTTP signaling portu (host nginx /livekit → 127.0.0.1:7880'e proxy yapar)
+# 0-65535 arası, çakışma olmaması için 7880 standart
 port: 7880
-# Prometheus metrikleri — yalnız localhost'tan
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Prometheus metrikleri (opsiyonel)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Netdata veya Prometheus scraper bu porta bağlanır. YALNIZ localhost'tan
+# erişilebilir olmalı (host firewall/iptables). Dışarıya ASLA açma —
+# metrikler oda/katılımcı/IP bilgisi içerir (metadata, E2EE sonrası bile).
+#
+# Erişim kontrolü:
+#   ss -tlnp | grep 6789
+#   curl -s http://127.0.0.1:6789/metrics | head -3
 prometheus_port: 6789
-# Düşük log seviyesi: sadece uyarı/hata. Debug modunda her RTP paket
-# olayı loglanır, 2 vCPU'da %5-10 CPU yükü.
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Log seviyesi
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#   debug → her RTP paket olayı (geliştirme; 2 vCPU altında %5-10 CPU)
+#   info  → önemli olaylar (default)
+#   warn  → uyarı + hata (önerilen prod, 2 vCPU/3 GB hedefi)
+#   error → yalnız hata
+#
+# Değiştirince: docker compose restart livekit
 log_level: warn
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# RTC (WebRTC transport) — Public deploy
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 rtc:
+  # ICE TCP fallback portu (UDP engellenen ağlar için)
+  # 0-65535 arası, 7881 standart
   tcp_port: 7881
+
+  # RTP/RTCP UDP port aralığı. Her yayın (audio + video) bir port çifti
+  # kullanır (RTP + RTCP). 101 port = ~50 eşzamanlı yayıncı.
+  #   50000-50100 → 101 port, default (50 yayıncı yeterli)
+  #   50000-50300 → 301 port, büyük konferans (~150 yayıncı)
+  #
+  # NOT: LiveKit v1.x'te publisher_max_bitrate ve simulcast_layers
+  # alanları YOK (v2.x'te eklendi). Uplink cap client tarafında
+  # uygulanır (web/src/state/voiceStore.ts publishDefaults).
   port_range_start: 50000
   port_range_end: 50100
-  # Public deploy — use_external_ip + node_ip ile ICE portlarını public IP'de bind eder
-  use_external_ip: true
-  node_ip: <VPS_IP>        # ← VPS'in dış IP'si (ör: 203.0.113.10)
-  # === 2 vCPU/3 GB RAM optimizasyonu (docs/NETWORKING.md §10) ===
 
+  # Public deploy: true (NAT arkasında bile, VPS IP'sini ICE candidate'larında
+  # duyurur). LAN/lokal: false (kendi IP'mizi zaten biliyoruz).
+  #
+  # !!! use_external_ip: true + node_ip <VPS_IP> birlikte olmalı !!!
+  # - false → node_ip yok sayılır
+  # - true + yanlış node_ip → STUN cevapları tutarsız, medya kopar
+  # - true + doğru node_ip → otomatik test: docker logs postacim-livekit-1
+  #   "using external IPs" satırı görünmeli
+  use_external_ip: true
+  node_ip: <VPS_IP>          # ← VPS'in dış IPv4'ü (ör: 203.0.113.10)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# TURN (Traversal Using Relays around NAT) — opsiyonel ama önerilir
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Aynı şehirde bile bazı ISP'ler (özellikle Türkiye'de bazı mobil
+# operatörler) UDP'yi engelliyor. STUN başarısız olunca TURN tek çare.
+#
+# Gizlilik: TURN açık olması gizliliği BOZMAZ çünkü SFrame E2EE açık
+# (TURN operatörü yalnızca şifreli byte'ları görür, içeriği göremez).
+# Erişilebilirlik: TURN kapalıysa bazı kullanıcılar bağlanamaz.
+#
+#   true  → 4G/CGNAT arkasındaki kullanıcılar bağlanabilir (önerilen)
+#   false → sadece direkt STUN başarılı ağlar (ofis/LAN)
 turn:
-  # Embedded TURN — global kitle, 4G/CGNAT erişilebilirliği için açık.
-  # E2EE sayesinde TURN operatörü (biz) içeriği göremez, sadece
-  # metadata. Kapatırsan bazı kullanıcılar (UDP engellenen ağlar) hiç
-  # bağlanamaz.
   enabled: true
+
+  # TURN UDP portu. UDP 3478 IETF standardı, çoğu firewall izin verir.
   udp_port: 3478
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Değişiklikler sonrası kontroller
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#   bash scripts/deploy-state.sh restore   # VPS state'i geri yükle
+#   docker compose restart livekit
+#   curl -s -m 3 -o /dev/null -w '127.0.0.1:7880 → %{http_code}\n' \
+#     http://127.0.0.1:7880/                # 200 olmalı
+#   python3 -c "import socket,struct
+#   s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3)
+#   s.sendto(struct.pack('!HHI',0x0001,0,0x2112A442)+b'\x00'*12,('<VPS_IP>',3478))
+#   print(s.recvfrom(4096))"                # 40-byte STUN cevabı
+#
+# Hata ayıklama:
+#   docker logs postacim-livekit-1
+#   ss -tln | grep -E '7880|7881'           # signaling portları açık mı
+#   ss -uln | grep -E '3478|50000'          # TURN + ICE portları açık mı

@@ -108,14 +108,33 @@ diff_env() {
   fi
 }
 
-# livekit.yaml.example vs livekit.yaml karşılaştırma (sadece anahtar/alan varlığı)
+# livekit.yaml.example vs livekit.yaml karşılaştırma (sadece top-level key)
 diff_livekit() {
   if [ ! -f livekit/livekit.yaml ] || [ ! -f livekit/livekit.yaml.example ]; then
     return 0
   fi
-  # Top-level key + nested rtc/turn key'leri karşılaştır
-  local cur_keys=$(grep -E '^[a-z_]+:' livekit/livekit.yaml | sort -u)
-  local ex_keys=$(grep -E '^[a-z_]+:' livekit/livekit.yaml.example | sort -u)
+  # Yorum satırlarını (# ile başlayan) çıkar, sadece satır başında key:
+  # olan top-level key/value satırlarını yakala (girinti olmayan).
+  # Python ile daha sağlam: dosyayı parse et, sadece indent 0 olan key'leri al
+  local cur_keys=$(python3 -c "
+import yaml, sys
+try:
+    with open('livekit/livekit.yaml') as f:
+        d = yaml.safe_load(f) or {}
+    for k in d: print(k)
+except Exception as e:
+    sys.exit(1)
+" 2>/dev/null | sort -u)
+
+  local ex_keys=$(python3 -c "
+import yaml, sys
+try:
+    with open('livekit/livekit.yaml.example') as f:
+        d = yaml.safe_load(f) or {}
+    for k in d: print(k)
+except Exception as e:
+    sys.exit(1)
+" 2>/dev/null | sort -u)
 
   local new_in_example=$(comm -13 <(echo "$cur_keys") <(echo "$ex_keys"))
 
