@@ -19,6 +19,7 @@ Bu sunucunun ne saktığını ve neyi **saktığını** anlatıyor. Kod her iddi
 - **avatar** (isteğe bağlı): 64×64 küçük JPEG (~3–8 KB), şifresiz — bilerek şifresizdir, herkese açık profil parçasıdır
 - **hesap oluşturma tarihi** ve oturum kayıtları (oluşturma + sona erme zamanı, ~7 günlük süresi etkinlikle yenilenir; oturum token'ı yalnızca SHA-256 hash'i olarak saklanır)
 - **mesajlar**: yalnızca şifreli zarf (nonce + ciphertext), gönderici kimliği, saat, boyut — **içerik sunucuda asla okunabilir halde değildir**
+- **kaybolan mesaj süresi** (isteğe bağlı): mesaj başına seçilen TTL (`expires_at`) sunucu için **görünür metadata'dır** — süreyi bilir, içeriği bilmez. Yaşam döngüsü: süresi dolan mesaj sunucuda tombstone'a çevrilir (nonce/ciphertext silinir), istemcide de süresi dolanlar render'dan düşer; yani erişim + ömür sınırlaması bu ikisinin kombinasyonudur
 - **sosyal graf**: kim hangi topluluğa/kanala üye, kim kime DM açmış, arkadaşlıklar, davetiyeler, roller
 - **topluluk / kanal / grup adları** (şifresiz)
 - **sesli arama/konferanslar**: kim katıldı, hangi kanalda, ne zaman — ses/görüntü içeriği uça-uca şifrelidir (SFrame); medya sunucusu (LiveKit, kendi sunucumuzda) içeriği göremez, katılım bilgisini görür

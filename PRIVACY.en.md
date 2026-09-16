@@ -19,6 +19,7 @@ This explains what we store — and what we **cannot** see. The code is open and
 - **avatar** (optional): a 64×64 JPEG (~3–8 KB), stored unencrypted by design — it is a public profile component
 - **account creation date** and session records (creation + expiry timestamps; sessions live ~7 days and are refreshed while you use the app; session tokens are stored only as SHA-256 hashes)
 - **messages**: only the encrypted envelope (nonce + ciphertext), sender id, timestamp and size — content is never available in readable form
+- **disappearing-message timer** (optional): the per-message TTL (`expires_at`) is **visible metadata** to the server — it knows the lifetime, never the content. Lifecycle: expired messages are tombstoned on the server (nonce/ciphertext wiped) and clients stop rendering them once expired; access + lifetime limiting is the combination of these two
 - **your social graph**: which communities/channels you belong to, whom you DM, friendships, invites, roles
 - **community / channel / group names** (unencrypted)
 - **voice calls / conferences**: who joined, which channel, when. Call audio/video is end-to-end encrypted (SFrame); the media server (LiveKit, self-hosted) relays encrypted media and sees participation, not content

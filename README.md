@@ -8,6 +8,7 @@ düz hâlini **hiçbir zaman** görmez.
 
 - **Kayıt: sadece nick + şifre** — e-posta/telefon yok, zero-knowledge; kayıt sırasında **BIP-39 kurtarma ifadesi** ritüeli (12 kelime, 3'ünü doğrulama, metin dosyası indirme) — şifre kaybında kimlik ve geçmiş kurtarılır
 - **Yazı odaları** — XChaCha20-Poly1305 ile istemci tarafında şifreli, gerçek zamanlı (WebSocket)
+- **Kaybolan mesajlar** — composer'dan mesaj başına TTL (kapalı / 1 saat / 1 gün / 1 hafta), kanal ve DM/grup başına hatırlanır; süre dolan mesajlar sunucuda tombstone'a çevrilir, istemcide "süresi doldu" olarak görünür (TTL sunucu için metadata — bkz. Bilinen sınırlar)
 - **Sesli/görüntülü odalar** — LiveKit SFU üzerinde SFrame ile gerçek E2EE, onlarca katılımcı
 - **Topluluklar** — Discord benzeri sunucu → kanal yapısı, sahip/üye rolleri
 - **Anahtar dağıtımı** — kanal anahtarları her üyeye sealed-box ile sarılır; sunucu açamaz
@@ -48,7 +49,7 @@ düz hâlini **hiçbir zaman** görmez.
 | Cihaz kilidi (ops.) | WebAuthn PRF'ten türeyen cihaz KEK'i ile blob IndexedDB'de — F5'te parmak izi, şifre fallback akışı korunur |
 | Anahtar defteri | public key'ler append-only hash zincirinde (`key_log`); istemci boot'ta zinciri doğrular, head damgası profilde bant dışı karşılaştırma için. İmza anahtarları da defterden dağıtılır — yalnız zincir bütünlüğü kanıtlanmış kayıtlar imza doğrulamasına beslenir |
 
-**Bilinen sınırlar (MVP):** MLS yok (simetrik ratchet var, DH ratchet yok — çıkarılan üye öncesi mesajları zaten görmüşse okur); tek kimlik blob'u (cihaz iptali yok); şifre **ve** kurtarma ifadesi ikisi birden kaybolursa hesap kurtarılamaz (ifade kurtarma verisi de kimlik gibi uçtan uca sarılı — sunucu açamaz); kanal anahtarı rotasyonu açık davet linklerini ve katılım şifresi anahtarlarını geçersiz kılar (yeni üretilmeli — başvuru onayı etkilenmez); ban, yeni nick açılmasını engellemez (e-postasız sistemde yapısal sınır — katılım şifresi buna karşı direnir); kanal adları/üye listesi/zaman damgaları/roller/davet metadata'sı sunucuya açıktır (içerik değil); DB'de at-rest şifreleme (SQLCipher) bilinçli ertelendi — E2EE içeriği zaten koruyor, metadata katkısı marjinal, better-sqlite3 derlemesi imajı kırılganlaştırır. Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
+**Bilinen sınırlar (MVP):** MLS yok (simetrik ratchet var, DH ratchet yok — çıkarılan üye öncesi mesajları zaten görmüşse okur); tek kimlik blob'u (cihaz iptali yok); şifre **ve** kurtarma ifadesi ikisi birden kaybolursa hesap kurtarılamaz (ifade kurtarma verisi de kimlik gibi uçtan uca sarılı — sunucu açamaz); kanal anahtarı rotasyonu açık davet linklerini ve katılım şifresi anahtarlarını geçersiz kılar (yeni üretilmeli — başvuru onayı etkilenmez); ban, yeni nick açılmasını engellemez (e-postasız sistemde yapısal sınır — katılım şifresi buna karşı direnir); kanal adları/üye listesi/zaman damgaları/roller/davet metadata'sı sunucuya açıktır (içerik değil); **kaybolan mesajların `expires_at`'ı sunucu için görünür metadata'dır** (içerik değil, ömür bilgisi) — erişim + ömür sınırlaması client-side render + sunucu janitor kombinasyonudur, sunucu tarafı silme garanti edilir ama client'ta süreyi görme engellenmez; DB'de at-rest şifreleme (SQLCipher) bilinçli ertelendi — E2EE içeriği zaten koruyor, metadata katkısı marjinal, better-sqlite3 derlemesi imajı kırılganlaştırır. Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
 
 ## Mimari
 
@@ -323,14 +324,14 @@ npm test    # 190 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Sprint 1 — bütünlük: per-user limitler, pending rekey, LiveKit eviction, oturum düşürme
 - [x] Sprint 2 — TLS/HSTS + CSP + httpOnly çerez + WS dayanıklılık
 - [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
-- [x] Test turu — otomatik test + CI (bugün: 19 dosya, 173 test)
+- [x] Test turu — otomatik test + CI (bugün: 23 dosya, 206 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
 
 **Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):
 kripto/gizlilikte Signal paritesine 8 fazlı program.
 
 - [x] Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik)
-- [ ] Faz 2 — kaybolan mesajlar (disappearing messages)
+- [x] Faz 2 — kaybolan mesajlar (disappearing messages)
 - [ ] Faz 3 — Tor hidden service rehberi (IP metadata)
 - [ ] Faz 4 — signed release / reproducible build (JS trust azaltma)
 - [ ] Faz 5 — DH ratchet / MLS (tam forward secrecy; önce araştırma sprinti)
