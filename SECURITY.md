@@ -19,6 +19,12 @@ dünyaya duyurmak anlamına gelir.
 **İlk yanıt hedefi: 72 saat.** Kabul edilen açıklar için düzeltme
 zaman çizelgesini birlikte belirleriz (kural: koordineli açıklama, 90 gün).
 
+**Patch'iniz varsa public PR olarak AÇMAYIN** — public repoda PR'ın
+kaynağı görülebilir; diff, açığın dünyaya ilanı olur. Bunun yerine
+rapora ek olarak ya da özel iletişimden paylaşın; fix review sonrası
+maintainer tarafından commit edilir ve yayınlandığında adınız/takma
+adınızla anılırsınız.
+
 ## Kapsam — neler bildirilmeli
 
 - **Kripto**: mesaj/anahtar çözümü, AAD bağlama atlatması, ratchet zinciri
