@@ -1,17 +1,17 @@
-# postacim — Signal-parite güvenlik programı (master prompt)
+# postacim — Güvenlik yol haritası (Signal paritesi)
 
-> Bu dosya bir **prompt**tur: yeni Claude Code oturumlarında sırayla çalıştırılır.
-> İlk kullanım: "Faz 0'ı uygula". Sonraki oturumlar: "Faz 1 ile devam" vb.
-> Bağımlılıklar: 1→2 bağımsız paralel olabilir; 5, 6, 7 sıralı; 4 her zaman; 8 en son.
+> Her faz sırayla uygulanır: bir faz tamamlanıp push'landıktan sonra
+> sıradaki başlar. Bağımlılıklar: 1→2 bağımsız paralel olabilir;
+> 5, 6, 7 sıralı; 4 her zaman; 8 en son.
 
 ---
 
-## Rol ve bağlam
+## Bağlam
 
-Sen postacim'in geliştiricisin (Claude Code). postacim: gizlilik odaklı,
-uçtan uca şifreli, self-hostable, Discord-benzeri web sohbet uygulaması
-(React 19 + Fastify + better-sqlite3 + LiveKit SFU, AGPL-3.0, 173 test).
-Sunucu yalnız opak blob taşır — bu **değişmez invariant**.
+postacim: gizlilik odaklı, uçtan uca şifreli, self-hostable,
+Discord-benzeri web sohbet uygulaması (React 19 + Fastify +
+better-sqlite3 + LiveKit SFU, AGPL-3.0). Sunucu yalnız opak blob taşır —
+bu **değişmez invariant**.
 
 Hedef: kripto/gizlilik derinliğinde **Signal ile parite**. Mevcut dürüst
 boşluklar (README "Bilinen sınırlar"): gönderen atfı kriptografik değil,
@@ -20,32 +20,29 @@ mesaj yok, key transparency gossip yok.
 
 ## Her fazda zorunlu akış
 
-1. `session_recall("faz konusu")` ile önceki kararları çek; çelişki varsa
-   önceki karara uy veya kullanıcıya açıkça danış.
+1. Önceki faz kararlarıyla çelişki varsa önceki karara uy veya açıkça danış.
 2. Kısa tasarım: hangi dosya, hangi migration, hangi invariant korunuyor.
-   Kripto tasarımı içeren fazlarda tasarımı KULLANICIYA ONAYLAT (satır
-   bazlı değil — konsept bazlı).
-3. Uygula: CLAUDE.md kuralları (minimum code, surgical, mevcut stile uyum).
+   Kripto tasarımı içeren fazlarda tasarım konsept bazlı onaya tabidir.
+3. Uygula: minimum code, surgical, mevcut stile uyum.
 4. **Yeni test zorunlu** — kripto değişikliğinde negatif senaryolar
    (yanlış anahtar/AAD/imza reddi) şart. `npm test` tamamen yeşil
-   (173+ artan sayı) olmadan commit yok.
+   olmadan commit yok.
 5. Yeni UI metni **5 dilde** (tr/en/de/es/fr) — `locale-parity` CI'yı kırar.
 6. Dokümantasyon aynı PR'da: README (özellikler + kripto tablosu + bilinen
    sınırlar + roadmap), ARCHITECTURE.md (anahtar yaşam döngüsü + DB şeması +
    API/WS + modül haritası), gerekirse PRIVACY.md/PRIVACY.en.md.
-7. `record_decision` (kritik kararlar) + `record_code_area` (yeni akış) +
-   conventional commit + push.
+7. Kritik kararları kaydet + conventional commit + push.
 8. README "Bilinen sınırlar" listesinden bu fazın kapattığı maddeyi
    kaldır/düzenle — her fazın sonunda bu liste Signal-pariteye yaklaşmayı
    göstermeli.
 
 ---
 
-## Faz 0 — Plan commit'i
+## Faz 0 — Plan commit'i (tamamlandı: 7df484d)
 
-README "Durum → Sıradaki (kurul kurar)" bölümünü bu dosyanın faz listesiyle
-değiştir (bağlantı ver). Amaç: roadmap'in repo'da yaşaması. + ARCHITECTURE
-genel akış tablosuna "güvenlik yol haritası" satırı.
+Yol haritası repo'da yaşıyor; README "Durum → Sıradaki" bölümü bu faz
+listesiyle değiştirildi; ARCHITECTURE genel akış tablosuna "güvenlik yol
+haritası" satırı eklendi.
 
 ## Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik)
 
@@ -129,7 +126,7 @@ genel akış tablosuna "güvenlik yol haritası" satırı.
   var, ama doğruluk riski yüksek) vs (c) hafif çift-DH ratchet (Signal
   protokolünün alt kümesi). Karar kriterleri: bundle boyutu, WASM/JS
   entegrasyonu, test edilebilirlik, spec'e sadakat, bağımlılık riski.
-  Kararı `record_decision` ile sabitle + kullanıcı onayı al.
+  Kararı sabitle + kullanıcı onayı al.
 - Uygulama: `web/src/crypto/` altında yeni modül; mevcut AEAD katmanı
   (message.ts) zaten soyut — ratchet state'i + epoch yönetimi değişir.
   Grup: MLS seçilirse grup state'i tam değişir; çift-DH seçilirse

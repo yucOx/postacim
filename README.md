@@ -324,7 +324,7 @@ npm test    # 173 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Test turu — otomatik test + CI (bugün: 19 dosya, 173 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
 
-**Sıradaki — güvenlik yol haritası** ([SIGNAL-PARITY-PROMPT.md](SIGNAL-PARITY-PROMPT.md)):
+**Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):
 kripto/gizlilikte Signal paritesine 8 fazlı program.
 
 - [ ] Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik)
