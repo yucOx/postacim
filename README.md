@@ -377,7 +377,7 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 - [x] Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik)
 - [x] Faz 2 — kaybolan mesajlar (disappearing messages)
 - [x] Faz 3 — Tor hidden service rehberi (IP metadata)
-- [ ] Faz 4 — signed release / reproducible build (JS trust azaltma)
+- [x] Faz 4 — signed release / reproducible build (JS trust azaltma)
 - [ ] Faz 5 — DH ratchet / MLS (tam forward secrecy; önce araştırma sprinti)
 - [ ] Faz 6 — key transparency gossip (anti-forking)
 - [ ] Faz 7 — çoklu cihaz (Faz 5 sonrası)
