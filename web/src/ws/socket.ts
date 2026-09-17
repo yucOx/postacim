@@ -15,6 +15,13 @@ let retry = 0;
 const handlers = new Set<Handler>();
 const statusHandlers = new Set<(s: WsStatus) => void>();
 let status: WsStatus = 'offline';
+// son kapanışın teşhis bilgisi — "ara ara atıyor" şikayetinde kökeni görünür
+// kılar: 1006 anormal (ağ/suspend/sunucu terminate), 4003 oturum, 4004 auth
+// zaman aşımı (bağlandıktan sonra ana thread 10s+ bloklandı demektir),
+// 1009 çerçeve çok büyük
+let lastClose: { code: number; reason: string; at: number } | null = null;
+
+export const lastCloseInfo = (): { code: number; reason: string; at: number } | null => lastClose;
 
 const setStatus = (s: WsStatus): void => {
   status = s;
@@ -65,7 +72,8 @@ function open(): void {
       // ignore malformed frames
     }
   };
-  ws.onclose = () => {
+  ws.onclose = (ev) => {
+    lastClose = { code: ev.code, reason: ev.reason, at: Date.now() };
     setStatus('offline');
     scheduleReconnect();
   };

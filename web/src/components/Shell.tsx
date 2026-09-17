@@ -4,7 +4,7 @@ import { Track } from 'livekit-client';
 import { Bell, LogOut, Menu, Settings as SettingsIcon } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
-import { wsConnect, wsDisconnect, onWsStatus, type WsStatus } from '../ws/socket';
+import { wsConnect, wsDisconnect, onWsStatus, lastCloseInfo, type WsStatus } from '../ws/socket';
 import ServerRail from './ServerRail';
 import ChannelSidebar from './ChannelSidebar';
 import MemberList from './MemberList';
@@ -192,6 +192,14 @@ export default function Shell() {
                   ? 'border-lamp-600/70 bg-lamp-100 text-lamp-300'
                   : 'border-stamp-500/70 bg-stamp-100 text-stamp-400'
               }`}
+              // kopma teşhisi: hata kodu + kısa açıklama — "ara ara atıyor"
+              // şikayetinde 1006 (ağ/suspend/sunucu terminate) ile 4003 (oturum)
+              // ayırt edilir
+              title={
+                wsStat === 'offline' && lastCloseInfo()
+                  ? `${lastCloseInfo()!.code} ${lastCloseInfo()!.reason}`.trim()
+                  : undefined
+              }
             >
               {wsStat === 'connecting' ? t('shell.connecting') : t('shell.offline')}
             </span>
