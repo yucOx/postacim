@@ -57,16 +57,22 @@ export function chainSeed(epochKey: Uint8Array, senderId: string): Uint8Array {
 // türevleri aynı 32B çıktıyı üretir (stateless alıcı korunur). Geriye dönük
 // kırılganlık: 5b spec'inde DM için eşdeğer çapa tanımlı değildi; eski v4
 // DM'ler (kimlik-çifti türevi) yeni sürümde okunamaz — body null düşer.
+const anchorCache = new Map<string, { publicKey: Uint8Array; privateKey: Uint8Array }>();
+
 export function dhAnchor(
   scope: 'dm' | 'gdm' | 'ch',
   epochKey: Uint8Array,
   sortedIds?: [string, string],
 ): { publicKey: Uint8Array; privateKey: Uint8Array } {
+  const cacheKey = `${scope}:${b64(epochKey)}:${sortedIds ? sortedIds.join(',') : ''}`;
+  const hit = anchorCache.get(cacheKey);
+  if (hit) return hit;
+
   let privateKey: Uint8Array;
   if (scope === 'dm') {
     if (!sortedIds) throw new Error('dm anchor: sortedIds gerekli');
     // savunma: caller sorted verse bile normalize et — iki yönlü girişin
-    // // sıra farkı deterministik aynı çıktıyı üretmeli (gönderen/alıcı simetrisi)
+    // sıra farkı deterministik aynı çıktıyı üretmeli (gönderen/alıcı simetrisi)
     const [a, b] = [...sortedIds].sort() as [string, string];
     privateKey = H(
       new Uint8Array([
@@ -79,7 +85,18 @@ export function dhAnchor(
   } else {
     privateKey = H(new Uint8Array([...epochKey, ...enc.encode('dh-anchor')]));
   }
-  return { privateKey, publicKey: sodium.crypto_scalarmult_base(privateKey) };
+  // Tembel (lazy) public key: toDisplay sadece privateKey kullanır. Pahalı
+  // scalarmult_base döngüsü (50 mesajda 50 kez) ana UI thread'ini dondurmaz.
+  let pubCache: Uint8Array | null = null;
+  const item = {
+    privateKey,
+    get publicKey(): Uint8Array {
+      if (!pubCache) pubCache = sodium.crypto_scalarmult_base(privateKey);
+      return pubCache;
+    },
+  };
+  anchorCache.set(cacheKey, item);
+  return item;
 }
 
 /** X25519 paylaşılan sırrı — tüm-sıfır çıktıda libsodium fırlatır (identity koruması) */

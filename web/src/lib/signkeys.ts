@@ -8,19 +8,26 @@ import { b64, unb64 } from '../crypto/bytes';
 
 // userId → published sign public key'leri (b64)
 const byUser = new Map<string, string[]>();
+// Çözümlenmiş anahtar önbelleği: her mesaj decode'unda b64/unb64 ve Set döngüsünü engeller
+const resolvedCache = new Map<string, Uint8Array[] | null>();
 // zincir başı takibi: incremental doğrulama önceki kayda bağlanır
 let lastId = 0;
 let lastHash: string | null = null;
 
 /** zincir doğrulaması geçmiş tam senkronların kayıtlarını besler */
 export function ingestSignKeys(entries: { id: number; user_id: string; sign_public_key: string | null }[]): void {
+  let changed = false;
   for (const e of entries) {
     if (!e.sign_public_key) continue;
     const list = byUser.get(e.user_id) ?? [];
-    if (!list.includes(e.sign_public_key)) list.push(e.sign_public_key);
+    if (!list.includes(e.sign_public_key)) {
+      list.push(e.sign_public_key);
+      changed = true;
+    }
     byUser.set(e.user_id, list);
     lastId = Math.max(lastId, e.id);
   }
+  if (changed) resolvedCache.clear();
 }
 
 /** göndericinin published imza anahtarları — bilinmiyorsa null (imzalı mesaj reddedilir) */
@@ -43,6 +50,11 @@ export function resolveSignKeys(
   myUserId: string | undefined,
   mySignPublicKey: Uint8Array | null | undefined,
 ): Uint8Array[] | null {
+  const cacheKey = `${userId}:${myUserId ?? ''}:${mySignPublicKey ? b64(mySignPublicKey) : ''}`;
+  if (resolvedCache.has(cacheKey)) {
+    return resolvedCache.get(cacheKey)!;
+  }
+
   const out: Uint8Array[] = [];
   const seen = new Set<string>();
   if (userId === myUserId && mySignPublicKey) {
@@ -60,7 +72,9 @@ export function resolveSignKeys(
       out.push(unb64(k));
     }
   }
-  return out.length === 0 ? null : out;
+  const res = out.length === 0 ? null : out;
+  resolvedCache.set(cacheKey, res);
+  return res;
 }
 
 /**
