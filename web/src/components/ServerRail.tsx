@@ -3,9 +3,11 @@ import { ArrowUpRight, Plus } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
+import { useVoiceStore } from '../state/voiceStore';
 import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import Modal from './Modal';
 import { PigeonMark } from './Brand';
+import Avatar from './Avatar';
 import { parseInviteLink } from '../crypto/invite';
 import { useT } from '../i18n/I18nProvider';
 
@@ -28,10 +30,18 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
   const createCommunity = useAppStore((s) => s.createCommunity);
   const view = useAppStore((s) => s.view);
   const showDmHome = useAppStore((s) => s.showDmHome);
+  const activeDmId = useAppStore((s) => s.activeDmId);
+  const openDmChat = useAppStore((s) => s.openDmChat);
   const dms = useAppStore((s) => s.dms);
   const dmMessages = useDmChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap);
   const dmUnread = dms.reduce((n, d) => n + unreadCount(d.id, dmMessages[d.id]), 0);
+
+  const messagedDms = useMemo(() => {
+    return dms
+      .filter((d) => d.last_message_at !== null || (dmMessages[d.id] && dmMessages[d.id].length > 0))
+      .sort((a, b) => (b.last_message_at ?? 0) - (a.last_message_at ?? 0));
+  }, [dms, dmMessages]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -91,7 +101,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
           onNavigate?.();
         }}
         title={t('nav.dmHome')}
-        className={tag(view === 'dm')}
+        className={tag(view === 'dm' && !activeDmId)}
       >
         <PigeonMark size={21} />
         {dmUnread > 0 && view !== 'dm' && (
@@ -100,6 +110,42 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
           </span>
         )}
       </button>
+
+      {/* Önceden mesajlaşılmış kişiler (Discord tarzı sol ray ikonları) */}
+      {messagedDms.map((d) => {
+        const active = view === 'dm' && activeDmId === d.id;
+        const unread = unreadCount(d.id, dmMessages[d.id]);
+        return (
+          <button
+            key={d.id}
+            onClick={() => {
+              if (useVoiceStore.getState().isDmCall && !useVoiceStore.getState().pip) {
+                useVoiceStore.getState().setPip(true);
+              }
+              openDmChat(d.id);
+              onNavigate?.();
+            }}
+            title={d.peer.nick}
+            className={`group relative flex h-11 w-11 items-center justify-center transition-all ${
+              active
+                ? 'rounded-2xl ring-2 ring-lamp-500 bg-night-800'
+                : 'rounded-full border border-brass-700/50 bg-night-800 hover:rounded-2xl hover:border-brass-500'
+            }`}
+          >
+            <Avatar userId={d.peer.id} label={d.peer.nick} size={38} />
+            {unread > 0 && !active && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-night-900 bg-lamp-500 px-0.5 font-display text-[9px] font-bold text-night-950">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
+            {/* Discord tarzı sol aktif beyaz çentik */}
+            {active && (
+              <span className="absolute -left-3 top-1/2 h-8 w-1.5 -translate-y-1/2 rounded-r-full bg-paper-50" />
+            )}
+          </button>
+        );
+      })}
+
       <div className="perf w-8" aria-hidden />
       {sorted.map((c) => {
         const active = c.id === activeId && view === 'community';
@@ -107,6 +153,9 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
           <button
             key={c.id}
             onClick={() => {
+              if (useVoiceStore.getState().isDmCall && !useVoiceStore.getState().pip) {
+                useVoiceStore.getState().setPip(true);
+              }
               selectCommunity(c.id);
               onNavigate?.();
             }}
