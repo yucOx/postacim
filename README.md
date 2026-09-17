@@ -43,7 +43,7 @@ düz hâlini **hiçbir zaman** görmez.
 | Kanal anahtarı | 32B rastgele; üyelere `crypto_box_seal` (sealed box) ile sarılı |
 | Mesajlar | XChaCha20-Poly1305, AAD = `ch:<kanal>:v<epok>` (yeniden konumlandırmaya dayanıklı) |
 | Gönderen atfı | Her mesaj gönderenin **Ed25519 anahtarıyla imzalı** (`ciphertext‖signature`, imza ciphertext+AAD üzerinden); alıcı açmadan önce anahtar defterinden doğrular — sunucu sahte sender_id ile mesaj uyduramaz. Cutover tarihinden sonraki imzasız mesajlar reddedilir |
-| DH ratchet (v4, tüm scope'lar) | Her mesajda açık taşınan ephemeral X25519 public + DH çıktısı zincire karışır; adım 100 mesajda / 24 saatte bir yenilenir, ephemeral private atılır → **çalınan güncel zincir state'i bir sonraki adımdan itibaren geleceği üretemez** (forward secrecy). DM'de DH karşıtı karşı tarafın kimlik anahtarıdır; kanal/gdm'de epok anahtarından türetilen grup DH çapası (`dhAnchor`) — tüm üyeler aynı çifti türetir, alıcı stateless kalır: mesaj başlığından zincir yeniden türetilebilir (F5/pagination/localStorage kaybı doğal) |
+| DH ratchet (v4, tüm scope'lar) | Her mesajda açık taşınan ephemeral X25519 public + DH çıktısı zincire karışır; adım 100 mesajda / 24 saatte bir yenilenir, ephemeral private atılır → **çalınan güncel zincir state'i bir sonraki adımdan itibaren geleceği üretemez** (forward secrecy). DM'de DH karşıtı (ben, peer) sıralı çiftinden türetilen deterministik çapa (`dhAnchor` — 5b hotfix; kendi mesajımız da açılır); kanal/gdm'de epok anahtarından türetilen grup DH çapası — tüm üyeler aynı çifti türetir, alıcı stateless kalır: mesaj başlığından zincir yeniden türetilebilir (F5/pagination/localStorage kaybı doğal). Çapa düzeltmesinden önceki v4 DM'leri okunamaz (bir kez yazılan format değişmez) |
 | Ses/görüntü | SFrame anahtarı kanal anahtarının DH zincirinden türetilir (5d): `H(step_root ‖ 'voice')` — kanal sesi epok DH çapasının kendi üstündeki X25519'üne, DM araması iki tarafın statik kimlik DH'ine bağlı; epok başına sabit, rekey ile döner. SFU opak bayt görür |
 | Anahtar epokları | `key_version`; eski epoklar saklanır → rotasyon öncesi geçmiş okunmaya devam eder |
 | Per-gönderici ratchet | `msg_key_i` zinciri `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir; güncel zincir kökü sızarsa geçmiş korunur (geri türetim yok). Tüm scope'lar bu kökü v4 DH adımıyla birleştirir (yukarıdaki satır) |
@@ -305,7 +305,7 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Otomatik testler
 
 ```bash
-npm test    # 293 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 314 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
 ```
 
 - `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
@@ -480,7 +480,7 @@ npm test    # 293 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Sprint 1 — bütünlük: per-user limitler, pending rekey, LiveKit eviction, oturum düşürme
 - [x] Sprint 2 — TLS/HSTS + CSP + httpOnly çerez + WS dayanıklılık
 - [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
-- [x] Test turu — otomatik test + CI (bugün: 31 dosya, 293 test)
+- [x] Test turu — otomatik test + CI (bugün: 33 dosya, 314 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
 
 **Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):

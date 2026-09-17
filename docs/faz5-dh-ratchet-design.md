@@ -124,14 +124,17 @@ cutover kuralı v4 için de geçerlidir (cutover sonrası imzasız v4 reddedilir
 
 ## 3. Okuma yolları ve backward compat
 
-`decryptText` deneme sırası (değişmedikçe):
+`decryptText` deneme sırası (**perf fix ile v4 en önce** — v4 ciphertext'i
+v1/v2/v3 anahtarlarıyla asla açılamaz; eski sıra her v4 mesajı açılmadan
+önce openAll'ın ≤10k taramasını iki kez koşturuyor, geçmiş açılışını
+saniyelerce donduruyordu):
 
 | Sıra | Format | Algılama | Anahtar kaynağı |
 |---|---|---|---|
-| 1 | v1 (0x01 / headersız eski) | AEAD açılışı | epoch anahtarı, AAD'siz index |
-| 2 | v2 (0x02) | AEAD açılışı | simetrik ratchet, index taraması 0..MAX_RATCHET_SCAN (10k) |
-| 3 | v3 | son 64B imza, gövde v1/v2 yolu | v1/v2 anahtarı + imza doğrulama |
-| 4 | v4 | son 64B imza + ilk 40B DH başlığı (iki uzunluk denemesi: imzalı/imzasız) | DH zinciri, l taraması 0..M-1 |
+| 1 | v4 | ilk 40B DH başlığı + son 64B imza (iki uzunluk denemesi: imzalı/imzasız) | DH zinciri, l taraması 0..M-1 |
+| 2 | v1 (0x01 / headersız eski) | AEAD açılışı | epoch anahtarı, AAD'siz index |
+| 3 | v2 (0x02) | AEAD açılışı | simetrik ratchet, index taraması 0..MAX_RATCHET_SCAN (10k) |
+| 4 | v3 | son 64B imza, gövde v1/v2 yolu | v1/v2 anahtarı + imza doğrulama |
 
 - Yeni mesajlar **yalnız DM scope'unda** v4 üretilir; kanal/gdm v3 üretmeye
   devam eder (5c). v4 okuma yolu scope gözetmez çalışır.

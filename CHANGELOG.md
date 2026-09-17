@@ -122,6 +122,13 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 - **Sol rayda mesajlaşılan DM'ler (ServerRail)**: önceden konuşulmuş kişiler en soldaki rayda avatarları, aktif çentikleri ve okunmamış rozetleriyle gösterilir; arama sırasında sayfa geçişinde arama otomatik PiP'e alınarak hayalet arama engellenir
 - **Mute rozeti & mikrofon başlangıcı**: mikrofon kapalıyken tile sağ altında kırmızı `MicOff` rozeti; arama başlatıldığında mikrofon varsayılan açık gelir
 
+### Düzeltilen (canlıdan gelen hotfixler)
+
+- **Faz 1 sync race** (`a9f95aa`): `getSignKeys` haritası keytransparency sync'i bitmeden boştu — gönderen kendi imza public key'ini sync beklemeksizin RAM'den çözüyor (`resolveSignKeys` self kısayolu); "bu zarf açılamadı" kendi mesajlarında
+- **Faz 5b DM çapası** (`534837c`): DM v4'ünde gönderen/alıcı farklı DH türetimi yapıyordu (gönderen peer kimliğine, alıcı kendi kimliğine) — sıralı çiftten deterministik çapa her iki tarafı eşitledi. Çapa düzeltmesinden önceki v4 DM'leri okunamaz (bilinçli kesme, README'de)
+- **5b hotfix v2** (`26716f0`): okuma yolu çifti `[ben, sender]` hesaplıyordu — kendi mesajda `[ben, ben]` çıkıp gönderim çapasından ayrışıyordu; `dmAnchorIds` tek kaynağı okuma/gönderimi bağlıyor (sender_id yerine DM üyeliği)
+- **decryptText perf** (`d109168`): her v4 mesajı açılmadan önce legacy openAll taraması (v1 + 10k v2, v3'te ikinci kez ≈ 20k gereksiz op) koşuyordu; v4 yolu en öne alındı — sohbet ilk açılışındaki saniyelerce süren UI donması giderildi
+
 ### Önceki sprintler (özet)
 
 - E2EE çekirdek: XChaCha20-Poly1305 mesajlar, sealed-box anahtar dağıtımı,
