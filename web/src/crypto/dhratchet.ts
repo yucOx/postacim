@@ -140,6 +140,34 @@ export function saveDhStep(channelId: string, version: number, state: DhStepStat
   localStorage.setItem(stepKey(channelId, version), JSON.stringify(state));
 }
 
+// --- ses (SFrame) anahtarı — Faz 5d (spec §7) ---
+// LiveKit SFrame passphrase'i artık ham epok anahtarı DEĞİL: DH zinciri
+// malzemesinden türetilir — voice_seed = H(epok ‖ 'voice'),
+// step_root = H(voice_seed ‖ 'dh' ‖ u32LE(0) ‖ DH_ÇIKTISI), anahtar = H(step_root ‖ 'voice').
+// DH_ÇIKTISI: kanal/gdm'de epok çapasının kendi üstündeki X25519'ü (tüm üyeler
+// aynı); DM'de iki tarafın statik kimlik DH'i (iki taraf aynı sır).
+// j=0 SABİT — bilinçli pin kararı (canlı DH adımı rotasyonu DEĞİL): DH adımları
+// göndericiye özgüdür (j + kendi ephemeral'ı); grupça "güncel adım"da
+// buluşmayı sağlayan ortak bir sayaç yoktur, ses anahtarı epok başına sabittir
+// ve yalnız epok rekey'iyle döner (channel:rotated → setKey, mevcut yol).
+export function dhVoiceKey(epochKey: Uint8Array, dhOut: Uint8Array): Uint8Array {
+  const seed = H(new Uint8Array([...epochKey, ...enc.encode('voice')]));
+  const stepRoot = dhStepRoot(seed, dhOut, 0);
+  return H(new Uint8Array([...stepRoot, ...enc.encode('voice')]));
+}
+
+/** kanal/gdm ses anahtarı — çapa türetimi dahil; her üye aynı anahtarı alır */
+export function dhVoiceKeyAnchor(epochKey: Uint8Array): Uint8Array {
+  const anchor = dhAnchor(epochKey);
+  return dhVoiceKey(epochKey, dhShared(anchor.privateKey, anchor.publicKey));
+}
+
+/** DM ses anahtarı — statik-static kimlik DH'i; A tarafı (myPriv, peerPub),
+ *  B tarafı (peerPriv, myPub) ile bit-bit aynı anahtarı üretir */
+export function dhVoiceKeyDm(epochKey: Uint8Array, myPriv: Uint8Array, peerPub: Uint8Array): Uint8Array {
+  return dhVoiceKey(epochKey, dhShared(myPriv, peerPub));
+}
+
 // --- self-update duyurusu (yalnız doğrulama yardımcıları — 5c canlı connect eder) ---
 // Kanon: utf8('postacim/dh-update/v1') ‖ utf8(channel_id) ‖ u32LE(epoch_version) ‖ yeni_dh_pub.
 // Dağıtım WS relay only — sunucu plaintext görmez (değişmez). Spec §6.

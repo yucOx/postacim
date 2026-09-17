@@ -9,7 +9,8 @@ import { sealJoinKey } from '../crypto/joinpw';
 import { buildInviteLink } from '../crypto/invite';
 import { onServerEvent } from '../ws/socket';
 import { getSignKeys, refreshSignKeys } from '../lib/signkeys';
-import { ingestDhUpdate } from '../lib/dhupdate';
+import { bandFromIngest, ingestDhUpdate } from '../lib/dhupdate';
+import { useSecurityStore } from './securityStore';
 
 export interface Channel {
   id: string;
@@ -621,10 +622,13 @@ export const useAppStore = create<AppState>((set, get) => {
       ) {
         void get().loadBootstrap();
       } else if (e.type === 'dh_update') {
-        // self-update duyurusu (Faz 5c): Ed25519 doğrulaması + TOFU pin —
-        // geçersiz imza sessizce reddedilir (dhupdate.ts)
+        // self-update duyurusu (Faz 5c): Ed25519 doğrulaması + TOFU pin.
+        // Faz 5d: imza REDDİ kırmızı güvenlik bandına bağlanır; malformed /
+        // bilinmeyen gönderen sessizce düşer (çöp frame bandı spam'lemesin).
         const d = e as unknown as { channel_id: string; payload: string; from: string };
-        ingestDhUpdate(d.from, d.channel_id, d.payload, getSignKeys(d.from));
+        const r = ingestDhUpdate(d.from, d.channel_id, d.payload, getSignKeys(d.from));
+        const band = bandFromIngest(r);
+        if (band) useSecurityStore.getState().flagDhUpdateRejected(band);
       }
     });
   },

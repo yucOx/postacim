@@ -43,10 +43,10 @@ düz hâlini **hiçbir zaman** görmez.
 | Mesajlar | XChaCha20-Poly1305, AAD = `ch:<kanal>:v<epok>` (yeniden konumlandırmaya dayanıklı) |
 | Gönderen atfı | Her mesaj gönderenin **Ed25519 anahtarıyla imzalı** (`ciphertext‖signature`, imza ciphertext+AAD üzerinden); alıcı açmadan önce anahtar defterinden doğrular — sunucu sahte sender_id ile mesaj uyduramaz. Cutover tarihinden sonraki imzasız mesajlar reddedilir |
 | DH ratchet (v4, tüm scope'lar) | Her mesajda açık taşınan ephemeral X25519 public + DH çıktısı zincire karışır; adım 100 mesajda / 24 saatte bir yenilenir, ephemeral private atılır → **çalınan güncel zincir state'i bir sonraki adımdan itibaren geleceği üretemez** (forward secrecy). DM'de DH karşıtı karşı tarafın kimlik anahtarıdır; kanal/gdm'de epok anahtarından türetilen grup DH çapası (`dhAnchor`) — tüm üyeler aynı çifti türetir, alıcı stateless kalır: mesaj başlığından zincir yeniden türetilebilir (F5/pagination/localStorage kaybı doğal) |
-| Ses/görüntü | Aynı kanal anahtarı → LiveKit SFrame (HKDF) — SFU opak bayt görür |
+| Ses/görüntü | SFrame anahtarı kanal anahtarının DH zincirinden türetilir (5d): `H(step_root ‖ 'voice')` — kanal sesi epok DH çapasının kendi üstündeki X25519'üne, DM araması iki tarafın statik kimlik DH'ine bağlı; epok başına sabit, rekey ile döner. SFU opak bayt görür |
 | Anahtar epokları | `key_version`; eski epoklar saklanır → rotasyon öncesi geçmiş okunmaya devam eder |
 | Per-gönderici ratchet | `msg_key_i` zinciri `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir; güncel zincir kökü sızarsa geçmiş korunur (geri türetim yok). Tüm scope'lar bu kökü v4 DH adımıyla birleştirir (yukarıdaki satır) |
-| DH-rekey broadcast + self-update | Üye değişiminde rotate yeni epoku kalan üyelere sarmalayarak dağıtır — çıkarılan üye eski epok bilgisiyle (anahtar + çapa + tüm başlıklar elinde olsa bile) gelecekteki mesaj anahtarlarını türetemez. Ele geçirilen cihazın yerini alan kurban, yeni DH public'ini Ed25519 imzalı `dh_update` duyurusuyla yayınlar (WS relay — sunucu opak geçirir, saklamaz); alıcı imzayı anahtar defterinden doğrur, geçerliyi TOFU pin'ler |
+| DH-rekey broadcast + self-update | Üye değişiminde rotate yeni epoku kalan üyelere sarmalayarak dağıtır — çıkarılan üye eski epok bilgisiyle (anahtar + çapa + tüm başlıklar elinde olsa bile) gelecekteki mesaj anahtarlarını türetemez. Ele geçirilen cihazın yerini alan kurban, yeni DH public'ini Ed25519 imzalı `dh_update` duyurusuyla yayınlar (WS relay — sunucu opak geçirir, saklamaz); alıcı imzayı anahtar defterinden doğrur, geçerliyi TOFU pin'ler. Duyuru Ayarlar → Güvenlik'ten tek tıkla yayınlanır (5d); imza doğrulamasını geçemeyen duyuru kırmızı güvenlik bandı tetikler — çöp frame (bozuk biçim/bilinmeyen gönderen) sessizce reddeilir, bant spam'lenmez |
 | Mesaj padding | plaintext boyut bucket'larına (256 B / 1 KiB / 4 KiB / 4 KiB-adım) yuvarlanır — sunucu mesaj uzunluğundan içerik çıkarımı yapamaz |
 | Cihaz kilidi (ops.) | WebAuthn PRF'ten türeyen cihaz KEK'i ile blob IndexedDB'de — F5'te parmak izi, şifre fallback akışı korunur |
 | Anahtar defteri | public key'ler append-only hash zincirinde (`key_log`); istemci boot'ta zinciri doğrular, head damgası profilde bant dışı karşılaştırma için. İmza anahtarları da defterden dağıtılır — yalnız zincir bütünlüğü kanıtlanmış kayıtlar imza doğrulamasına beslenir |
@@ -301,7 +301,7 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Otomatik testler
 
 ```bash
-npm test    # 249 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 255 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
 ```
 
 - `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
@@ -317,9 +317,9 @@ npm test    # 249 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - `server/test/social.test.ts` — arkadaşlık, DM, grup DM rekey, WS canlı olay + sesli durum yayını
 - `server/test/boot.test.ts` — zayıf secret reddi, taze DB migration zinciri
 - `web/src/crypto/ratchet.test.ts` — per-gönderici ratchet: zincir tek yönlülüğü, index/AAD reddi, stateless yeniden türetim, out-of-order
-- `web/src/crypto/dh-ratchet.test.ts` — DH ratchet (v4): KAT vektörleri (`dh-ratchet.vectors.json`), FS/PCS-lite sızıntı simülasyonu (gönderici state sızıntısı → eski adım kapalı, sonraki adım güvenli), adım içi backward secrecy, out-of-order, tarama sınırı, AAD/imza/başlık takası negatifleri, self-update doğrulama, 5c: epok DH çapası (kanal/gdm roundtrip) + rekey broadcast negatifleri (atılan üye broadcast'i yakalasa da geleceği açamaz)
-- `web/src/lib/dhupdate.test.ts` — self-update duyuru işleme: kanon ayrıştırma, yanlış Ed25519/bozuk kanon reddi, kanal/epok bağlama, TOFU pin
-- `server/test/dhupdate.test.ts` — WS `dh_update` opak relay: kanal/gdm/dm kitlesi, üye olmayan reddi, sığ payload sınırı, plaintext invariant (satır/tablo oluşmaz)
+- `web/src/crypto/dh-ratchet.test.ts` — DH ratchet (v4): KAT vektörleri (`dh-ratchet.vectors.json`), FS/PCS-lite sızıntı simülasyonu (gönderici state sızıntısı → eski adım kapalı, sonraki adım güvenli), adım içi backward secrecy, out-of-order, tarama sınırı, AAD/imza/başlık takası negatifleri, self-update doğrulama, 5c: epok DH çapası (kanal/gdm roundtrip) + rekey broadcast negatifleri (atılan üye broadcast'i yakalasa da geleceği açamaz), 5d: ses anahtarı türetimi (çapa/DM KAT, iki tarafın aynı anahtarı, epok ayrımı, mesaj zincirinden alan ayrımı)
+- `web/src/lib/dhupdate.test.ts` — self-update duyuru işleme: kanon ayrıştırma, yanlış Ed25519/bozuk kanon reddi, kanal/epok bağlama, TOFU pin, bant eşlemesi (yalnız imza red bant tetikler)
+- `server/test/dhupdate.test.ts` — WS `dh_update` opak relay: kanal/gdm/dm kitlesi, üye olmayan reddi, sığ payload sınırı, plaintext invariant (satır/tablo oluşmaz), relay→ingest uçtan uca (geçerli + bozuk imza)
 - `web/src/crypto/devicekey.test.ts` — cihaz kilidi: blob sar/çöz, yanlış KEK/AAD reddi, enroll→unlock, PRF fallback
 - `web/src/lib/keytransparency.test.ts` — anahtar defteri: zincir bütünlüğü, kopuk/çelişkili head reddi, kendi kayıt kontrolü
 - `server/test/hardening.test.ts` — log hijyeni (query/IP düşmez), WS auth zaman aşımı (4004), login kademeli bloğu
@@ -383,7 +383,7 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 - [x] Faz 2 — kaybolan mesajlar (disappearing messages)
 - [x] Faz 3 — Tor hidden service rehberi (IP metadata)
 - [x] Faz 4 — signed release / reproducible build (JS trust azaltma)
-- [ ] Faz 5 — DH ratchet (alt fazlar: 5a araştırma ✓, 5b DM v4 DH ratchet ✓, **5c kanal/gdm v4 + rekey broadcast + self-update relay ✓**, 5d ses anahtarı türetimi)
+- [ ] Faz 5 — DH ratchet (alt fazlar: 5a araştırma ✓, 5b DM v4 DH ratchet ✓, 5c kanal/gdm v4 + rekey broadcast + self-update relay ✓, 5d ses anahtarı DH zincirinden + self-update UI ✓ — fazın kapanışı kullanıcı merge onayı ile)
 - [ ] Faz 6 — key transparency gossip (anti-forking)
 - [ ] Faz 7 — çoklu cihaz (Faz 5 sonrası)
 - [ ] Faz 8 — threat model revizyonu + dış audit hazırlığı (v1.0.0)

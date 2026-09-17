@@ -6,6 +6,8 @@ import type { VoiceTokenResponse } from '../api/types';
 import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
 import { unwrapMyKey } from '../crypto/identity';
+import { dhVoiceKeyAnchor, dhVoiceKeyDm } from '../crypto/dhratchet';
+import { unb64 } from '../crypto/bytes';
 import { onServerEvent, wsSend } from '../ws/socket';
 // official subpath export; ?worker&inline bundles the SFrame worker into the app
 import E2EEWorker from 'livekit-client/e2ee-worker?worker&inline';
@@ -183,6 +185,34 @@ const cleanup = (room: Room | null): void => {
   }
 };
 
+// Faz 5d — SFrame anahtarı artık v4 DH zincirinden türetilir (spec §7):
+// kanal sesi epok DH çapasına, DM araması iki tarafın statik kimlik DH'ine
+// bağlı. Epok başına sabit (arama başında pin); epok rekey'inde channel:rotated
+// yolu yeni anahtarı setKey eder. DM'de karşı tarafın kimlik anahtarı
+// bulunamazsa ESKİ türetim (ham epok anahtarı) — eski istemciyle uyumlu tek
+// durum; aksi halde türetim her iki tarafta deterministik ve aynıdır.
+async function sframeKey(raw: Uint8Array, scope: 'ch' | 'dm', peerId?: string): Promise<Uint8Array> {
+  if (scope === 'dm' && peerId) {
+    const pubOf = (s: ReturnType<typeof useAppStore.getState>): string | undefined =>
+      s.publicKeys[peerId] ?? s.friends.find((f) => f.id === peerId)?.public_key;
+    let peerPub = pubOf(useAppStore.getState());
+    if (!peerPub) {
+      await useAppStore.getState().loadBootstrap();
+      peerPub = pubOf(useAppStore.getState());
+    }
+    const { privateKey } = useAuthStore.getState();
+    if (peerPub && privateKey) {
+      try {
+        return dhVoiceKeyDm(raw, privateKey, unb64(peerPub));
+      } catch {
+        // tüm-sıfır DH çıktısı (libsodium reddi) — eski türetimde kal
+      }
+    }
+    return raw;
+  }
+  return dhVoiceKeyAnchor(raw);
+}
+
 // shared LiveKit+E2EE room builder for community channels and DM calls
 async function connectRoom(
   key: Uint8Array,
@@ -299,9 +329,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
 
     set({ error: null });
     try {
-      // 1. channel key (this is the E2EE key — SFU never sees it)
+      // 1. channel key (E2EE kökü — SFU hiç görmez); SFrame anahtarı bunun
+      //    DH zincirinden türetilir (Faz 5d)
       const app = useAppStore.getState();
       const key = await app.ensureChannelKey(channelId);
+      const voiceKey = await sframeKey(key, 'ch');
 
       // 2. access token from our server
       const { url, token } = await api<VoiceTokenResponse>(`/channels/${channelId}/voice-token`, {
@@ -325,7 +357,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
               useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
             }
           };
-          const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
+          const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
           wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
           set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: false, camOn: false, isDmCall: false });
           return;
@@ -437,8 +469,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   },
 
   // DM call: join the room, then ring. Media path identical to community calls
-  // (same LiveKit E2EE machinery, DM channel key as the shared key). When video
-  // is requested the camera opens before the ring so the callee sees the caller.
+  // (same LiveKit E2EE machinery; SFrame key derived from the DM DH chain — 5d).
+  // When video is requested the camera opens before the ring so the callee sees the caller.
   startDmCall: async (dmId, video) => {
     if (get().isDmCall && get().callState?.channelId === dmId) return;
     set({ error: null });
@@ -461,6 +493,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         }
       }
       if (!key) throw new Error('DM anahtarı yok');
+      const peerId = app.dms.find((d) => d.id === dmId)?.peer.id;
+      const voiceKey = await sframeKey(key, 'dm', peerId);
       // fresh start: tear down any previous room/community channel first
       teardownAll();
       const { url, token } = await api<VoiceTokenResponse>(`/dms/${dmId}/call-token`, { method: 'POST' });
@@ -470,7 +504,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
         }
       };
-      const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
+      const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
       wsSend({ type: 'call:ring', channel_id: dmId });
       // open camera first so the callee can see the caller immediately on accept
       let camOpened = false;
@@ -514,6 +548,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         if (!key) throw new Error('DM anahtarı yok');
       }
       if (!key) throw new Error('DM anahtarı yok');
+      const peerId = app.dms.find((d) => d.id === call.channelId)?.peer.id;
+      const voiceKey = await sframeKey(key, 'dm', peerId);
       // tear down any previous room (community channel etc.) but keep callState
       // so a failed connect can be retried from the incoming banner
       teardownAll(true);
@@ -524,7 +560,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
         }
       };
-      const { room, keyProvider } = await connectRoom(key, url, token, onDisconnected);
+      const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
       set({ room, keyProvider, joinedChannelId: call.channelId, micOn: false, camOn: false, isDmCall: true, callState: { phase: 'active', channelId: call.channelId } });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
@@ -555,14 +591,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         const participants = (e.participants as VoiceParticipant[]) ?? [];
         set((s) => ({ presence: { ...s.presence, [channelId]: participants } }));
       } else if (e.type === 'channel:rotated') {
-        // live rekey: refresh epochs, then hand the new key to SFrame
+        // live rekey: refresh epochs, then hand the new key to SFrame.
+        // Faz 5d: SFrame anahtarı DH zincirinden türetildiği için rekey zincir
+        // seed'i + çapayı da çevirir — atılan üye yeni ses anahtarını da türetemez.
         const channelId = e.channel_id as string;
         if (get().joinedChannelId === channelId && get().keyProvider) {
           void (async () => {
             try {
               await useAppStore.getState().loadBootstrap();
               const key = useAppStore.getState().currentKey(channelId);
-              if (key) await get().keyProvider!.setKey(key.slice().buffer as ArrayBuffer);
+              if (key) await get().keyProvider!.setKey((await sframeKey(key, 'ch')).slice().buffer as ArrayBuffer);
             } catch {
               // stay on old key; user can rejoin
             }

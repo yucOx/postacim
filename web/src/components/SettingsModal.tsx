@@ -6,18 +6,24 @@ import {
   Fingerprint,
   KeyRound,
   MonitorUp,
+  RefreshCcw,
   ShieldCheck,
   User,
   X,
 } from 'lucide-react';
 import Modal from './Modal';
+import ConfirmDialog from './ConfirmDialog';
 import ProfileModal from './ProfileModal';
 import { useSettingsStore } from '../state/settingsStore';
 import { useI18nStore } from '../i18n/store';
 import { LOCALES, LOCALE_LABEL, LOCALE_FLAG, type Locale } from '../i18n/types';
 import { useT } from '../i18n/I18nProvider';
 import { useAuthStore } from '../state/authStore';
+import { useAppStore } from '../state/appStore';
 import { useSecurityStore } from '../state/securityStore';
+import { wsSend } from '../ws/socket';
+import { newDhEphemeral } from '../crypto/dhratchet';
+import { encodeDhUpdatePayload } from '../lib/dhupdate';
 import { generateMnemonic, quizPositions } from '../crypto/bip39';
 import { deviceUnlockSupported, hasDeviceUnlock } from '../crypto/devicekey';
 
@@ -145,6 +151,7 @@ function SecurityTab(): React.ReactNode {
     <div className="flex flex-col gap-3">
       <PasskeyBlock />
       <hr className="border-night-700" />
+      <DhIdBlock />
       <button
         type="button"
         onClick={() => setSection('recovery')}
@@ -251,6 +258,97 @@ function PasskeyBlock(): React.ReactNode {
         </p>
       )}
     </div>
+  );
+}
+
+// Faz 5d — self-update: ele geçirilme şüphesinde yeni bir DH anahtarı üretilip
+// tüm DM/grup DM/kanal bağlamlarına Ed25519 imzalı dh_update duyurusu olarak
+// yayınlanır (WS opak relay). Alıcılar doğrulayıp TOFU pin'ler — duyuru
+// sonrasındaki DH adımları eski (ele geçirilmiş) cihazın anahtarına bağlı kalmaz.
+function DhIdBlock(): React.ReactNode {
+  const { t } = useT();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const publish = (): void => {
+    setBusy(true);
+    setError(null);
+    try {
+      const auth = useAuthStore.getState();
+      if (!auth.user || !auth.signPrivateKey) throw new Error(t('settings.security.dhIdNoSignKey'));
+      const app = useAppStore.getState();
+      const targets = [
+        ...app.dms.map((d) => ({ id: d.id, version: d.key_version })),
+        ...app.gdms.map((g) => ({ id: g.id, version: g.key_version })),
+        ...app.communities.flatMap((c) => c.channels.map((ch) => ({ id: ch.id, version: ch.key_version }))),
+      ];
+      // tek taze ephemeral, tüm bağlamlarda aynı kimlik — karşı tarafın pin'i
+      // tutarlı olur; private yarım duyurulan an atılır (asla kaydedilmez)
+      const pub = newDhEphemeral().publicKey;
+      for (const tg of targets) {
+        wsSend({
+          type: 'dh_update',
+          channel_id: tg.id,
+          payload: encodeDhUpdatePayload(tg.id, tg.version, pub, auth.signPrivateKey),
+        });
+      }
+      setSent(targets.length);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.security.dhIdFail'));
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-night-700 bg-night-900 p-3">
+      <div className="flex items-start gap-2.5">
+        <RefreshCcw size={18} className="mt-0.5 shrink-0 text-lamp-500" />
+        <div className="flex-1">
+          <div className="text-sm text-paper-100">{t('settings.security.dhIdTitle')}</div>
+          <p className="mt-0.5 text-[11px] text-paper-500">{t('settings.security.dhIdHint')}</p>
+        </div>
+      </div>
+      {sent != null && (
+        <p className="mt-2 rounded border border-lamp-500/60 bg-lamp-100/40 px-2 py-1 text-xs text-lamp-300">
+          {t('settings.security.dhIdDone', { count: sent })}
+        </p>
+      )}
+      {error && (
+        <p className="mt-2 rounded border border-stamp-500/60 bg-stamp-100 px-2 py-1 text-xs text-stamp-400">
+          {error}
+        </p>
+      )}
+      <button type="button" onClick={() => setConfirming(true)} disabled={busy} className="btn-ghost mt-3 !text-xs">
+        {t('settings.security.dhIdBtn')}
+      </button>
+      {confirming && (
+        <DhIdConfirm
+          onConfirm={publish}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// hedef sayısı onay metninde görünür — ne yayinlanacağı onaydan önce bellidir
+function DhIdConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }): React.ReactNode {
+  const { t } = useT();
+  const app = useAppStore.getState();
+  const count =
+    app.dms.length + app.gdms.length + app.communities.reduce((n, c) => n + c.channels.length, 0);
+  return (
+    <ConfirmDialog
+      title={t('settings.security.dhIdConfirmTitle')}
+      message={t('settings.security.dhIdConfirmMsg', { count })}
+      confirmLabel={t('settings.security.dhIdBtn')}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }
 
