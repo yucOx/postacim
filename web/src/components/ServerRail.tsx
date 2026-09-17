@@ -61,10 +61,23 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
   const [dmOrder, setDmOrder] = useState<string[]>(loadDmOrder);
   const [dragDmId, setDragDmId] = useState<string | null>(null);
 
+  // Aktif açılan sohbet veya yeni mesaj gelmiş sohbet otomatik olarak gizlilikten çıkarılır (Discord mantığı)
+  useMemo(() => {
+    if (activeDmId && hiddenDmIds.includes(activeDmId)) {
+      const next = hiddenDmIds.filter((id) => id !== activeDmId);
+      setHiddenDmIds(next);
+      try {
+        localStorage.setItem(DM_HIDDEN_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+    }
+  }, [activeDmId, hiddenDmIds]);
+
   const messagedDms = useMemo(() => {
     const visible = dms.filter(
       (d) =>
-        !hiddenDmIds.includes(d.id) &&
+        (!hiddenDmIds.includes(d.id) || activeDmId === d.id || unreadCount(d.id, dmMessages[d.id]) > 0) &&
         (d.last_message_at !== null || (dmMessages[d.id] && dmMessages[d.id].length > 0))
     );
     const idx = (id: string): number => {
@@ -76,7 +89,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
       if (diff !== 0) return diff;
       return (b.last_message_at ?? 0) - (a.last_message_at ?? 0);
     });
-  }, [dms, dmMessages, hiddenDmIds, dmOrder]);
+  }, [dms, dmMessages, hiddenDmIds, dmOrder, activeDmId]);
 
   const persistDmOrder = (next: string[]): void => {
     setDmOrder(next);

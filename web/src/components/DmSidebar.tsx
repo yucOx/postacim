@@ -17,6 +17,17 @@ export default function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const dmMessages = useDmChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap); // re-render when markers change
 
+  const unhideDmInStorage = (id: string): void => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('pgv_dm_rail_hidden') ?? '[]') as string[];
+      if (Array.isArray(raw) && raw.includes(id)) {
+        localStorage.setItem('pgv_dm_rail_hidden', JSON.stringify(raw.filter((x) => x !== id)));
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const byRecent = (a: { last_message_at: number | null }, b: { last_message_at: number | null }): number =>
     (b.last_message_at ?? 0) - (a.last_message_at ?? 0);
 
@@ -27,6 +38,7 @@ export default function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
       <button
         key={id}
         onClick={() => {
+          unhideDmInStorage(id);
           openDmChat(id);
           onNavigate?.();
         }}
