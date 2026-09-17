@@ -134,6 +134,7 @@ export default {
     passwordTitle: 'şifre değiştir',
     logoutTitle: 'çıkış yap',
     keylogWarning: 'güvenlik uyarısı — {message}. durum düzelene kadar bu sunucudaki hiçbir anahtara güvenmeyin',
+    keylogForkWarning: 'güvenlik uyarısı — başka bir istemci farklı anahtar defteri head damgası görüyor (view-splitting olasılığı: sunucu iki kullanıcıya farklı defter gösterebilir). bant dışı damga karşılaştırması ile doğrula',
     dhUpdateWarning: 'güvenlik uyarısı — bir DH kimlik duyurusu (dh_update) imza doğrulamasını geçemedi ve reddedildi; gönderen ya da bu sunucu kanıt uyduruyor olabilir — durum netleşene kadar anahtarlara güvenmeyin',
     loading: 'yükleniyor…',
     selectCommunity: 'soldan bir topluluk ve oda seç',

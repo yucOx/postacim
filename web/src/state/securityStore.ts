@@ -16,8 +16,14 @@ interface SecurityState {
   /** dh_update self-update duyurusu imza doğrulamasını geçemedi (Faz 5d) —
    *  kırmızı bant; yalnız 'bad-signature' tetikler (bkz. dhupdate.bandFromIngest) */
   dhUpdateWarning: string | null;
+  /** Faz 6: başka bir istemci farklı anahtar defteri head'i gördü —
+   *  gözlemsel fork kanıtı. 'view-splitting' olasılığı. Daha düşük panik
+   *  tonu (zincir bozulmasıyla karışmasın diye ayrı alan) */
+  keylogForkWarning: string | null;
   runKeyLogCheck: (userId: string, publicKey: Uint8Array) => Promise<void>;
   flagDhUpdateRejected: (code: 'bad-signature') => void;
+  flagKeylogFork: (code: string) => void;
+  clearKeylogFork: () => void;
 }
 
 export const useSecurityStore = create<SecurityState>((set) => ({
@@ -25,12 +31,21 @@ export const useSecurityStore = create<SecurityState>((set) => ({
   keylogStamp: null,
   keylogWarning: null,
   dhUpdateWarning: null,
+  keylogForkWarning: null,
 
   flagDhUpdateRejected: (code) => {
     // konsola da düş: gözlemci, imzalı-geçersiz duyuru yayını fark etsin
     console.error('dh_update duyurusu reddedildi:', code);
     set({ dhUpdateWarning: code });
   },
+
+  flagKeylogFork: (code) => {
+    // konsola da düş: gözlemci, view-splitting olasılığını fark etsin
+    console.error('anahtar defteri fork uyarısı:', code);
+    set({ keylogForkWarning: code });
+  },
+
+  clearKeylogFork: () => set({ keylogForkWarning: null }),
 
   runKeyLogCheck: async (userId, publicKey) => {
     try {

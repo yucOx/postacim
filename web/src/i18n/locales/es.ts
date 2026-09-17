@@ -125,6 +125,7 @@ export default {
     passwordTitle: 'cambiar contraseña',
     logoutTitle: 'cerrar sesión',
     keylogWarning: 'advertencia de seguridad — {message}. no confíes en ninguna clave de este servidor hasta que se resuelva',
+    keylogForkWarning: 'advertencia de seguridad — otro cliente observó un sello diferente del registro de claves (posible view-splitting: el servidor podría estar mostrando registros distintos a usuarios distintos). verifica con una comparación de sellos fuera de banda',
     dhUpdateWarning: 'advertencia de seguridad — un anuncio de identidad DH (dh_update) no superó la verificación de firma y fue rechazado; el remitente o este servidor podrían estar falsificando pruebas — no confíes en las claves hasta que se aclare',
     loading: 'cargando…',
     selectCommunity: 'elige una comunidad y sala a la izquierda',
