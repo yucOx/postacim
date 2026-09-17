@@ -30,6 +30,11 @@ export interface ChatMessage {
   channel_id: string;
   sender_id: string;
   nick: string;
+  /** gönderen kullanıcının Ed25519 imza public key (b64); sunucu users
+   *  tablosundan çekip döner. Kendi mesajımız için RAM'de de var (KDF),
+   *  ama yeni login sonrası RAM boşken server'dan gelen fallback
+   *  çözer (Faz 1 hotfix). */
+  sender_sign_key?: string | null;
   key_version: number;
   nonce: string;
   ciphertext: string;
