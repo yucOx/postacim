@@ -9,7 +9,7 @@ import { dhParamsFor } from './dhstep';
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
 import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
-import { resolveSignKeys, ingestSignKeys } from '../lib/signkeys';
+import { resolveSignKeys } from '../lib/signkeys';
 import { ttlSeconds } from './ttlStore';
 import { onServerEvent } from '../ws/socket';
 
@@ -116,11 +116,6 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
     // DH çıktısını üretir (stateless türetim) — dm'de kimlik private, gdm'de
     // epok çapası private (row'un kendi epok anahtarından türetilir)
     const myPriv = kind === 'dm' ? useAuthStore.getState().privateKey : key ? dhAnchor(key).privateKey : null;
-    // server'dan gelen sender_sign_key'i deftere al (Faz 1 hotfix: kendi
-    // mesajımızı kendi RAM'de yokken bile açarız — syncKeyLog beklenmez)
-    if (raw.sender_sign_key) {
-      ingestSignKeys([{ id: 0, user_id: raw.sender_id, sign_public_key: raw.sender_sign_key }]);
-    }
     return {
       id: raw.id,
       channelId: raw.channel_id,

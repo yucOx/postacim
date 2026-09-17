@@ -1,7 +1,5 @@
 port: 7880
-# Prometheus metrikleri — 6789. Bind adresi CLI üzerinden
-# `--bind-address 127.0.0.1` ile sınırlandı (0.0.0.0 public'te scrape
-# yüzeyi + olası bilgi sızıntısı, aynı host'tan gözlem yeterli).
+# Prometheus metrikleri — yalnız localhost'tan
 prometheus_port: 6789
 # Düşük log seviyesi: sadece uyarı/hata. Debug modunda her RTP paket
 # olayı loglanır, 2 vCPU'da %5-10 CPU yükü.
@@ -12,7 +10,7 @@ rtc:
   port_range_end: 50100
   # Public deploy — use_external_ip + node_ip ile ICE portlarını public IP'de bind eder
   use_external_ip: true
-  node_ip: 31.57.77.212     # VPS'in dış IP'si (.env'de NODE_IP ile override)
+  node_ip: <VPS_IP>        # ← VPS'in dış IP'si (ör: 203.0.113.10)
   # === 2 vCPU/3 GB RAM optimizasyonu (docs/NETWORKING.md §10) ===
 
 turn:
