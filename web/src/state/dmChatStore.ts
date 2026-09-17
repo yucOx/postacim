@@ -5,7 +5,7 @@ import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
 import { decryptText, encryptText, nextSendIndex, type MsgScope } from '../crypto/message';
 import { dhAnchor } from '../crypto/dhratchet';
-import { dhParamsFor } from './dhstep';
+import { dhParamsFor, dmAnchorIds } from './dhstep';
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
 import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
@@ -113,16 +113,16 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
   }
   try {
     // v4 okuma yolu (dm + gdm): alıcı private'ı başlıktaki ephemeral public ile
-    // DH çıktısını üretir (stateless türetim). dm'de (sender, peer) sorted çifti
-    // anchor'ı belirler (Faz 5b hotfix) — taraflar aynı çifti türetir, kendi
+    // DH çıktısını üretir (stateless türetim). dm'de (ben, peer) sorted çifti
+    // anchor'ı belirler (Faz 5b hotfix v2) — taraflar aynı çifti türetir, kendi
     // mesajımız da açılabilir; gdm'de epok çapası (klasik 5c).
     let myPriv: Uint8Array | null = null;
     if (kind === 'dm') {
-      const me = useAuthStore.getState().user?.id;
-      if (me) {
-        const sorted = [me, raw.sender_id].sort() as [string, string];
-        myPriv = dhAnchor('dm', key, sorted).privateKey;
-      }
+      // çift [ben, peer] — sender_id DEĞİL: kendi mesajımızda sender=ben,
+      // [ben, ben] çifti gönderim çapasından farklı çıkar (5b hotfix v2).
+      // Gönderim yolu aynı dmAnchorIds'i kullanır — iki taraf asla ayrışmaz.
+      const sorted = dmAnchorIds(raw.channel_id);
+      if (sorted) myPriv = dhAnchor('dm', key, sorted).privateKey;
     } else if (key) {
       myPriv = dhAnchor(kind, key).privateKey;
     }

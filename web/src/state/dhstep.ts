@@ -6,7 +6,6 @@
 // → null = primary alias, geriye uyumlu).
 import type { DhSendParams, MsgScope } from '../crypto/message';
 import { dhAnchor, loadDhStep, newDhEphemeral, nextDhStep, saveDhStep, shouldDhStep } from '../crypto/dhratchet';
-import { unb64 } from '../crypto/bytes';
 import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
 
@@ -14,10 +13,22 @@ import { useAuthStore } from './authStore';
 // sayfa yenilenince ephemeral kaybolur → sonraki mesaj yeni DH adımı açar (FS).
 const ephCache = new Map<string, { publicKey: Uint8Array; privateKey: Uint8Array }>();
 
-// 1:1 DM: karşı tarafın published kimlik X25519 anahtarı DH çıktısını belirler;
-// anahtar yoksa v3'e düşülür (imzalı simetrik ratchet).
-// Kanal/gdm: epok anahtarından türetilen grup DH çapası (dhAnchor) — her üye
-// aynı çifti türetir, v4 her zaman üretilebilir; v3'e düşüş gerekmez.
+// 1:1 DM: karşı tarafın published kimlik X25519 anahtarı yerine, sıralı
+// (ben, peer) çiftinden türetilen deterministik DH çapası kullanılır
+// (Faz 5b hotfix v2). Kanal/gdm: epok anahtarından türetilen grup DH çapası
+// (dhAnchor) — her üye aynı çifti türetir, v4 her zaman üretilebilir;
+// v3'e düşüş gerekmez.
+
+// DM çapa çifti — gönderim (dhParamsFor) ve okuma (dmChatStore.toDisplay)
+// AYNI yardımcıyı kullanır. Kendi mesajımızda sender_id = ben olduğundan
+// okuma tarafı çifti asla [ben, ben] olmamalı; peer, DM üyeliğinden gelir
+// (ilk hotfix'te [me, sender] hesaplanmış, kendi mesajları açılamamıştı).
+export function dmAnchorIds(channelId: string): [string, string] | null {
+  const me = useAuthStore.getState().user?.id;
+  const peerId = useAppStore.getState().dms.find((d) => d.id === channelId)?.peer.id;
+  return me && peerId ? ([me, peerId].sort() as [string, string]) : null;
+}
+
 export async function dhParamsFor(
   channelId: string,
   kind: MsgScope,
@@ -27,25 +38,8 @@ export async function dhParamsFor(
 ): Promise<DhSendParams | undefined> {
   const deviceId = useAuthStore.getState().deviceId;
   if (kind === 'dm') {
-    const peerId = useAppStore.getState().dms.find((d) => d.id === channelId)?.peer.id;
-    if (!peerId) return undefined;
-    const peerPubOf = (): string | undefined => {
-      const app = useAppStore.getState();
-      return app.publicKeys[peerId] ?? app.friends.find((f) => f.id === peerId)?.public_key;
-    };
-    let peerPub = peerPubOf();
-    if (!peerPub) {
-      await useAppStore.getState().loadBootstrap();
-      peerPub = peerPubOf();
-    }
-    if (!peerPub) return undefined;
-    // DM: sıralı (sender_id, peer_id) çiftinden deterministik DH çapası türetilir
-    // (Faz 5b hotfix — spec §1). Karşılıklı taraflar aynı çifti hesaplar; X25519
-    // simetrisi gereği kendi mesajımız da açılabilir. peer_static_pub olarak
-    // anchor.publicKey kullanılır — kimlik X25519 public'i değil.
-    const me = useAuthStore.getState().user?.id;
-    if (!me) return undefined;
-    const sorted = [me, peerId].sort() as [string, string];
+    const sorted = dmAnchorIds(channelId);
+    if (!sorted) return undefined;
     const anchor = dhAnchor('dm', key, sorted);
     const eph = stepEph(channelId, version, index, deviceId);
     return { ...eph, peerStaticPub: anchor.publicKey };
