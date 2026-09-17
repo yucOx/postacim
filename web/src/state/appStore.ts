@@ -18,6 +18,7 @@ import {
   startGossipLoop,
 } from '../lib/keygossip';
 import { useSecurityStore } from './securityStore';
+import { useDeviceStore } from './deviceStore';
 
 export interface Channel {
   id: string;
@@ -193,9 +194,11 @@ export const useAppStore = create<AppState>((set, get) => {
       friends: { friends: FriendInfo[]; incoming: FriendBrief[]; outgoing: FriendBrief[] };
       dms?: DmInfo[];
       gdms?: GdmInfo[];
+      devices?: import('./deviceStore').DeviceInfo[];
     }>('/bootstrap');
     // imza anahtarı haritası defterden beslenir — yeni üye/kayıt sonrası tazele
     void refreshSignKeys();
+    if (data.devices) useDeviceStore.setState({ devices: data.devices });
     const { communities, keys } = unwrapBootstrap(data.communities, get().channelKeys);
     // DM/GDM keys: unwrap into a separate epoch map (ids never collide: dm_/gdm_ prefixes)
     const { publicKey, privateKey } = useAuthStore.getState();
@@ -657,6 +660,30 @@ export const useAppStore = create<AppState>((set, get) => {
             void sec.runKeyLogCheck(auth.user.id, auth.publicKey);
           }
         }
+      } else if (e.type === 'device:link_request') {
+        // Faz 7 — primary cihaza yeni cihaz bağlama isteği. Modal açar.
+        const d = e as unknown as { device_id: string; device_name: string; ephemeral_pub: string };
+        useDeviceStore.getState().setPendingLink({
+          device_id: d.device_id,
+          device_name: d.device_name,
+          ephemeral_pub: d.ephemeral_pub,
+        });
+      } else if (e.type === 'device:link_approved') {
+        // Joinee tarafında: approval geldi. finishLink UI tetikler.
+        // Burada yalnız kayıt → deviceStore tarafında ownLinkInProgress
+        // UI tarafından yönetilir; onay event'i UI'ı uyarır.
+        const d = e as unknown as { link_token: string; approval: string };
+        window.dispatchEvent(new CustomEvent('pgv:device-link-approved', { detail: d }));
+      } else if (e.type === 'device:link_completed') {
+        // Primary'a joinee'in başarıyla eklendiği bildirimi. Listeyi tazele.
+        void get().loadBootstrap();
+      } else if (e.type === 'device:revoked') {
+        // Bir cihaz iptal edildi (bu cihaz dahil olabilir — sunucu
+        // oturumu düşürmediği sürece biz yine de listeden düşürürüz).
+        const d = e as unknown as { device_id: string };
+        useDeviceStore.setState((s) => ({
+          devices: s.devices.filter((dev) => dev.id !== d.device_id),
+        }));
       }
     });
 
