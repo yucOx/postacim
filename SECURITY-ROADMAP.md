@@ -13,10 +13,13 @@ Discord-benzeri web sohbet uygulaması (React 19 + Fastify +
 better-sqlite3 + LiveKit SFU, AGPL-3.0). Sunucu yalnız opak blob taşır —
 bu **değişmez invariant**.
 
-Hedef: kripto/gizlilik derinliğinde **Signal ile parite**. Mevcut dürüst
-boşluklar (README "Bilinen sınırlar"): gönderen atfı kriptografik değil,
-kısmi forward secrecy (DH ratchet/MLS yok), tek cihaz, JS trust, kaybolan
-mesaj yok, key transparency gossip yok.
+Hedef: kripto/gizlilik derinliğinde **Signal ile parite**. **v1.0.0 itibarıyla
+durum:** 7 faz tamamlandı (Faz 1 imza, Faz 2 TTL, Faz 3 Tor rehberi,
+Faz 4 signed release, Faz 5 DH ratchet PCS-lite, Faz 6 key transparency
+gossip gözlemsel, Faz 7 çoklu cihaz); Faz 8 audit hazırlık
+(SECURITY-REVIEW.md + AUDIT-FUNDING.md) tamamlandı. Kapanan boşluklar
+README §Tehdit modeli tablosunda **KAPATILDI/KISMEN** etiketiyle listeli.
+Kalan sınırlar yapısal/kaynak kısıtı (AYNI/GELECEK).
 
 ## Her fazda zorunlu akış
 
@@ -43,6 +46,13 @@ mesaj yok, key transparency gossip yok.
 Yol haritası repo'da yaşıyor; README "Durum → Sıradaki" bölümü bu faz
 listesiyle değiştirildi; ARCHITECTURE genel akış tablosuna "güvenlik yol
 haritası" satırı eklendi.
+
+## Program özeti (v1.0.0)
+
+8 fazın tamamı tamamlandı. Detay: her faz başlığı + README §Tehdit
+modeli (boşluk akıbet tablosu) + CHANGELOG v1.0.0. Dış audit paketi:
+[docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md). Audit/fon kaynak
+haritası: [docs/AUDIT-FUNDING.md](docs/AUDIT-FUNDING.md).
 
 ## Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik) — tamamlandı (9294cc3)
 
@@ -181,7 +191,7 @@ linking flow, cihaz iptali = rekey zorunlu, per-cihaz fingerprint. Spec:
 step + 12 server (link/revoke flow, primary iptal reddi, token tek
 kullanımlık, başka user cihazı 404) — 274 → 293.
 
-## Faz 8 — Kapanış: threat model revizyonu + dış audit hazırlığı
+## Faz 8 — Kapanış: threat model revizyonu + dış audit hazırlığı — tamamlandı (6 atomic commit)
 
 - README tehdit modelini sıfırdan yaz (kapalı boşluklar listeden çıkar,
   kalan sınırlar dürüstçe kalır: metadata, sansür, web JS trust kalıntısı).
@@ -189,6 +199,15 @@ kullanımlık, başka user cihazı 404) — 274 → 293.
   özet, kripto spesifikasyonu, test envanteri, kapsamı dışı listesi).
 - FUNDING/audit kaynak notu: OTF Red Team Lab, Cure53 tarzı programlar.
 - Son: CHANGELOG özeti + sürüm tag'i (v1.0.0) + release manifest.
+
+**Tamamlandı:** `main` üzerinde 6 atomic commit ile uygulandı
+(`742f833` → `6346893` → `b3a416c` Faz 8 commit'leri; `f4c345c` Faz 8
+AUDIT-FUNDING.md; `80dec56` Faz 8 SECURITY-REVIEW.md). Kod değişikliği
+yok — sadece dokümanlar + CHANGELOG/README stale check. **Sürüm tag'i
+(v1.0.0) ve main'e merge kararı kullanıcıda**: kullanıcı
+`git tag v1.0.0 && git push --tags` ile tag atınca CI
+(`.github/workflows/release.yml`) web bundle SHA-256 + SRI manifest'i
+GitHub Release asset'i olarak üretir.
 
 ---
 
