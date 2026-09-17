@@ -27,7 +27,16 @@ export function attachWs(app: FastifyInstance): void {
     }, 10_000);
 
     ws.on('message', (raw) => {
-      let msg: { type?: string; token?: string; channel_id?: string; state?: string; payload?: string };
+      let msg: {
+        type?: string;
+        token?: string;
+        channel_id?: string;
+        state?: string;
+        payload?: string;
+        id?: number;
+        hash?: string;
+        communities?: unknown;
+      };
       try {
         msg = JSON.parse(raw.toString());
       } catch {
@@ -140,6 +149,42 @@ export function attachWs(app: FastifyInstance): void {
             if (m.user_id !== userId) hub.sendToUser(m.user_id, payload);
           }
         }
+      }
+
+      // --- Keylog head gossip (Faz 6): her istemci kendi doğrulanmış
+      // head'ini üyesi olduğu topluluklara periyodik yayınlar. Sunucu
+      // yalnız relay: saklamaz, yorumlamaz; üyelik kontrolü ile kitleye
+      // iletir. Çatışma çözümü alıcıdadır (spec: docs/faz6-keygossip-design.md).
+      // Sunucu plaintext görmez invariant'ı korunur — id/hash public alanlar.
+      if (msg?.type === 'keylog_head' && Array.isArray(msg.communities)) {
+        // sığ sınır: id pozitif 32-bit tam sayı, hash 64 hex, communities string[] (≤64)
+        if (
+          typeof msg.id !== 'number' ||
+          !Number.isInteger(msg.id) ||
+          msg.id < 1 ||
+          msg.id > 0x7fffffff ||
+          typeof msg.hash !== 'string' ||
+          !/^[0-9a-f]{64}$/.test(msg.hash) ||
+          msg.communities.length > 64 ||
+          !msg.communities.every((c) => typeof c === 'string' && c.length > 0 && c.length <= 64)
+        ) {
+          return;
+        }
+        const sender = db.prepare('SELECT nick FROM users WHERE id = ?').get(userId) as
+          | { nick: string }
+          | undefined;
+        if (!sender) return;
+        for (const communityId of msg.communities as string[]) {
+          if (!memberRole(communityId, userId)) continue; // üye değilse bu scope atlanır
+          hub.broadcast(communityId, {
+            type: 'keylog_head',
+            community_id: communityId,
+            id: msg.id,
+            hash: msg.hash,
+            from: userId,
+          });
+        }
+        return;
       }
 
       // --- 1:1 DM call signaling (caller/relayed; media goes through LiveKit) ---
