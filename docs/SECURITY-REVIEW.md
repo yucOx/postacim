@@ -266,7 +266,13 @@ Denetçi için önerilen öncelik sırası (yüksek risk → düşük):
 7. **Anahtar defteri (key_log) bütünlüğü** — `server/src/routes/keys.ts`
    + `web/src/lib/keytransparency.ts`. Append-only invariant, genesis
    hash, silinen hesabın satırı. Saldırı: sahte `entry_hash` (sunucu
-   sahteciliği), sayfalama atlatma.
+   sahteciliği), sayfalama atlatma. **Faz 1 hotfix (race):** `resolveSignKeys`
+   kendi userId'miz için RAM'deki `authStore.signPublicKey`'i kısayol
+   olarak kabul eder; `chatStore`/`dmChatStore` `toDisplay` bunu kullanır —
+   syncKeyLog tamamlanmadan kendi mesajımız decode olur, başkaları için
+   yalnız zincir kanıtı geçerli (tehdit modeli bozulmaz). Test:
+   `web/src/lib/signkeys.test.ts` (12 durum: self short-circuit, impostor
+   reddi, harita birleşimi, key rotation).
 8. **Key transparency gossip relay** — `server/src/ws/index.ts`
    `keylog_head` işleme. Sığ sınır, üye olmayan reddi, broadcast
    scope doğruluğu. Saldırı: büyük `communities` listesi DoS, geçersiz
