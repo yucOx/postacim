@@ -65,12 +65,15 @@ export function dhAnchor(
   let privateKey: Uint8Array;
   if (scope === 'dm') {
     if (!sortedIds) throw new Error('dm anchor: sortedIds gerekli');
+    // savunma: caller sorted verse bile normalize et — iki yönlü girişin
+    // // sıra farkı deterministik aynı çıktıyı üretmeli (gönderen/alıcı simetrisi)
+    const [a, b] = [...sortedIds].sort() as [string, string];
     privateKey = H(
       new Uint8Array([
         ...epochKey,
         ...enc.encode('dm-anchor'),
-        ...enc.encode(sortedIds[0]),
-        ...enc.encode(sortedIds[1]),
+        ...enc.encode(a),
+        ...enc.encode(b),
       ]),
     );
   } else {

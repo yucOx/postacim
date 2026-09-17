@@ -533,3 +533,115 @@ describe('Faz 5d — ses anahtarı: DH zincirinden türetim', () => {
     expect(b64(dhVoiceKey(epoch, dhShared(anchor.privateKey, anchor.publicKey)))).not.toBe(b64(msgChainRoot));
   });
 });
+
+// --- Faz 5b hotfix: DM v4 — sıralı (sender, peer) çiftinden DH çapası ---
+// 5b spec'inde DM türevi X25519(eph, peer_static_pub) idi; alıcı
+// X25519(my_priv, my_eph) ile kendi mesajını AÇAMIYORDU (kimlik çiftinin
+// yarısı). 5c'de kanal/gdm için eşdeğer çapa (dhAnchor) vardı; DM'ye
+// burada uygulanıyor: anchor_pub/priv = X25519base(H(epoch‖'dm-anchor'‖
+// sorted(sender)‖sorted(peer))). Her iki taraf aynı çifti türetir, X25519
+// simetrisi gereği gönderen/alıcı türevleri aynı 32B → kendi mesajı
+// açılabilir, ek dağıtım yok.
+describe('Faz 5b hotfix — DM v4 DH çapası (sıralı çift)', () => {
+  const epoch = new Uint8Array(32).fill(11);
+  const ME = 'u_self';
+  const PEER = 'u_peer';
+
+  it('DM çapası deterministik + sıra-bağımsız + peer-ayırıcı', () => {
+    const a = dhAnchor('dm', epoch, [ME, PEER]);
+    const b = dhAnchor('dm', epoch, [PEER, ME]); // sıra ters → aynı çift
+    expect(b64(a.publicKey)).toBe(b64(b.publicKey));
+    expect(b64(a.privateKey)).toBe(b64(b.privateKey));
+    expect(b64(sodium.crypto_scalarmult_base(a.privateKey))).toBe(b64(a.publicKey));
+    // farklı peer → farklı çift
+    const c = dhAnchor('dm', epoch, [ME, 'u_other']);
+    expect(b64(c.publicKey)).not.toBe(b64(a.publicKey));
+    // farklı epok → farklı çift
+    const d = dhAnchor('dm', new Uint8Array(32).fill(22), [ME, PEER]);
+    expect(b64(d.publicKey)).not.toBe(b64(a.publicKey));
+    // sortedIds yoksa reddeder (sessiz hata yerine explicit error)
+    expect(() => dhAnchor('dm', epoch)).toThrow();
+  });
+
+  it('DM simetri: gönderen türetimi = alıcı türetimi (kendi mesajımı AÇARIM)', () => {
+    // Prod mantığıyla aynı: her iki taraf aynı sorted çiftinden anchor türetir,
+    // gönderen X25519(eph_priv, anchor_pub), alıcı X25519(anchor_priv, eph_pub)
+    // — simetri gereği aynı 32B DH çıktısı.
+    const myAnchor = dhAnchor('dm', epoch, [ME, PEER]);
+    const peerAnchor = dhAnchor('dm', epoch, [ME, PEER]);
+    expect(b64(myAnchor.publicKey)).toBe(b64(peerAnchor.publicKey));
+    expect(b64(myAnchor.privateKey)).toBe(b64(peerAnchor.privateKey));
+    const eph = newDhEphemeral();
+    const dhSender = dhShared(eph.privateKey, myAnchor.publicKey);
+    const dhReceiver = dhShared(peerAnchor.privateKey, eph.publicKey);
+    expect(b64(dhSender)).toBe(b64(dhReceiver));
+  });
+
+  it('DM v4 roundtrip: kendi mesajımı kendim açarım (kanal scope yok, dm scope)', () => {
+    const dmId = 'dm_hotfix';
+    const myAnchor = dhAnchor('dm', epoch, [ME, PEER]);
+    // gönderen: ben, peer olarak PEER (sorted = [ME, PEER]) ile anchor seçtim
+    const eph = newDhEphemeral();
+    const enc = encryptText(dmId, 1, epoch, 'kendi mesajım', 'dm', undefined, false, { senderId: ME, index: 0 }, { signPrivateKey: senderSign.signPrivateKey }, {
+      dhPriv: eph.privateKey, dhPub: eph.publicKey, dhStep: 0, stepBase: 0, peerStaticPub: myAnchor.publicKey,
+    });
+    // alıcı: ben (kendi mesajım), sender = ME ile sorted yine [ME, PEER] → aynı anchor
+    const recvAnchor = dhAnchor('dm', epoch, [ME, ME]).privateKey; // sorted([ME,ME])
+    // gerçek alıcı senaryosu: raw.sender_id = ME, ben = ME → sorted [ME, ME]
+    // fakat bu DM'de sorted pair = [ben, peer] olmalı — peer'ı bilmiyorsam
+    // (kendi mesajımı açarken) localStorage'daki DM peer id'sinden gelir.
+    // Burada peer = PEER, sorted = [ME, PEER] (sıra sender ile aynı olmalı).
+    // Yani alıcı kendi rolünde: sorted(sender=ME, peer=PEER) = [ME, PEER].
+    const myRecvAnchor = dhAnchor('dm', epoch, [ME, PEER]).privateKey;
+    const msg = decryptText(dmId, 1, epoch, enc.nonce, enc.ciphertext, 'dm', undefined, ME, sigCtx(), { myPriv: myRecvAnchor });
+    expect(msg.body).toBe('kendi mesajım');
+    expect(msg.ratchet?.i).toBe(0);
+    // yanlış sorted pair ile çözüm reddedilir (kanıt: anchor türevi farklı)
+    const wrongAnchor = dhAnchor('dm', epoch, [PEER, ME]).privateKey; // aynı sorted olur
+    // sıra-bağımsızlık nedeniyle yine aynı — burada gerçek "yanlış pair" deneyelim:
+    const stranger = dhAnchor('dm', epoch, [ME, 'u_stranger']).privateKey;
+    expect(() => decryptText(dmId, 1, epoch, enc.nonce, enc.ciphertext, 'dm', undefined, ME, sigCtx(), { myPriv: stranger })).toThrow(DecryptError);
+    // not: unused var uyarısını bastırmak için recvAnchor'ı referansla
+    expect(recvAnchor.byteLength).toBe(32);
+  });
+
+  it('DM cross-device: farklı cihazlardan gönderip alma (her iki taraf doğru anchor türetir)', () => {
+    const dmId = 'dm_xdev';
+    // Alice (ME) ve Bob (PEER) farklı ephemeral'larla farklı cihazlardan gönderiyor
+    const sorted = [ME, PEER].sort() as [string, string];
+    const aliceAnchor = dhAnchor('dm', epoch, sorted);
+    const bobAnchor = dhAnchor('dm', epoch, sorted);
+    // Alice → Bob
+    const aliceEph = newDhEphemeral();
+    const toBob = encryptText(dmId, 1, epoch, 'alice→bob', 'dm', undefined, false, { senderId: ME, index: 0 }, { signPrivateKey: senderSign.signPrivateKey }, {
+      dhPriv: aliceEph.privateKey, dhPub: aliceEph.publicKey, dhStep: 0, stepBase: 0, peerStaticPub: aliceAnchor.publicKey,
+    });
+    const bobReads = decryptText(dmId, 1, epoch, toBob.nonce, toBob.ciphertext, 'dm', undefined, ME, sigCtx(), { myPriv: bobAnchor.privateKey });
+    expect(bobReads.body).toBe('alice→bob');
+    // Bob → Alice (ters yön, aynı anchor çifti)
+    const bobEph = newDhEphemeral();
+    const toAlice = encryptText(dmId, 1, epoch, 'bob→alice', 'dm', undefined, false, { senderId: PEER, index: 1 }, { signPrivateKey: senderSign.signPrivateKey }, {
+      dhPriv: bobEph.privateKey, dhPub: bobEph.publicKey, dhStep: 0, stepBase: 1, peerStaticPub: bobAnchor.publicKey,
+    });
+    const aliceReads = decryptText(dmId, 1, epoch, toAlice.nonce, toAlice.ciphertext, 'dm', undefined, PEER, sigCtx(), { myPriv: aliceAnchor.privateKey });
+    expect(aliceReads.body).toBe('bob→alice');
+  });
+
+  it('NEGATİF: eski v4 DM (peer_static_pub = identity public) yeni sürümde okunamaz', () => {
+    // 5b spec'inde DM türevi X25519(eph, peer_static_pub) idi (kimlik X25519
+    // public'i). Yeni sürüm peer_static_pub yerine anchor.publicKey bekliyor
+    // — eski türetilmiş mesajlar yeni alıcıda açılamaz (gövde null düşer).
+    const dmId = 'dm_legacy';
+    // eski üretim: kimlik public'i peer_static_pub
+    const eph = newDhEphemeral();
+    const legacy = encryptText(dmId, 1, epoch, 'eski v4', 'dm', undefined, false, { senderId: ME, index: 0 }, { signPrivateKey: senderSign.signPrivateKey }, {
+      dhPriv: eph.privateKey, dhPub: eph.publicKey, dhStep: 0, stepBase: 0, peerStaticPub: recv.pub,
+    });
+    // yeni alıcı: anchor.privateKey — eski mesaj için yanlış DH çıktısı
+    const myAnchor = dhAnchor('dm', epoch, [ME, PEER]).privateKey;
+    expect(() => decryptText(dmId, 1, epoch, legacy.nonce, legacy.ciphertext, 'dm', undefined, ME, sigCtx(), { myPriv: myAnchor })).toThrow(DecryptError);
+    // eski alıcı (kimlik private) ile eski mesaj açılırdı — bizde bu davranış
+    // artık üretilmiyor, yalnızca eski DB satırları için "anahtar bu epoch"
+    // mesajı gösterilir (body null kalıbı).
+  });
+});
