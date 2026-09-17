@@ -3,7 +3,7 @@ import { api } from '../api/client';
 import type { ChatMessage } from '../api/types';
 import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
-import { decryptText, encryptText, nextSendIndex, type MsgScope } from '../crypto/message';
+import { decryptText, encryptText, nextSendIndex, DecryptError, type MsgScope } from '../crypto/message';
 import { dhAnchor } from '../crypto/dhratchet';
 import { dhParamsFor, dmAnchorIds } from './dhstep';
 import { ReplayFilter } from '../lib/replay';
@@ -15,6 +15,22 @@ import { onServerEvent } from '../ws/socket';
 
 // dm_/gdm_ ids never collide with chatStore's channel ids — separate filter is safe
 const replays = new ReplayFilter();
+
+// kalıcı çözümleme başarısızları — bkz. chatStore'daki aynı adlı set
+// (çapa öncesi v4 DM satırları her açılışta 20k'lık taramayı yeniden
+// koşturmamalı). Anahtar satır bazlı: içerik değişmez, sonuç değişmez.
+const deadRows = new Set<string>();
+const rowKey = (raw: ChatMessage): string => `${raw.channel_id}:${raw.key_version}:${raw.id}`;
+
+// partiler arası event-loop yield'i — bkz. chatStore'daki aynı yardımcı
+async function mapBatched<T, R>(items: T[], fn: (x: T) => R, batch = 8): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i++) {
+    out.push(fn(items[i]!));
+    if (i % batch === batch - 1 && i < items.length - 1) await new Promise<void>((r) => setTimeout(r, 0));
+  }
+  return out;
+}
 
 // dm channel ids are prefixed dm_/gdm_ — the kind picks endpoint + AAD scope
 const kindOf = (channelId: string): MsgScope => (channelId.startsWith('gdm_') ? 'gdm' : 'dm');
@@ -73,6 +89,21 @@ function metaOf(raw: ChatMessage): Pick<DmDisplayMessage, 'replyTo' | 'reactions
 function toDisplay(raw: ChatMessage): DmDisplayMessage {
   const meta = metaOf(raw);
   const expiry = { expiresAt: raw.expires_at ?? undefined };
+  // önbellekte kalıcı-failure olarak bilinen satır: taramayı hiç başlatma
+  if (deadRows.has(rowKey(raw))) {
+    return {
+      id: raw.id,
+      channelId: raw.channel_id,
+      senderId: raw.sender_id,
+      nick: raw.nick,
+      sentAt: raw.sent_at,
+      clientId: raw.client_id ?? undefined,
+      clientSentAt: raw.sent_at_client ?? undefined,
+      body: null,
+      ...expiry,
+      ...meta,
+    };
+  }
   // tombstone row: the server kept the placeholder and wiped the content
   if (raw.deleted) {
     return {
@@ -152,7 +183,8 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
       ...expiry,
       ...meta,
     };
-  } catch {
+  } catch (err) {
+    if (err instanceof DecryptError && err.permanent) deadRows.add(rowKey(raw));
     return {
       id: raw.id,
       channelId: raw.channel_id,
@@ -191,12 +223,12 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
     // full reload replaces the list — rebuild the replay set so re-served
     // history is not flagged as injected duplicates
     replays.reset(dmId);
+    const filtered = res.messages.filter((m) => !(m.client_id && replays.check(dmId, m.client_id)));
+    const display = await mapBatched(filtered, toDisplay);
     set((s) => ({
       messages: {
         ...s.messages,
-        [dmId]: res.messages
-          .filter((m) => !(m.client_id && replays.check(dmId, m.client_id)))
-          .map(toDisplay),
+        [dmId]: display,
       },
       hasMore: { ...s.hasMore, [dmId]: res.has_more },
     }));
@@ -209,15 +241,12 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
     const res = await api<{ messages: ChatMessage[]; has_more: boolean }>(
       `${baseOf(dmId)}/${dmId}/messages?before=${oldest}&limit=50`,
     );
+    const filtered = res.messages.filter((m) => !(m.client_id && replays.check(dmId, m.client_id)));
+    const older = await mapBatched(filtered, toDisplay);
     set((s) => ({
       messages: {
         ...s.messages,
-        [dmId]: [
-          ...res.messages
-            .filter((m) => !(m.client_id && replays.check(dmId, m.client_id)))
-            .map(toDisplay),
-          ...(s.messages[dmId] ?? []),
-        ],
+        [dmId]: [...older, ...(s.messages[dmId] ?? [])],
       },
       hasMore: { ...s.hasMore, [dmId]: res.has_more },
     }));

@@ -10,7 +10,7 @@ import {
   wrapKeyFor,
   unwrapMyKey,
 } from './identity';
-import { encryptText, decryptText } from './message';
+import { encryptText, decryptText, DecryptError } from './message';
 import { generateMnemonic, validateMnemonic } from './bip39';
 import { deriveRecoveryKeys } from './recovery';
 import { parseInviteLink, buildInviteLink } from './invite';
@@ -140,6 +140,22 @@ describe('message AEAD + AAD binding', () => {
     const b = { clientId: '55555555-5555-4555-8555-555555555555', clientSentAt: 1 };
     const { nonce, ciphertext } = encryptText('ch_1', 1, key, 'x', 'ch', b);
     expect(() => decryptText('ch_1', 1, key, nonce, ciphertext, 'ch')).toThrow();
+  });
+  it('DecryptError.permanent: tam bağlamla açılamayan v4-biçimli satır kalıcı; bağlam eksikse değil', () => {
+    const k = randomBytes(32);
+    const raw = b64(randomBytes(24 + 156)); // yabancı ct, ≥56B → v4 biçimli sayılır; asla açılmaz
+    const attempt = (...args: Parameters<typeof decryptText>): boolean | null => {
+      try {
+        decryptText(...args);
+        return null; // açıldı — bu test beklemiyordu
+      } catch (e) {
+        return e instanceof DecryptError ? e.permanent : null;
+      }
+    };
+    // (a) dhCtx + senderId VAR → tüm yollar (v4 + legacy taramalar) denenir → kalıcı
+    expect(attempt('ch_1', 1, k, b64(randomBytes(24)), raw, 'ch', undefined, 'sender-1', undefined, { myPriv: randomBytes(32) })).toBe(true);
+    // (b) dhCtx YOK, ct v4-biçimli → çapa sonradan gelebilir → kalıcı değil
+    expect(attempt('ch_1', 1, k, b64(randomBytes(24)), raw, 'ch', undefined, 'sender-1')).toBe(false);
   });
 });
 

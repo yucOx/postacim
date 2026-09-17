@@ -240,8 +240,14 @@ export function encryptText(
 }
 
 export class DecryptError extends Error {
-  constructor() {
+  /** true = tam bağlamla (anahtar+çapa+imza anahtarları elverişliyken) hiçbir
+   *  yol açamadı — aynı satırı yeniden denemek aynı sonucu verir. Çağıran
+   *  katman bunu önbelleğe alıp 20k'lık legacy taramasını atlayabilir.
+   *  false = bağlam eksikti (anahtar/çapa/imza anahtarları sonra gelebilir) */
+  permanent: boolean;
+  constructor(permanent = false) {
     super('mesaj çözülemedi');
+    this.permanent = permanent;
   }
 }
 
@@ -367,7 +373,14 @@ export function decryptText(
       return parseBody(opened.pt, opened.scanIdx);
     }
   }
-  throw new DecryptError();
+  // hiçbir yol açamadı: kalıcılık, bağlamın eksik olup olmamasına bağlı —
+  // v4 biçimli bir satırı çapasız denediysek (dhCtx yok) çapa sonradan
+  // gelebilir; imza anahtarları eksikse sync sonrası doğrulama mümkün.
+  // İkisi de tamamsa sonuç deterministiktir: kalıcı.
+  const fullAttempt =
+    (!!dhCtx || ct.length < DH_HEADER_LEN + 16) &&
+    (!sigCtx || (!!sigCtx.signPublicKey && sigCtx.signPublicKey.length > 0));
+  throw new DecryptError(fullAttempt);
 }
 
 // header (v1: 0x01 / v2: 0x02 / v4: 0x04 + uzunluk; eski: headersız) + JSON + scan çelişki kontrolü
