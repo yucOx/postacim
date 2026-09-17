@@ -14,6 +14,9 @@ import {
   dhMsgKey,
   dhShared,
   dhStepRoot,
+  dhVoiceKey,
+  dhVoiceKeyAnchor,
+  dhVoiceKeyDm,
   encodeDhHeader,
   encodeDhUpdate,
   loadDhStep,
@@ -44,6 +47,7 @@ const vectors = JSON.parse(
   steps: { j: number; eph_priv_hex: string; eph_pub_hex: string; dh_out_hex: string; step_root_hex: string; msg_keys: { l: number; i: number; root_hex: string; msg_key_hex: string }[] }[];
   aad_sample: { scope: string; channel_id: string; epoch_version: number; i: number; dh_pub_hex: string; aad: string };
   message: { body: string; j: number; step_base: number; i: number; dh_pub_hex: string; nonce_b64: string; ciphertext_b64: string; aad: string; signer_seed_hex: string; signer_pub_hex: string; sent: number };
+  voice: { note: string; anchor_voice_key_hex: string; dm_alice_priv_hex: string; dm_bob_priv_hex: string; dm_alice_pub_hex: string; dm_bob_pub_hex: string; dm_voice_key_hex: string };
 };
 
 // --- ortak kurulum ---
@@ -480,5 +484,52 @@ describe('Faz 5c — epok DH çapası (kanal/gdm)', () => {
     expect(verifyDhUpdate(encodeDhUpdate('ch_b', 3, pub), sig, senderSign.signPublicKey)).toBe(false);
     expect(verifyDhUpdate(encodeDhUpdate('ch_a', 4, pub), sig, senderSign.signPublicKey)).toBe(false);
     expect(verifyDhUpdate(encodeDhUpdate('ch_a', 3, pub), sig, senderSign.signPublicKey)).toBe(true);
+  });
+});
+
+// --- Faz 5d — ses (SFrame) anahtarı türetimi (spec §7) ---
+describe('Faz 5d — ses anahtarı: DH zincirinden türetim', () => {
+  const epoch = fromHex(vectors.inputs.epoch_key_hex);
+  const vk = vectors.voice;
+  const alicePriv = fromHex(vk.dm_alice_priv_hex);
+  const bobPriv = fromHex(vk.dm_bob_priv_hex);
+
+  it('KAT: kanal/gdm ses anahtarı fikstürle bit-bit aynı (çapa türetimi)', () => {
+    expect(toHex(dhVoiceKeyAnchor(epoch))).toBe(vk.anchor_voice_key_hex);
+    // elle yeniden hesap: her üye aynı çifti türetir → aynı DH çıktısı
+    const anchor = dhAnchor(epoch);
+    expect(toHex(dhVoiceKey(epoch, dhShared(anchor.privateKey, anchor.publicKey))))
+      .toBe(vk.anchor_voice_key_hex);
+    // determinizm: aynı epok → aynı anahtar (arama başına pin, taraf başına ayrım yok)
+    expect(toHex(dhVoiceKeyAnchor(epoch))).toBe(toHex(dhVoiceKeyAnchor(epoch)));
+  });
+
+  it('KAT: DM ses anahtarı fikstürle bit-bit aynı; iki taraf AYNI anahtarı türetir', () => {
+    // alice tarafı: kendi private'ı × bob'un public'i; bob tarafı tersi
+    expect(toHex(dhVoiceKeyDm(epoch, alicePriv, fromHex(vk.dm_bob_pub_hex))))
+      .toBe(vk.dm_voice_key_hex);
+    expect(toHex(dhVoiceKeyDm(epoch, bobPriv, fromHex(vk.dm_alice_pub_hex))))
+      .toBe(vk.dm_voice_key_hex);
+    // public'ler private'lardan yeniden türetilebilir (fixture tutarlılığı)
+    expect(toHex(sodium.crypto_scalarmult_base(alicePriv))).toBe(vk.dm_alice_pub_hex);
+    expect(toHex(sodium.crypto_scalarmult_base(bobPriv))).toBe(vk.dm_bob_pub_hex);
+  });
+
+  it('epok ayrımı: farklı epok anahtarı → farklı ses anahtarı; rekey anahtarı çevirir', () => {
+    const K2 = new Uint8Array(32).fill(8);
+    expect(toHex(dhVoiceKeyAnchor(K2))).not.toBe(vk.anchor_voice_key_hex);
+    expect(toHex(dhVoiceKeyDm(K2, alicePriv, fromHex(vk.dm_bob_pub_hex))))
+      .not.toBe(vk.dm_voice_key_hex);
+  });
+
+  it('alan ayrımı: ses anahtarı ham epok anahtarı DEĞİL ve mesaj zincirinden farklı', () => {
+    // eski istemci ham epok anahtarını SFrame'e verirdi — yeni türetim bundan
+    // ayrışır: karışık ortamda uyuşmazlık EncryptionError ile görünür (dürüst sınır)
+    expect(b64(dhVoiceKeyAnchor(epoch))).not.toBe(b64(epoch));
+    expect(b64(dhVoiceKeyDm(epoch, alicePriv, fromHex(vk.dm_bob_pub_hex)))).not.toBe(b64(epoch));
+    // mesaj zincirinin j=0 kökünden de farklı (voice seed ayrı alan)
+    const anchor = dhAnchor(epoch);
+    const msgChainRoot = dhStepRoot(chainSeed(epoch, vectors.inputs.sender_id), dhShared(anchor.privateKey, anchor.publicKey), 0);
+    expect(b64(dhVoiceKey(epoch, dhShared(anchor.privateKey, anchor.publicKey)))).not.toBe(b64(msgChainRoot));
   });
 });

@@ -112,5 +112,14 @@
     "signer_seed_hex": "6666666666666666666666666666666666666666666666666666666666666666",
     "signer_pub_hex": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746",
     "sent": 1726400000000
+  },
+  "voice": {
+    "note": "Faz 5d — ses (SFrame) anahtarı: voice_seed = H(epok ‖ 'voice'); step_root = H(voice_seed ‖ 'dh' ‖ u32LE(0) ‖ DH_ÇIKTISI); ses anahtarı = H(step_root ‖ 'voice'). anchor: DH_ÇIKTISI = X25519(çapa_priv, çapa_pub) — tüm üyeler aynı. dm: DH_ÇIKTISI = X25519(alice_priv, bob_pub) = X25519(bob_priv, alice_pub) — iki taraf aynı.",
+    "anchor_voice_key_hex": "74e2ebe05bf7b19f8bb2fdbb40f58e45096d43689e1258fb9f17ba98094e37b7",
+    "dm_alice_priv_hex": "4444444444444444444444444444444444444444444444444444444444444444",
+    "dm_bob_priv_hex": "5555555555555555555555555555555555555555555555555555555555555555",
+    "dm_alice_pub_hex": "ff2ee45601ec1b67310c7790404585ae697331eee1c1f8cf2419731c1fff3e6b",
+    "dm_bob_pub_hex": "38ab664bd86f77d7e66bdd9ae0792913a94fd8b33a1260027e4b46c1f4884c67",
+    "dm_voice_key_hex": "ccb5039d17c4f4215547bffe6361b75ea5c857548f4c1f683f8e575758270da1"
   }
 }
