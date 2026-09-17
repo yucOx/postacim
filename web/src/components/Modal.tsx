@@ -2,6 +2,8 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 
+const modalStack: HTMLDivElement[] = [];
+
 export default function Modal({
   title,
   onClose,
@@ -15,8 +17,13 @@ export default function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (panelRef.current) modalStack.push(panelRef.current);
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        // En üstteki modal dışında alttaki modallar Escape tuşuyla kapanmasın
+        if (modalStack.length > 0 && modalStack[modalStack.length - 1] !== panelRef.current) {
+          return;
+        }
         e.stopPropagation();
         onClose();
         return;
@@ -38,7 +45,13 @@ export default function Modal({
       }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      if (panelRef.current) {
+        const idx = modalStack.indexOf(panelRef.current);
+        if (idx !== -1) modalStack.splice(idx, 1);
+      }
+      window.removeEventListener('keydown', onKey);
+    };
   }, [onClose]);
 
   return (

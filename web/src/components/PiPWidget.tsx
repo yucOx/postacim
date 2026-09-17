@@ -36,15 +36,15 @@ export default function PiPWidget(): React.ReactNode {
   // compute effective position: -1 sentinel → snap to bottom-right based on viewport
   const pos =
     pipPos.x < 0 || pipPos.y < 0
-      ? { x: window.innerWidth - WIDGET_W - MARGIN, y: window.innerHeight - WIDGET_H - MARGIN }
+      ? { x: Math.max(0, (typeof window !== 'undefined' ? window.innerWidth : 1000) - WIDGET_W - MARGIN), y: Math.max(0, (typeof window !== 'undefined' ? window.innerHeight : 800) - WIDGET_H - MARGIN) }
       : pipPos;
 
   const clamp = useCallback((x: number, y: number): { x: number; y: number } => {
-    const maxX = Math.max(MARGIN, window.innerWidth - WIDGET_W - MARGIN);
-    const maxY = Math.max(MARGIN, window.innerHeight - WIDGET_H - MARGIN);
+    const maxX = Math.max(0, window.innerWidth - WIDGET_W - MARGIN);
+    const maxY = Math.max(0, window.innerHeight - WIDGET_H - MARGIN);
     return {
-      x: Math.min(Math.max(MARGIN, x), maxX),
-      y: Math.min(Math.max(MARGIN, y), maxY),
+      x: Math.min(Math.max(0, x), maxX),
+      y: Math.min(Math.max(0, y), maxY),
     };
   }, []);
 
@@ -78,6 +78,7 @@ export default function PiPWidget(): React.ReactNode {
   // re-clamp on viewport resize so a dragged widget never gets stranded offscreen
   useEffect(() => {
     const onResize = (): void => {
+      if (pipPos.x < 0 || pipPos.y < 0) return;
       const next = clamp(pos.x, pos.y);
       if (next.x !== pipPos.x || next.y !== pipPos.y) setPipPos(next);
     };
