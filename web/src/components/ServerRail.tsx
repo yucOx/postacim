@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, Plus, X } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppStore } from '../state/appStore';
@@ -62,7 +62,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
   const [dragDmId, setDragDmId] = useState<string | null>(null);
 
   // Aktif açılan sohbet veya yeni mesaj gelmiş sohbet otomatik olarak gizlilikten çıkarılır (Discord mantığı)
-  useMemo(() => {
+  useEffect(() => {
     if (activeDmId && hiddenDmIds.includes(activeDmId)) {
       const next = hiddenDmIds.filter((id) => id !== activeDmId);
       setHiddenDmIds(next);
