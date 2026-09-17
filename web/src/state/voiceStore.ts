@@ -34,6 +34,12 @@ interface VoiceState {
   micOn: boolean;
   camOn: boolean;
   screenOn: boolean;
+  /** master output volume 0..1 */
+  volume: number;
+  /** deafened / muted incoming audio */
+  deafened: boolean;
+  setVolume: (v: number) => void;
+  toggleDeafen: () => void;
   /** selected publish quality (kalite seçici); persisted in localStorage */
   quality: CallQuality;
   setQuality: (q: CallQuality) => void;
@@ -284,6 +290,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   micOn: false,
   camOn: false,
   screenOn: false,
+  volume: 1,
+  deafened: false,
+  setVolume: (v) => set({ volume: Math.max(0, Math.min(1, v)), deafened: false }),
+  toggleDeafen: () => set((s) => ({ deafened: !s.deafened })),
   quality: loadQuality(),
   screenQuality: null,
   error: null,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ParticipantTile, useParticipants, useTracks, AudioTrack } from '@livekit/components-react';
+import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsSpeaking } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
@@ -14,12 +14,20 @@ import Avatar from './Avatar';
  *  publish fine but nobody would hear them. Local mic is never attached (echo). */
 function RemoteAudio(): React.ReactNode {
   const tracks = useTracks([Track.Source.Microphone], { onlySubscribed: true });
+  const volume = useVoiceStore((s) => s.volume);
+  const deafened = useVoiceStore((s) => s.deafened);
   return (
     <>
       {tracks
         .filter((t) => !t.participant.isLocal)
         .map((t) => (
-          <AudioTrack key={t.participant.identity} trackRef={t} className="hidden" />
+          <AudioTrack
+            key={t.participant.identity}
+            trackRef={t}
+            volume={deafened ? 0 : volume}
+            muted={deafened}
+            className="hidden"
+          />
         ))}
     </>
   );
@@ -31,12 +39,20 @@ function RemoteAudio(): React.ReactNode {
  *  attached (echo). */
 function ShareAudio({ volume, muted, activeIds }: { volume: number; muted: boolean; activeIds: string[] }): React.ReactNode {
   const tracks = useTracks([Track.Source.ScreenShareAudio], { onlySubscribed: true });
+  const masterVol = useVoiceStore((s) => s.volume);
+  const deafened = useVoiceStore((s) => s.deafened);
   return (
     <>
       {tracks
         .filter((t) => !t.participant.isLocal && activeIds.includes(t.participant.identity))
         .map((t) => (
-          <AudioTrack key={t.participant.identity} trackRef={t} volume={muted ? 0 : volume} className="hidden" />
+          <AudioTrack
+            key={t.participant.identity}
+            trackRef={t}
+            volume={deafened || muted ? 0 : masterVol * volume}
+            muted={deafened || muted}
+            className="hidden"
+          />
         ))}
     </>
   );
@@ -93,6 +109,45 @@ function trackAspect(t: TrackReference): number | null {
   return null;
 }
 
+interface SpeakingTileProps {
+  participant?: Participant;
+  isScreen?: boolean;
+  active?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+  onClick?: () => void;
+  title?: string;
+  style?: React.CSSProperties;
+}
+
+function SpeakingTile({
+  participant,
+  isScreen = false,
+  active = false,
+  className = '',
+  children,
+  onClick,
+  title,
+  style,
+}: SpeakingTileProps): React.ReactNode {
+  const isSpeaking = useIsSpeaking(participant);
+  const borderClass = !isScreen && isSpeaking
+    ? 'border-emerald-500 ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+    : active
+      ? 'border-lamp-500/80 ring-1 ring-lamp-500/50'
+      : 'border-brass-700/50 hover:border-brass-500';
+  return (
+    <div
+      onClick={onClick}
+      title={title}
+      style={style}
+      className={`transition-all duration-150 ${borderClass} ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 interface TileProps {
   trackRef: TrackReference;
   onClick?: () => void;
@@ -110,13 +165,14 @@ interface TileProps {
 function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill, overlay, title: titleProp }: TileProps): React.ReactNode {
   const { t } = useT();
   return (
-    <div
+    <SpeakingTile
+      participant={trackRef.participant}
+      isScreen={isScreen}
+      active={active}
       onClick={onClick}
       title={titleProp ?? (onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined)}
-      className={`relative cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${
+      className={`relative cursor-pointer overflow-hidden rounded-md border bg-night-850 ${
         fill ? 'min-h-0 min-w-0 flex-1' : 'aspect-video w-full'
-      } ${
-        active ? 'border-lamp-500/80 ring-1 ring-lamp-500/50' : 'border-brass-700/50 hover:border-brass-500'
       } ${fill ? '[&_video]:object-contain' : fit(isScreen)}${TILE_HIDE}`}
     >
       <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
@@ -127,16 +183,18 @@ function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocu
         isFocus={isFocus}
       />
       {overlay}
-    </div>
+    </SpeakingTile>
   );
 }
 
 function PlaceholderTile({
+  participant,
   identity,
   isLocal,
   onClick,
   active,
 }: {
+  participant?: Participant;
   identity: string;
   isLocal: boolean;
   onClick?: () => void;
@@ -144,16 +202,18 @@ function PlaceholderTile({
 }): React.ReactNode {
   const { t } = useT();
   return (
-    <div
+    <SpeakingTile
+      participant={participant}
+      active={active}
       onClick={onClick}
       title={onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined}
       className={`relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border bg-night-850 ${
-        active ? 'border-lamp-500/80' : 'border-brass-700/50'
-      } ${onClick ? 'cursor-pointer transition-colors hover:border-brass-500' : ''}`}
+        onClick ? 'cursor-pointer' : ''
+      }`}
     >
       <Avatar userId={identity} label={nickFor(identity)} size={56} srcOverride={null} />
       <NamePlate identity={identity} isLocal={isLocal} isScreen={false} isFocus={active} />
-    </div>
+    </SpeakingTile>
   );
 }
 
@@ -379,15 +439,16 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   const stripTile = (p: Participant): React.ReactNode => {
     const cam = camByIdentity.get(p.identity);
     const focused = spotlight === `cam:${p.identity}`;
-    const border = focused ? 'border-lamp-500/80' : 'border-brass-700/50';
     const aspect = cam ? trackAspect(cam) : null;
     return cam ? (
-      <div
+      <SpeakingTile
         key={slotKey(p.identity)}
+        participant={p}
+        active={focused}
         onClick={() => toggleSpotlight('cam', p.identity)}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
         style={aspect ? { aspectRatio: `${aspect}` } : undefined}
-        className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${border} ${TILE_HIDE}`}
+        className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
       >
         <ParticipantTile
           trackRef={cam}
@@ -395,18 +456,20 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
         {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
-      </div>
+      </SpeakingTile>
     ) : (
-      <div
+      <SpeakingTile
         key={slotKey(p.identity)}
+        participant={p}
+        active={focused}
         onClick={() => toggleSpotlight('cam', p.identity)}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-        className={`flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850 transition-colors ${border}`}
+        className="flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
       >
         <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
         <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
         {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
-      </div>
+      </SpeakingTile>
     );
   };
 
@@ -460,13 +523,14 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     const paneFor = (v: { key: string; trackRef: TrackReference; isScreen: boolean; identity: string }): React.ReactNode => {
       const own = v.trackRef.participant.isLocal && v.isScreen;
       return (
-        <div
+        <SpeakingTile
           key={v.key}
+          participant={v.trackRef.participant}
+          isScreen={v.isScreen}
+          active={spotlight === v.key}
           onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
           title={v.isScreen ? t('stream.enlargeStream') : t('stream.enlarge')}
-          className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border ${
-            spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
-          } bg-night-850 transition-colors ${TILE_HIDE}`}
+          className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
         >
           <ParticipantTile
             trackRef={v.trackRef}
@@ -474,7 +538,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           />
           <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
           {own && stopBtn(true)}
-        </div>
+        </SpeakingTile>
       );
     };
     const videoIds = new Set(allVideos.map((v) => v.identity));
@@ -491,15 +555,16 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           {participants
             .filter((p) => !videoIds.has(p.identity))
             .map((p) => (
-              <div
+              <SpeakingTile
                 key={slotKey(p.identity)}
+                participant={p}
                 onClick={() => focusFromSide(p.identity)}
                 title={t('stream.enlarge')}
-                className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850 transition-colors hover:border-brass-500"
+                className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
               >
                 <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
                 <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
-              </div>
+              </SpeakingTile>
             ))}
         </div>
       </>
@@ -526,14 +591,15 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           const own = v.trackRef.participant.isLocal && v.isScreen;
           const aspect = trackAspect(v.trackRef);
           return (
-            <div
+            <SpeakingTile
               key={v.key}
+              participant={v.trackRef.participant}
+              isScreen={v.isScreen}
+              active={spotlight === v.key}
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               title={t('stream.enlarge')}
               style={aspect ? { aspectRatio: `${aspect}` } : undefined}
-              className={`relative h-full aspect-video shrink-0 cursor-pointer overflow-hidden rounded-md border ${
-                spotlight === v.key ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
-              } bg-night-850 transition-colors ${TILE_HIDE}`}
+              className={`relative h-full aspect-video shrink-0 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
             >
               <ParticipantTile
                 trackRef={v.trackRef}
@@ -541,20 +607,21 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               />
               <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
               {own && stopBtn(true)}
-            </div>
+            </SpeakingTile>
           );
         });
       }
       return (
-        <div
+        <SpeakingTile
           key={slotKey(p.identity) + '-slot'}
+          participant={p}
           onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
           title={p.identity === focusId ? undefined : t('stream.enlarge')}
-          className="relative flex h-full aspect-video shrink-0 items-center justify-center overflow-hidden rounded-md border border-brass-700/50 bg-night-850"
+          className="relative flex h-full aspect-video shrink-0 items-center justify-center overflow-hidden rounded-md border bg-night-850"
         >
           <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
           <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
-        </div>
+        </SpeakingTile>
       );
     };
     return (
@@ -629,15 +696,17 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               />
             ) : (
               focusPerson && (
-                <div
+                <SpeakingTile
                   key={focusedKey + '-ph'}
+                  participant={focusPerson}
+                  active
                   onClick={releaseSpot}
                   title={t('stream.enlargeExit')}
-                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-lamp-500/80 bg-night-850"
+                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
                 >
                   <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
                   <NamePlate identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
-                </div>
+                </SpeakingTile>
               )
             )}
           </div>
@@ -666,14 +735,14 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
             // oranında (bilinmiyorsa 16:9) sahneye sığan pencere
             const aspect = cam ? (trackAspect(cam) ?? 16 / 9) : 16 / 9;
             return (
-              <div
+              <SpeakingTile
                 key={slotKey(p.identity)}
+                participant={p}
+                active={focused}
                 onClick={() => toggleSpotlight('cam', p.identity)}
                 title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
                 style={{ aspectRatio: `${aspect}` }}
-                className={`relative h-full min-w-0 max-w-full w-auto cursor-pointer overflow-hidden rounded-md border bg-night-850 transition-colors ${
-                  focused ? 'border-lamp-500/80' : 'border-brass-700/50 hover:border-brass-500'
-                } ${TILE_HIDE}`}
+                className={`relative h-full min-w-0 max-w-full w-auto cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
               >
                 {cam ? (
                   <ParticipantTile
@@ -687,7 +756,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 )}
                 <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
                 {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
-              </div>
+              </SpeakingTile>
             );
           })}
         </div>

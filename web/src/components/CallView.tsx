@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import { RoomContext } from '@livekit/components-react';
-import { Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
@@ -18,6 +19,27 @@ export default function CallView(): React.ReactNode {
   const setPip = useVoiceStore((s) => s.setPip);
   const cancelCall = useVoiceStore((s) => s.cancelCall);
   const dms = useAppStore((s) => s.dms);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (containerRef.current) {
+        await containerRef.current.requestFullscreen();
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   if (!callState) return null;
   const peerNick = dms.find((d) => d.id === callState.channelId)?.peer.nick ?? '?';
   const status =
@@ -31,14 +53,22 @@ export default function CallView(): React.ReactNode {
     // tam ekran overlay değil — ana flex satırına sığan panel; böylece
     // sol ray (sunucu + DM listesi) görüşme boyunca görünür kalır (Discord).
     // min-h-0 olmadan içerideki flex-1'ler viewport'u taşırıp scroll yaratır
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-night-950">
+    <div ref={containerRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-night-950">
       <div className="flex shrink-0 items-center gap-2.5 border-b border-night-700 bg-night-900/60 px-3 py-2">
         <span className="plate">{t('call.plate')}</span>
         <span className="font-display text-base font-semibold uppercase tracking-[0.08em] text-paper-50">{peerNick}</span>
         <span className="sealed-band">{status}</span>
         <button
-          onClick={() => setPip(true)}
+          onClick={() => void toggleFullscreen()}
           className="btn-ghost ml-auto !px-2 !py-1"
+          title={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
+          aria-label={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
+        >
+          {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        </button>
+        <button
+          onClick={() => setPip(true)}
+          className="btn-ghost !px-2 !py-1"
           title={t('call.minimizeTitle')}
           aria-label={t('call.minimizeAria')}
         >

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Mic, MicOff, MonitorUp, PhoneOff, PictureInPicture2, Video, VideoOff } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Maximize, Mic, MicOff, Minimize, MonitorUp, PhoneOff, PictureInPicture2, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useLocalParticipant } from '@livekit/components-react';
 import { useVoiceStore, type CallQuality, type ShareOpts } from '../state/voiceStore';
 import Modal from './Modal';
@@ -42,11 +42,36 @@ export default function CallControls({
   const toggleCam = useVoiceStore((s) => s.toggleCam);
   const startScreen = useVoiceStore((s) => s.startScreen);
   const toggleScreen = useVoiceStore((s) => s.toggleScreen);
+  const volume = useVoiceStore((s) => s.volume);
+  const deafened = useVoiceStore((s) => s.deafened);
+  const setVolume = useVoiceStore((s) => s.setVolume);
+  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const local = useLocalParticipant();
   const { t } = useT();
+
+  const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {
+      // fullscreen denied or unsupported
+    }
+  };
+
   // ekran paylaşımı öncesi detaylı yayın diyaloğu (Discord Go Live akışı):
   // kaynak ipucu + çözünürlük + fps + ses, sonra tarayıcıdan kaynak seçimi
   const [screenPrompt, setScreenPrompt] = useState(false);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [resH, setResH] = useState(() => QUALITY_TO_RES[quality]);
   const [fps, setFps] = useState<ShareOpts['fps']>(30); // 15 fps akıcılık için düşük kalıyor — varsayılan 30
   const [shareAudio, setShareAudio] = useState(true);
@@ -77,6 +102,47 @@ export default function CallControls({
         aria-pressed={screenOn}
       >
         <MonitorUp size={18} />
+      </button>
+      <div
+        className="relative flex items-center"
+        onMouseEnter={() => setShowVolumeSlider(true)}
+        onMouseLeave={() => setShowVolumeSlider(false)}
+      >
+        <button
+          type="button"
+          onClick={toggleDeafen}
+          className={round(!deafened, deafened)}
+          title={deafened ? t('stream.unmute') : t('stream.mute')}
+          aria-label={deafened ? t('stream.unmute') : t('stream.mute')}
+          aria-pressed={!deafened}
+        >
+          {deafened || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </button>
+        {showVolumeSlider && (
+          <div className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-md border border-night-700 bg-night-950/95 px-3 py-2 shadow-lg flex items-center gap-2 z-20">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={deafened ? 0 : Math.round(volume * 100)}
+              onChange={(e) => setVolume(Number(e.target.value) / 100)}
+              className="w-24 accent-lamp-500 cursor-pointer"
+              aria-label={t('stream.volLabel')}
+            />
+            <span className="font-mono text-[10px] text-paper-300 w-7 text-right">
+              {deafened ? '0%' : `${Math.round(volume * 100)}%`}
+            </span>
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => void toggleFullscreen()}
+        className={round(true)}
+        title={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
+        aria-label={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
+      >
+        {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
       </button>
       {variant === 'call' && onMinimize && (
         <button onClick={onMinimize} className={round(true)} title={t('call.pipTitle')} aria-label={t('call.pipTitle')}>
