@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { b64 } from '../crypto/bytes';
 import { headFingerprint, syncKeyLog, type KeyLogHead } from '../lib/keytransparency';
+import { publishKeylogHead } from '../lib/keygossip';
 
 // Anahtar defteri doğrulamasının UI yansıması: head damga olarak profilde
 // durur, çelişki kırmızı uyarı olarak Shell'in en üstünde. Ağ/sunucu hatası
@@ -51,7 +52,10 @@ export const useSecurityStore = create<SecurityState>((set) => ({
     try {
       const r = await syncKeyLog({ myUserId: userId, myPublicKeyB64: b64(publicKey) });
       if (r.ok) {
-        set({ keylogHead: r.head, keylogStamp: headFingerprint(r.head), keylogWarning: null });
+        set({ keylogHead: r.head, keylogStamp: headFingerprint(r.head), keylogWarning: null, keylogForkWarning: null });
+        // JIT tetikleyici: doğrulanmış yeni head var — hemen bir gossip
+        // yayını, aynı topluluktaki diğer istemciler periyot beklememiş olur
+        publishKeylogHead();
       } else {
         // çelişki — konsola da düş: sunucu kanıtı değiştirmiş olabilir
         console.error('anahtar defteri uyarısı:', r.warning);
