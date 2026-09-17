@@ -292,37 +292,11 @@ export function decryptText(
     }
     return null;
   };
-  // 1) imzasız yol: tam ciphertext (v1/v2). Cutover'dan sonra imzasız kabul edilmez.
-  const legacy = openAll(ct);
-  if (legacy) {
-    if (sigCtx && sigCtx.sentAt >= SIGN_CUTOVER_MS) throw new DecryptError();
-    return parseBody(legacy.pt, legacy.scanIdx);
-  }
-  // 2) v3: ciphertext ‖ signature — son 64B imza; gövde v1/v2 yollarından
-  //    biriyle açılır, imza göndericinin published anahtarıyla doğrulanır.
-  if (ct.length > SIG_LEN) {
-    const body = ct.slice(0, ct.length - SIG_LEN);
-    const sig = ct.slice(ct.length - SIG_LEN);
-    const opened = openAll(body);
-    if (opened) {
-      const candidates = sigCtx?.signPublicKey;
-      if (!candidates || candidates.length === 0) throw new DecryptError();
-      const signed = cat(body, enc.encode(opened.aadUsed));
-      const ok = candidates.some((pk) => {
-        try {
-          return sodium.crypto_sign_verify_detached(sig, signed, pk);
-        } catch {
-          return false;
-        }
-      });
-      if (!ok) throw new DecryptError();
-      return parseBody(opened.pt, opened.scanIdx);
-    }
-  }
-  // 3) v4: DH header (40B) ‖ ct ‖ [sig 64]. Başlıktaki dh_pub + alıcı static
-  //    private → DH çıktısı → adım kökü; l 0..DH_STEP_MSGS taraması. AAD'de
-  //    global index + dh_pub bağlıdır; imza girdisi header ‖ ct ‖ AAD'dir.
-  //    İmzalı/imzasız iki uzunluk denemesi — cutover kuralı v3 ile aynıdır.
+  // 1) v4: DH header (40B) ‖ ct ‖ [sig 64] — dhCtx varken EN ÖNCE denenir.
+  //    En fazla DH_STEP_MSGS deneme (ucuz). v4 ciphertext'i v1/v2/v3
+  //    anahtarlarıyla asla açılmaz; openAll taraması (her çağrıda ≤10k deneme,
+  //    aşağıda iki kez koşar) önce çalışırsa her mesaj ~20k gereksiz op yer ve
+  //    geçmiş açılışı saniyelerce dondurur — v4 deploy'undan beri böyleydi.
   if (dhCtx && senderId && ct.length >= DH_HEADER_LEN + 16) {
     const seed = ratchetChainSeed(key, senderId);
     const head = decodeDhHeader(ct);
@@ -363,6 +337,34 @@ export function decryptText(
           }
         }
       }
+    }
+  }
+  // 2) imzasız yol: tam ciphertext (v1/v2). Cutover'dan sonra imzasız kabul edilmez.
+  const legacy = openAll(ct);
+  if (legacy) {
+    if (sigCtx && sigCtx.sentAt >= SIGN_CUTOVER_MS) throw new DecryptError();
+    return parseBody(legacy.pt, legacy.scanIdx);
+  }
+  // 3) v3: ciphertext ‖ signature — son 64B imza; gövde v1/v2 yollarından
+  //    biriyle açılır, imza göndericinin published anahtarıyla doğrulanır.
+  //    İmzalı/imzasız iki uzunluk denemesi v4'te; burada yalnız imzalı kabul.
+  if (ct.length > SIG_LEN) {
+    const body = ct.slice(0, ct.length - SIG_LEN);
+    const sig = ct.slice(ct.length - SIG_LEN);
+    const opened = openAll(body);
+    if (opened) {
+      const candidates = sigCtx?.signPublicKey;
+      if (!candidates || candidates.length === 0) throw new DecryptError();
+      const signed = cat(body, enc.encode(opened.aadUsed));
+      const ok = candidates.some((pk) => {
+        try {
+          return sodium.crypto_sign_verify_detached(sig, signed, pk);
+        } catch {
+          return false;
+        }
+      });
+      if (!ok) throw new DecryptError();
+      return parseBody(opened.pt, opened.scanIdx);
     }
   }
   throw new DecryptError();
