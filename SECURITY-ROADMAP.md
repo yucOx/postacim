@@ -118,7 +118,12 @@ haritası" satırı eklendi.
   olarak bırak.
 - ARCHITECTURE: "dağıtım bütünlüğü" bölümü.
 
-## Faz 5 — DH ratchet / MLS araştırması ve uygulaması (tam FS + PCS)
+## Faz 5 — DH ratchet / MLS araştırması ve uygulaması (tam FS + PCS) — tamamlandı (5a: de1cb48 · 5b: e37d0bf · 5c: c5aa7d9 · 5d: abdb5a2)
+
+**KARAR (kullanıcı):** OpenMLS DEĞİL — (c+) güçlendirilmiş hafif çift-DH ratchet (kendi implementasyon,
+libsodium primitifler). PCS-formel yerine PCS-lite (per-sender DH + epok rekey penceresi M=100/T=24h +
+self-update). Araştırma brifi: `docs/faz5-ratchet-research.md`; spec: `docs/faz5-dh-ratchet-design.md`.
+MLS yeniden değerlendirme tetikleyicisi: Faz 7 (çoklu cihaz) öncesi openmls-wasm stabil sürüm + storage dokümanı.
 
 **Kapatır:** "Forward secrecy kısmi — DH ratchet/MLS bekleyen kurul."
 

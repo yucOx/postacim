@@ -383,7 +383,7 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 - [x] Faz 2 — kaybolan mesajlar (disappearing messages)
 - [x] Faz 3 — Tor hidden service rehberi (IP metadata)
 - [x] Faz 4 — signed release / reproducible build (JS trust azaltma)
-- [ ] Faz 5 — DH ratchet (alt fazlar: 5a araştırma ✓, 5b DM v4 DH ratchet ✓, 5c kanal/gdm v4 + rekey broadcast + self-update relay ✓, 5d ses anahtarı DH zincirinden + self-update UI ✓ — fazın kapanışı kullanıcı merge onayı ile)
+- [x] Faz 5 — DH ratchet (kendi implementasyon: per-sender DH + epok rekey penceresi + self-update; DM/kanal/gdm/ses; PCS-formel değil — dürüst sınırlar tehdit modelinde; araştırma: docs/faz5-ratchet-research.md, spec: docs/faz5-dh-ratchet-design.md)
 - [ ] Faz 6 — key transparency gossip (anti-forking)
 - [ ] Faz 7 — çoklu cihaz (Faz 5 sonrası)
 - [ ] Faz 8 — threat model revizyonu + dış audit hazırlığı (v1.0.0)
