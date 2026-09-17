@@ -4,9 +4,17 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) — kategoriler
 Eklenen / Değişen / Düzeltilen / Güvenlik. Her `v*` tag'i CI'da web bundle SHA
 manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
-## [Unreleased]
+## [v1.0.0] — YYYY-AA-GG
+
+> İlk stabil sürüm. 8 fazlık güvenlik yol haritası (SECURITY-ROADMAP.md)
+> tamamlandı: Ed25519 imzalı mesajlar → kaybolan mesajlar → Tor rehberi →
+> signed release → DH ratchet (PCS-lite) → key transparency gossip →
+> çoklu cihaz → audit hazırlığı. **Sürüm tag'i sahip kararı** — kullanıcı
+> tag atınca tarih doldurulur.
 
 ### Eklenen
+
+#### Yol haritası: 7 faz + 4 sprint + paketler (tamamlandı)
 
 - **Faz 1 — Ed25519 imzalı mesajlar**: gönderen atfı kriptografik — her mesaj
   göndericinin imza anahtarıyla imzalı, alıcı anahtar defterinden doğrular;
@@ -88,6 +96,23 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   kullanımlık, başka user cihazı 404) — 274 → 293. Spec:
   `docs/faz7-multidevice-design.md`.
 
+#### Faz 8 — Audit hazırlığı (bu sürüm)
+
+- **README tehdit modeli sıfırdan**: 6 roadmap boşluğu (Faz 1–7)
+  KAPATILDI/KISMEN/AYNI/GELECEK etiketiyle yeniden sınıflandı;
+  kalan sınırlar (metadata, sansür/sıralama, rate-limit anonimleştirme,
+  ses atfı, WebRTC Tor, MLS-formel yok, key transparency gözlemsel,
+  SQLCipher at-rest) dürüstçe listelendi.
+- **docs/SECURITY-REVIEW.md**: dış auditör için tek-giriş paketi —
+  kapsam + tehdit modeli + mimari + kripto spesifikasyonu + test
+  envanteri (293 test, 31 dosya) + bilinen sınırlar + P0/P1/P2 audit
+  tavsiyeleri + iletişim (GitHub private advisory).
+- **docs/AUDIT-FUNDING.md**: dış audit/fon kaynak haritası — OTF Red
+  Team Lab (tercih, FOSS kapsamı), Cure53, NCC Group, Trail of Bits,
+  Radically Open Security + Open Collective / GitHub Sponsors / NLnet /
+  EU NGI Zero + Signal/Matrix/MLS RFC 9420/CONIKS referansları + v1.0.0
+  sonrası 5 adımlı süreç önerisi.
+
 ### Önceki sprintler (özet)
 
 - E2EE çekirdek: XChaCha20-Poly1305 mesajlar, sealed-box anahtar dağıtımı,
@@ -98,3 +123,8 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   blok, WS auth timeout, log hijyeni
 - Ürün: topluluk/kanal, roller/ban, davet linkleri + katılım şifresi,
   arkadaş/DM/grup DM, 1:1 arama, okunmadı, LiveKit SFrame E2EE ses/görüntü
+- Paketler: A–D (roller/ban, davet, başvuru, katılım şifresi), E–G
+  (arkadaş, DM, grup DM + 1:1 arama + okunmadı)
+- Sprint 1–4: per-user limitler, TLS/HSTS/CSP, BIP-39 ritüeli, sertleştirme
+  (padding + Trusted Types + log hijyeni + WS timeout + login kademeli + passkey
+  + per-gönderici ratchet + anahtar defteri)
