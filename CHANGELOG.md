@@ -113,6 +113,15 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   EU NGI Zero + Signal/Matrix/MLS RFC 9420/CONIKS referansları + v1.0.0
   sonrası 5 adımlı süreç önerisi.
 
+#### Kullanıcı Arayüzü & Arama Deneyimi (Discord paritesi)
+
+- **Aktif konuşmacı parlaması**: konuşan katılımcının video veya avatar kutusu çevresinde yeşil parlama (`border-emerald-500 ring-2`)
+- **Arama kontrolleri ve ses yönetimi**: arama başlığı ve kontrollerine tam ekran desteği; gelen ses için %0-100 seviye kaydırıcısı ve tek tıkla sağırlaştırma (`toggleDeafen`)
+- **Arama içi yan sohbet (Split-view)**: arama açıkken sağ panelde `DmChat` açılabilir, görüşmeden ayrılmadan yazışma imkânı
+- **Odak / Izgara sahne geçişi**: herhangi bir katılımcıya tıklayarak anında odaklama, alt şeritten kesintisiz geçiş ve `LayoutGrid` butonuyla ızgaraya dönüş
+- **Sol rayda mesajlaşılan DM'ler (ServerRail)**: önceden konuşulmuş kişiler en soldaki rayda avatarları, aktif çentikleri ve okunmamış rozetleriyle gösterilir; arama sırasında sayfa geçişinde arama otomatik PiP'e alınarak hayalet arama engellenir
+- **Mute rozeti & mikrofon başlangıcı**: mikrofon kapalıyken tile sağ altında kırmızı `MicOff` rozeti; arama başlatıldığında mikrofon varsayılan açık gelir
+
 ### Önceki sprintler (özet)
 
 - E2EE çekirdek: XChaCha20-Poly1305 mesajlar, sealed-box anahtar dağıtımı,
