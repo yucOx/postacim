@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { RoomContext, useTracks, ParticipantTile } from '@livekit/components-react';
+import { RoomContext, useTracks, useSpeakingParticipants, useIsSpeaking, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
-import { Maximize2, PhoneOff } from 'lucide-react';
+import type { Participant } from 'livekit-client';
+import { Maximize2, Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
+import { useAuthStore } from '../state/authStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { nickFor } from '../lib/nick';
 import Avatar from './Avatar';
-import CallControls from './CallControls';
 
-const WIDGET_W = 288; // w-72
-const WIDGET_H = 252; // header + tile + controls
+const WIDGET_W = 310; // w-[310px]
+const WIDGET_H = 260; // header + video + controls
 const MARGIN = 16;
 
 /** The minimized call — a draggable corner window over the chat, with snap
@@ -50,7 +51,7 @@ export default function PiPWidget(): React.ReactNode {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
-      // ignore drags started on the action buttons
+      // ignore drags started on action buttons
       const tgt = e.target as HTMLElement;
       if (tgt.closest('button')) return;
       ref.current?.setPointerCapture(e.pointerId);
@@ -97,11 +98,11 @@ export default function PiPWidget(): React.ReactNode {
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onDoubleClick={snapToCorner}
-      className="fixed z-40 w-72 cursor-grab select-none overflow-hidden rounded-lg border border-brass-600/70 bg-night-900 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)] active:cursor-grabbing"
+      className="fixed z-40 w-[310px] cursor-grab select-none overflow-hidden rounded-xl border border-brass-600/70 bg-night-950 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] active:cursor-grabbing"
       style={{ left: pos.x, top: pos.y, touchAction: 'none' }}
     >
-      <div className="flex items-center gap-2 border-b border-night-700 px-3 py-2">
-        <span className="plate">{t('call.plate')}</span>
+      <div className="flex items-center gap-2 border-b border-night-700 bg-night-900/80 px-3 py-2">
+        <span className="plate !text-[10px]">{t('call.plate')}</span>
         <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50">
           {peerNick}
         </span>
@@ -113,63 +114,165 @@ export default function PiPWidget(): React.ReactNode {
               useAppStore.setState({ view: 'dm' });
             }
           }}
-          className="rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
+          className="rounded p-1 text-paper-400 transition-colors hover:bg-night-800 hover:text-paper-100"
           title={t('pip.maximize')}
           aria-label={t('pip.maximizeAria')}
         >
-          <Maximize2 size={14} />
+          <Maximize2 size={15} />
         </button>
         <button
           onClick={() => void cancelCall()}
-          className="rounded p-1 text-paper-500 transition-colors hover:bg-stamp-100 hover:text-stamp-400"
+          className="rounded p-1 text-paper-400 transition-colors hover:bg-stamp-100 hover:text-stamp-400"
           title={t('pip.endCall')}
           aria-label={t('pip.endCallAria')}
         >
-          <PhoneOff size={14} />
+          <PhoneOff size={15} />
         </button>
       </div>
       {!room ? (
-        <div className="flex h-40 flex-col items-center justify-center gap-2 text-paper-500">
+        <div className="flex h-44 flex-col items-center justify-center gap-2 text-paper-500">
           <Avatar userId={callState.channelId} label={peerNick} size={48} />
         </div>
       ) : (
         <RoomContext.Provider value={room}>
-          <PiPTile />
-          <CallControls variant="call" onEnd={() => void cancelCall()} endLabel={t('call.end')} />
+          <PiPStage />
+          <PiPControls onEnd={() => void cancelCall()} />
         </RoomContext.Provider>
       )}
     </div>
   );
 }
 
-/** prefers the remote screen share, then camera; falls back to avatar */
-function PiPTile(): React.ReactNode {
+/** Discord tarzı PiP sahnesi:
+ *  - Ana ekranda konuşan kişi (veya karşı tarafın ekranı/kamerası/avatarı)
+ *  - Sağ alt köşede küçük pencere (bizim kendi kameramız veya avatarımız)
+ */
+function PiPStage(): React.ReactNode {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
-    onlySubscribed: true,
+    onlySubscribed: false,
   });
-  // muted = camera/screen off (livekit keeps muted tracks published) — those
-  // would paint a black tile, drop them and fall through to the waiting state
-  const remote = tracks.filter((t) => !t.participant.isLocal && !(t.publication?.isMuted ?? false));
-  const pick =
-    remote.find((t) => t.source === Track.Source.ScreenShare) ??
-    remote.find((t) => t.source === Track.Source.Camera);
+  const speaking = useSpeakingParticipants();
   const callState = useVoiceStore((s) => s.callState);
   const peerId = callState?.channelId ?? '';
 
-  if (!pick) {
-    return (
-      <div className="flex h-40 flex-col items-center justify-center gap-2 bg-night-850 text-paper-500">
-        <Avatar userId={peerId} label={nickFor(peerId)} size={56} srcOverride={null} />
-        <span className="font-display text-[11px] uppercase tracking-[0.18em] text-paper-300">{nickFor(peerId)}</span>
-      </div>
-    );
-  }
+  // 1. Ana görünüm: Konuşan katılımcı varsa onun kamerası, yoksa ekran paylaşımı -> kamera -> avatar
+  const remoteTracks = tracks.filter((t) => !t.participant.isLocal && !(t.publication?.isMuted ?? false));
+  const activeRemoteSpeaker = speaking.find((p) => !p.isLocal);
+  const speakerTrack = activeRemoteSpeaker
+    ? remoteTracks.find((t) => t.participant.identity === activeRemoteSpeaker.identity)
+    : undefined;
+
+  const pick =
+    speakerTrack ??
+    remoteTracks.find((t) => t.source === Track.Source.ScreenShare) ??
+    remoteTracks.find((t) => t.source === Track.Source.Camera) ??
+    remoteTracks[0];
+
+  const mainParticipant = pick?.participant;
+  const isMainSpeaking = useIsSpeaking(mainParticipant);
+
+  // 2. Kendi küçük penceremiz (Discord self-view inset)
+  const localCamTrack = tracks.find((t) => t.participant.isLocal && t.source === Track.Source.Camera && !(t.publication?.isMuted ?? false));
+  const user = useAuthStore((s) => s.user);
+  const isSelfSpeaking = useIsSpeaking(useVoiceStore((s) => s.room?.localParticipant as Participant | undefined));
+
   return (
-    <div className="relative h-40 bg-night-850 [&_video]:object-contain">
-      <ParticipantTile trackRef={pick} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
-      <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50">
-        {nickFor(pick.participant.identity)}
-      </span>
+    <div className="relative h-44 w-full overflow-hidden bg-night-900 flex items-center justify-center">
+      {/* Ana büyük pencere (Karşı taraf / Konuşan) */}
+      {pick ? (
+        <div className={`relative h-full w-full ${isMainSpeaking ? 'ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]' : ''}`}>
+          <ParticipantTile trackRef={pick} className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain" />
+          <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50">
+            {nickFor(pick.participant.identity)}
+          </span>
+        </div>
+      ) : (
+        <div className={`flex h-full w-full flex-col items-center justify-center gap-2 bg-night-850 ${isMainSpeaking ? 'ring-2 ring-emerald-500' : ''}`}>
+          <Avatar userId={peerId} label={nickFor(peerId)} size={52} srcOverride={null} />
+          <span className="font-display text-[11px] uppercase tracking-[0.14em] text-paper-300">{nickFor(peerId)}</span>
+        </div>
+      )}
+
+      {/* Bizim küçük penceremiz (Discord tarzı sağ alt köşe inset) */}
+      <div
+        className={`absolute bottom-2 right-2 h-14 w-20 overflow-hidden rounded-md border bg-night-950 shadow-lg transition-all ${
+          isSelfSpeaking ? 'border-emerald-500 ring-2 ring-emerald-500' : 'border-brass-700/60'
+        }`}
+      >
+        {localCamTrack ? (
+          <ParticipantTile
+            trackRef={localCamTrack}
+            className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center bg-night-850">
+            {user && <Avatar userId={user.id} label={user.nick} size={24} srcOverride={user.avatar_updated_at ? undefined : null} />}
+            <span className="font-display text-[8px] uppercase tracking-wider text-paper-400">sen</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Discord tarzı şık ve kompakt PiP kontrol çubuğu */
+function PiPControls({ onEnd }: { onEnd: () => void }): React.ReactNode {
+  const { t } = useT();
+  const micOn = useVoiceStore((s) => s.micOn);
+  const camOn = useVoiceStore((s) => s.camOn);
+  const deafened = useVoiceStore((s) => s.deafened);
+  const volume = useVoiceStore((s) => s.volume);
+  const toggleMic = useVoiceStore((s) => s.toggleMic);
+  const toggleCam = useVoiceStore((s) => s.toggleCam);
+  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
+
+  const btnClass = (active: boolean, danger = false) =>
+    `flex h-9 w-9 items-center justify-center rounded-full border transition-all ${
+      danger
+        ? 'border-stamp-500 bg-stamp-500 text-white hover:bg-stamp-400'
+        : active
+          ? 'border-brass-600/60 bg-night-800 text-paper-100 hover:border-brass-500 hover:bg-night-700'
+          : 'border-stamp-500/70 bg-stamp-100 text-stamp-400 hover:bg-stamp-500 hover:text-white'
+    }`;
+
+  return (
+    <div className="flex items-center justify-center gap-3 border-t border-night-700 bg-night-900 px-3 py-2">
+      <button
+        type="button"
+        onClick={() => void toggleMic()}
+        className={btnClass(micOn)}
+        title={micOn ? t('call.micOn') : t('call.micOff')}
+        aria-label={micOn ? t('call.micOn') : t('call.micOff')}
+      >
+        {micOn ? <Mic size={15} /> : <MicOff size={15} />}
+      </button>
+      <button
+        type="button"
+        onClick={() => void toggleCam()}
+        className={btnClass(camOn)}
+        title={camOn ? t('call.camOn') : t('call.camOff')}
+        aria-label={camOn ? t('call.camOn') : t('call.camOff')}
+      >
+        {camOn ? <Video size={15} /> : <VideoOff size={15} />}
+      </button>
+      <button
+        type="button"
+        onClick={toggleDeafen}
+        className={btnClass(!deafened, deafened)}
+        title={deafened ? t('stream.unmute') : t('stream.mute')}
+        aria-label={deafened ? t('stream.unmute') : t('stream.mute')}
+      >
+        {deafened || volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
+      </button>
+      <button
+        type="button"
+        onClick={onEnd}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-stamp-500 text-white transition-colors hover:bg-stamp-400 shadow"
+        title={t('call.end')}
+        aria-label={t('call.end')}
+      >
+        <PhoneOff size={15} />
+      </button>
     </div>
   );
 }
