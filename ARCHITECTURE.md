@@ -26,7 +26,7 @@ Akış: tarayıcı `web/` nginx'den yüklenir → `/api/*` server'a, `/ws` WS'e,
 8. Epoklar: her sarma yeni `key_version`; eski satırlar kalır → rotasyon öncesi geçmiş okunur. Üye çıkarma = `needs_rekey` → kanal donar, staff rotate edene kadar yazı/ses/davet/üye ekleme kapalı. Rotate aynı zamanda **DH-rekey broadcast**'tir (5c): yeni epok anahtarı kalan üyelere sarmalayarak dağıtılır; v4 zincir seed'i ve epok DH çapası yeni epoktan türetildiğinden atılan üye eski malzemesiyle (broadcast'i yakalasa bile) gelecekteki adım anahtarlarını türetemez. Self-update (5c, UI 5d): ele geçirilen cihazın yerini alan kurban Ayarlar → Güvenlik'ten tek tıkla Ed25519 imzalı `dh_update` duyurusu yayınlar (`SettingsModal` DhIdBlock — tek taze ephemeral tüm DM/gdm/kanal bağlamlarına, private atılır kaydedilmez) — WS `dh_update` frame'i opak relay edilir (`ws/index.ts` saklamaz/yorumlamaz), alıcı imzayı anahtar defterinden doğrurup TOFU pin'ler (`lib/dhupdate.ts`); **imza reddi** kırmızı güvenlik bandı tetikler (`securityStore.dhUpdateWarning` — `bandFromIngest`: yalnız `bad-signature` bant yapar, çöp frame sessiz düşer); anahtar geçişi mevcut rekey akışıyla tamamlanır
 9. BIP-39 kurtarma: 12 kelime → aynı Argon2id zinciri (`crypto/recovery.ts`) → identity blob ikinci kez sarılır (`recovery_blob`). Şifre kaybı hesap kaybı değil; ikisi de kaybolursa hesap kurtarılamaz. v1 kurtarma blob'u imza private key taşımaz → kurtarma sonrası yeni imza kimliği üretilir (deftere yeni satır — kanıtlı key değişimi)
 10. Cihaz kilidi (ops.): WebAuthn PRF'ten cihaz KEK'i → private key'ler + auth_material XChaCha20 ile sarılıp IndexedDB'ye (`pgv-device`, `crypto/devicekey.ts`) — F5'te parmak izi/PIN, şifre akışı fallback. Cihaz payload'u `sk` (Ed25519 private) içerir; eski kayıtlarda yoksa açılışta tamamlanır
-11. Anahtar defteri: kayıtta public key + imza public key `key_log`'a append-only satır düşer; istemci boot'ta `GET /keys/log` ile zinciri doğrular, kendi kaydını kontrol eder, head'i localStorage'a yazar (`lib/keytransparency.ts`); doğrulanmış zincirdeki imza anahtarları `lib/signkeys.ts` haritasına beslenir (artımlı tazeleme: `loadBootstrap` tetikli)
+11. Anahtar defteri: kayıtta public key + imza public key `key_log`'a append-only satır düşer; istemci boot'ta `GET /keys/log` ile zinciri doğrular, kendi kaydını kontrol eder, head'i localStorage'a yazar (`lib/keytransparency.ts`); doğrulanmış zincirdeki imza anahtarları `lib/signkeys.ts` haritasına beslenir (artımlı tazeleme: `loadBootstrap` tetikli). **Faz 6 head gossip:** her istemci doğrulanmış head'ini 5dk'da bir (JIT tetikleme: `syncKeyLog` başarılı olunca anında bir yayın) üyesi olduğu topluluklara WS `keylog_head` ile yayar — sunucu opak relay; alıcı 4 durum makinesi (eşleşme/ileri/aynı-id-farklı-hash/biz-önde-uyuşmazlık) → son ikisi `keylogForkWarning` kırmızı bant tetikler (`lib/keygossip.ts`, `appStore.wireEvents`). Dürüst sınır: gözlemsel — tam CONIKS/Keybase MAP kanıt ağacı yok; tek online istemci hiçbir çelişki yakalayamaz, bant dışı damga karşılaştırması hâlâ en güçlü kanıt (spec: `docs/faz6-keygossip-design.md`).
 
 ## DB şeması
 
@@ -201,6 +201,7 @@ Client → server:
 | `voice_state` | `channel_id`, `state: joined\|left` | ses odası presence'ı |
 | `call:ring` / `call:accept` / `call:decline` / `call:cancel` | `channel_id` | 1:1 DM arama sinyali (yalnız DM üyesi; media LiveKit'te) |
 | `dh_update` | `channel_id`, `payload` | self-update duyurusu (Faz 5c): b64 kanon+imza **opak relay** — sunucu saklamaz/yorumlamaz; kanal→topluluk broadcast, gdm→üyeler, dm→karşı taraf; sığ sınır: b64 + ≤512 karakter |
+| `keylog_head` | `id`, `hash`, `communities[]` | Faz 6: istemci-arası anahtar defteri head gossip — istemci kendi doğrulanmış head'ini üyesi olduğu topluluklara periyodik (5dk + JIT) yayınlar; sunucu opak relay; `id` 32-bit pozitif, `hash` 64 hex, `communities` ≤64 string |
 
 Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s)`):
 
@@ -229,8 +230,9 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `call:accepted` / `call:declined` / `call:cancelled` | `channel_id` | arama yanıtları |
 | `call:ended` | `channel_id`, `reason` (`declined`\|`cancelled`\|`peer_disconnected`) | arama kapandı — socket düşüşünde de hub üretir |
 | `dh_update` | `channel_id`, `payload`, `from` | self-update duyurusunun opak aynası (5c) — `from` gönderici socket kullanıcı id'si, sunucu tarafından eklenir; kriptografik doğrulama alıcıdadır |
+| `keylog_head` | `community_id`, `id`, `hash`, `from` | Faz 6: gossip aynası — `community_id` her topluluk için ayrı broadcast; `from` sunucu tarafından eklenir; id/hash public, saklama/yorum yok (invariant). Alıcı 4 durum makinesi (eşleşme / ileri / aynı-id-farklı-hash / biz-önde-uyuşmazlık); son ikisi `keylogForkWarning` bant tetikler |
 
-İstemci kablo dağılımı: `appStore.wireEvents` (bootstrap yenileme + üyelik olayları + `dh_update` doğrulama/pin), `chatStore` (`message:new`/`message:deleted`), `dmChatStore` (`dm:message`/`gdm:message`/`message:deleted`), `voiceStore` (`voice:update`, `channel:rotated`, tüm `call:*`). Mesaj frame'lerinin `message` payload'u (`message:new`, `dm:message`, `gdm:message`) `expires_at` taşır (ms epoch; null = TTL kapalı); canlı dağıtımda süresi çoktan geçmiş frame sunucu tarafından yayınlanmaz.
+İstemci kablo dağılımı: `appStore.wireEvents` (bootstrap yenileme + üyelik olayları + `dh_update` doğrulama/pin + `keylog_head` gossip reducer + publisher bootstrap), `chatStore` (`message:new`/`message:deleted`), `dmChatStore` (`dm:message`/`gdm:message`/`message:deleted`), `voiceStore` (`voice:update`, `channel:rotated`, tüm `call:*`). Mesaj frame'lerinin `message` payload'u (`message:new`, `dm:message`, `gdm:message`) `expires_at` taşır (ms epoch; null = TTL kapalı); canlı dağıtımda süresi çoktan geçmiş frame sunucu tarafından yayınlanmaz.
 
 ## Dağıtım bütünlüğü
 
@@ -304,6 +306,7 @@ içeriğin yayıldığı varsayımıyla anlamlıdır.
 | `lib/format.ts` | saat/gün biçimleme (tr-TR) |
 | `lib/keypins.ts` | TOFU public-key pin store — sunucu anahtar değişimini yakalar |
 | `lib/keytransparency.ts` | anahtar defteri: zincir doğrulama, head localStorage, kendi kayıt kontrolü, head damga formatı |
+| `lib/keygossip.ts` | Faz 6: istemci-arası head gossip — 4 durum makinesi (classifyKeylogHead) + periyodik yayın (5dk + JIT) + savunmacı ön kontrol (isValidIncomingHead) |
 | `lib/signkeys.ts` | gönderen atfı: doğrulanmış defterden Ed25519 public key haritası (kullanıcı başına çoklu — key yenilemesi), artımlı tazeleme; imzalı mesaj doğrulaması yalnız bu haritadan beslenir |
 | `lib/dhupdate.ts` | Faz 5c self-update duyurusu: kanon ayrıştırma + Ed25519 doğrulama (defter anahtarlarıyla), TOFU pin (`pgv.dhupdates.v1` — sır içermez); geçersiz imza/biçim koşulsuz reddedilir; 5d: `bandFromIngest` — yalnız `bad-signature` güvenlik bandı tetikler |
 | `lib/nick.ts` | userId → nick çözümleyici (tüm bilinen kaynaklardan) |
@@ -361,7 +364,7 @@ içeriğin yayıldığı varsayımıyla anlamlıdır.
 | `routes/users.ts` | pubkey dağıtımı + kalıcı hesap silme |
 | `routes/keys.ts` | anahtar defteri: appendKeyLog (tek yazı yolu), GET /keys/log, boot backfill |
 | `ws/hub.ts` | socket kaydı, oda/kullanıcı yayını, ses kadro haritası, DM arama takibi |
-| `ws/index.ts` | WS upgrade + auth-first-frame (10 sn'de 4004 timeout) + voice_state/call sinyal işleme + `dh_update` opak relay (saklamaz, yorumlamaz — yalnız kanal kitlesine iletir) |
+| `ws/index.ts` | WS upgrade + auth-first-frame (10 sn'de 4004 timeout) + voice_state/call sinyal işleme + `dh_update` opak relay (saklamaz, yorumlamaz — yalnız kanal kitlesine iletir) + `keylog_head` opak relay (Faz 6: üye olduğu topluluklara broadcast, sığ sınır: id 32-bit pozitif, hash 64 hex, communities ≤64 string) |
 | `lib/access.ts` | üyelik/rol/kanal/topluluk erişim sorguları (isStaff, needsRekey) |
 | `lib/social.ts` | arkadaş/DM yardımcıları (areFriends, findDmByPair, dm id üretimi) |
 | `lib/ttl.ts` | kaybolan mesaj TTL doğrulaması (`parseExpiresAt`, 30 gün tavan) + `isExpired` |
