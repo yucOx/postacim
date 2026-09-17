@@ -12,8 +12,9 @@ düz hâlini **hiçbir zaman** görmez.
 - **Sesli/görüntülü odalar** — LiveKit SFU üzerinde SFrame ile gerçek E2EE, onlarca katılımcı
 - **Topluluklar** — Discord benzeri sunucu → kanal yapısı, sahip/üye rolleri
 - **Anahtar dağıtımı** — kanal anahtarları her üyeye sealed-box ile sarılır; sunucu açamaz
-**Üye çıkarma = rekey (zorunlu)** — çıkarılan/banlanan üyeden sonra kanallar **kilitlenir**: yazışma, ses odası, davet üretimi/kullanımı ve yeni üye ekleme, sahip veya admin "anahtarı yenileyene" kadar kapalıdır (eski anahtar risk altında olduğundan). Atılan üye elindeki davetle geri dönüp okuyamaz; sesli odadaysa canlı bağlantısı düşürülür.
+- **Üye çıkarma = rekey (zorunlu)** — çıkarılan/banlanan üyeden sonra kanallar **kilitlenir**: yazışma, ses odası, davet üretimi/kullanımı ve yeni üye ekleme, sahip veya admin "anahtarı yenileyene" kadar kapalıdır (eski anahtar risk altında olduğundan). Atılan üye elindeki davetle geri dönüp okuyamaz; sesli odadaysa canlı bağlantısı düşürülür.
 - **Şifre değiştirme** — kimlik blob yeniden sarılır, kanal anahtarları etkilenmez; değişince **tüm oturumlar düşer** (çalınan token da dahil)
+- **Çoklu cihaz** (Faz 7) — her cihaz bağımsız X25519+Ed25519 keypair (kimlik blob'u v3, `device_id`); Ayarlar → Cihazlar sekmesinden cihaz listesi, WS tabanlı linking (primary onayı), cihaz iptali = zorunlu rekey. Per-cihaz DH step: aynı kullanıcının farklı cihazları farklı adım sayacı tutar (F5 per-sender modelinin doğal uzantısı) — bir cihazdaki state sızıntısı diğerini etkilemez
 - **Ekran paylaşımı** — aynı E2EE hattı üzerinden
 
 ### Moderasyon ve katılım
@@ -38,7 +39,7 @@ düz hâlini **hiçbir zaman** görmez.
 | Amaç | Yöntem |
 |---|---|
 | Şifreden anahtar türetme | Argon2id (64 MiB, t=3), 64B çıktı: ilk 32B auth kanıtı (sunucuda argon2id verifier), son 32B KEK (tarayıcıdan çıkmaz) |
-| Kimlik | X25519 keypair + **Ed25519 imza keypair**; private key'ler KEK ile XChaCha20-Poly1305 şifreli blob olarak sunucuda (blob v2 payload: ikisi birden — v1 blob'lar ilk açılışta otomatik v2'ye yükselir) |
+| Kimlik | X25519 keypair + **Ed25519 imza keypair**; private key'ler KEK ile XChaCha20-Poly1305 şifreli blob olarak sunucuda. **Blob evrimi:** v1 = X25519 priv; v2 = `0x02 ‖ X25519 ‖ Ed25519` (Faz 1); v3 = `0x03 ‖ X25519 ‖ Ed25519 ‖ 16B device_id` (Faz 7). Eski blob'lar ilk açılışta otomatik son sürüme yükselir; v1/v2 hesaplar `deviceId = null` ile primary alias olarak devam eder |
 | Kanal anahtarı | 32B rastgele; üyelere `crypto_box_seal` (sealed box) ile sarılı |
 | Mesajlar | XChaCha20-Poly1305, AAD = `ch:<kanal>:v<epok>` (yeniden konumlandırmaya dayanıklı) |
 | Gönderen atfı | Her mesaj gönderenin **Ed25519 anahtarıyla imzalı** (`ciphertext‖signature`, imza ciphertext+AAD üzerinden); alıcı açmadan önce anahtar defterinden doğrular — sunucu sahte sender_id ile mesaj uyduramaz. Cutover tarihinden sonraki imzasız mesajlar reddedilir |
@@ -53,7 +54,7 @@ düz hâlini **hiçbir zaman** görmez.
 | Anahtar defteri | public key'ler append-only hash zincirinde (`key_log`); istemci boot'ta zinciri doğrular, head damgası profilde bant dışı karşılaştırma için. İmza anahtarları da defterden dağıtılır — yalnız zincir bütünlüğü kanıtlanmış kayıtlar imza doğrulamasına beslenir |
 | Keylog gossip | her istemci doğrulanmış head'ini 5dk'da bir üyesi olduğu topluluklara WS ile yayınlar; aynı id farklı hash = fork kanıtı → kırmızı bant. Sunucu opak relay (saklama/yorum yok) — invariant korunur. Tam CONIKS kanıt zinciri yok: gözlemsel, bant dışı damga karşılaştırması hâlâ en güçlü kanıt |
 
-**Bilinen sınırlar (MVP):** MLS yok — PCS-formel yok; PCS-lite var (tüm scope'larda DH ratchet'li gönderici-tarafı FS: sızıntı penceresi 100 mesaj/24 sa; üye değişiminde rekey broadcast + imzalı self-update duyurusu ile sınırlı toparlanma; çıkarılan üye öncesi mesajları zaten görmüşse okur; alıcı kimlik private'ı sızarsa gözlemlenen mesajlar açılır; epok anahtarı sızarsa o epoğun zincir + çapası baştan türetilebilir); şifre **ve** kurtarma ifadesi ikisi birden kaybolursa hesap kurtarılamaz (ifade kurtarma verisi de kimlik gibi uçtan uca sarılı — sunucu açamaz); kanal anahtarı rotasyonu açık davet linklerini ve katılım şifresi anahtarlarını geçersiz kılar (yeni üretilmeli — başvuru onayı etkilenmez); ban, yeni nick açılmasını engellemez (e-postasız sistemde yapısal sınır — katılım şifresi buna karşı direnir); kanal adları/üye listesi/zaman damgaları/roller/davet metadata'sı sunucuya açıktır (içerik değil); **kaybolan mesajların `expires_at`'ı sunucu için görünür metadata'dır** (içerik değil, ömür bilgisi) — erişim + ömür sınırlaması client-side render + sunucu janitor kombinasyonudur, sunucu tarafı silme garanti edilir ama client'ta süreyi görme engellenmez; DB'de at-rest şifreleme (SQLCipher) bilinçli ertelendi — E2EE içeriği zaten koruyor, metadata katkısı marjinal, better-sqlite3 derlemesi imajı kırılganlaştırır; **çoklu cihazda linking iki cihazın aynı anda açık olmasını gerektirir** (WS tabanlı onay, MVP) — async QR/off-band linking roadmap'te. Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
+> **Bilinen sınırların güncel ve sınıflandırılmış hâli** (KAPATILDI / KISMEN / AYNI / GELECEK etiketleriyle) [aşağıda](#tehdit-modeli-ve-bilinen-sınırlar) ayrı bölümde. Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
 
 ## Mimari
 
@@ -481,7 +482,7 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 - [x] Faz 5 — DH ratchet (kendi implementasyon: per-sender DH + epok rekey penceresi + self-update; DM/kanal/gdm/ses; PCS-formel değil — dürüst sınırlar tehdit modelinde; araştırma: docs/faz5-ratchet-research.md, spec: docs/faz5-dh-ratchet-design.md)
 - [x] Faz 6 — key transparency gossip (anti-forking, gözlemsel — 5dk periyodik WS + JIT; spec: docs/faz6-keygossip-design.md)
 - [x] Faz 7 — çoklu cihaz (per-cihaz X25519 + Ed25519, v3 blob, WS tabanlı linking, per-cihaz DH step + fingerprint, cihaz iptali = rekey; spec: docs/faz7-multidevice-design.md)
-- [ ] Faz 8 — threat model revizyonu + dış audit hazırlığı (v1.0.0)
+- [x] Faz 8 — threat model sıfırdan + dış audit hazırlığı (v1.0.0 — tag kararı kullanıcıda; paket: docs/SECURITY-REVIEW.md + docs/AUDIT-FUNDING.md)
 
 ## Katkıda bulunma
 
