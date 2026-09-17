@@ -19,11 +19,11 @@ Akış: tarayıcı `web/` nginx'den yüklenir → `/api/*` server'a, `/ws` WS'e,
 2. 64B ikiye bölünür (`authStore.ts`): ilk 32B **authMaterial** → sunucuda argon2id verifier olarak saklanır (şifre gönderilmez); son 32B **KEK** — tarayıcıdan çıkmaz, memory-only (reload'da şifre yeniden istenir)
 3. KEK, X25519 private key blob'unu açar: `key_blob` = nonce(24) ‖ XChaCha20-Poly1305(privateKey), AAD `postacim/v1/identity` (`crypto/identity.ts`)
 4. Private key, kanal anahtarlarının **sealed-box** (`crypto_box_seal`) wrapped_key satırlarını açar (`unwrapMyKey`)
-5. Kanal anahtarı (32B rastgele) → mesaj: **XChaCha20-Poly1305**, AAD = `scope:channelId:v<key_version>` + opsiyonel client binding (`crypto/message.ts`). Scope: `ch` (topluluk kanalı) / `dm` / `gdm`. Per-gönderici ratchet: `msg_key_i = H(root_i)`, zincir `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir — güncel kök sızarsa geçmiş korunur; plaintext boyut bucket padding'li (magic `0x01`/`0x02` v2 ratchet'li). **DM'de v4 DH ratchet** (`crypto/dhratchet.ts`): ciphertext = 40B DH header (ephemeral public ‖ adım j ‖ step_base, plaintext) ‖ AEAD ‖ [Ed25519 imza]; adım anahtarı `step_root_j = H(chain_seed ‖ 'dh' ‖ u32LE(j) ‖ X25519(eph_priv_j, peer_kimlik_pub))` — gönderici ephemeral private'ı adım sonunda atılır (M=100 mesaj / 24 sa / reload'ta bir adım) → gönderici tarafı tam forward secrecy; alıcı başlıktaki public + kendi kimlik private'ı ile stateless türetir. AAD'ye `d<dh_pub_hex>` eklenir, imza girdisi header‖ct‖AAD (spec: `docs/faz5-dh-ratchet-design.md`; KAT: `web/src/crypto/dh-ratchet.vectors.json`)
+5. Kanal anahtarı (32B rastgele) → mesaj: **XChaCha20-Poly1305**, AAD = `scope:channelId:v<key_version>` + opsiyonel client binding (`crypto/message.ts`). Scope: `ch` (topluluk kanalı) / `dm` / `gdm`. Per-gönderici ratchet: `msg_key_i = H(root_i)`, zincir `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir — güncel kök sızarsa geçmiş korunur; plaintext boyut bucket padding'li (magic `0x01`/`0x02` v2 ratchet'li, `0x04` v4). **v4 DH ratchet — tüm scope'lar** (`crypto/dhratchet.ts`): ciphertext = 40B DH header (ephemeral public ‖ adım j ‖ step_base, plaintext) ‖ AEAD ‖ [Ed25519 imza]; adım anahtarı `step_root_j = H(chain_seed ‖ 'dh' ‖ u32LE(j) ‖ DH_ÇIKTISI)` — gönderici ephemeral private'ı adım sonunda atılır (M=100 mesaj / 24 sa / reload'ta bir adım) → gönderici tarafı tam forward secrecy; alıcı başlıktaki public + kendi private girdisi ile stateless türetir. DH karşıtı: **DM'de karşı tarafın kimlik X25519 anahtarı**; **kanal/gdm'de epok anahtarından deterministik türetilen grup DH çapası** (`dhAnchor(epok)`, 5c) — her üye aynı çifti türetir, gönderici `X25519(eph_priv, çapa_pub)`, alıcı `X25519(çapa_priv, başlıktaki pub)` aynı 32B'yi üretir; ek dağıtım yok, stateless bozulmaz. AAD'ye `d<dh_pub_hex>` eklenir, imza girdisi header‖ct‖AAD (spec: `docs/faz5-dh-ratchet-design.md`; KAT: `web/src/crypto/dh-ratchet.vectors.json`)
 6. Gönderen atfı: v3 mesaj = AEAD çıktısı ‖ Ed25519 detached imza (imza girdisi = ciphertext baytları ‖ utf8(AAD) — AAD epok, index, binding'i kapsar). Alıcı, açmadan ÖNCE göndericinin anahtar defterinden gelen imza public key'iyle doğrular (`lib/signkeys.ts`); `SIGN_CUTOVER_MS`'ten sonraki imzasız mesajlar reddedilir. Eski hesaplar ilk açılışta/imza anahtarı yoksa ilk gönderimde Ed25519 çifti üretip `POST /keys/sign` ile yayınlar (blob v2 rewrap KEK RAM'deyken)
 6. Client binding: UUID + client timestamp AAD'ye girer, sunucu `client_id` + `sent_at_client` kolonlarında echo eder → bant dışı tekrar oynatma ve timestamp sahteciliği tespit edilebilir (`lib/replay.ts` istemcide dedupe eder)
 7. Ses/görüntü: aynı kanal anahtarı → LiveKit **SFrame** (HKDF türevi). DM araması aynı DM anahtarını kullanır
-8. Epoklar: her sarma yeni `key_version`; eski satırlar kalır → rotasyon öncesi geçmiş okunur. Üye çıkarma = `needs_rekey` → kanal donar, staff rotate edene kadar yazı/ses/davet/üye ekleme kapalı
+8. Epoklar: her sarma yeni `key_version`; eski satırlar kalır → rotasyon öncesi geçmiş okunur. Üye çıkarma = `needs_rekey` → kanal donar, staff rotate edene kadar yazı/ses/davet/üye ekleme kapalı. Rotate aynı zamanda **DH-rekey broadcast**'tir (5c): yeni epok anahtarı kalan üyelere sarmalayarak dağıtılır; v4 zincir seed'i ve epok DH çapası yeni epoktan türetildiğinden atılan üye eski malzemesiyle (broadcast'i yakalasa bile) gelecekteki adım anahtarlarını türetemez. Self-update (5c): ele geçirilen cihazın yerini alan kurban Ed25519 imzalı `dh_update` duyurusu yayınlar — WS `dh_update` frame'i opak relay edilir (`ws/index.ts` saklamaz/yorumlamaz), alıcı imzayı anahtar defterinden doğrurup TOFU pin'ler (`lib/dhupdate.ts`); anahtar geçişi mevcut rekey akışıyla tamamlanır
 9. BIP-39 kurtarma: 12 kelime → aynı Argon2id zinciri (`crypto/recovery.ts`) → identity blob ikinci kez sarılır (`recovery_blob`). Şifre kaybı hesap kaybı değil; ikisi de kaybolursa hesap kurtarılamaz. v1 kurtarma blob'u imza private key taşımaz → kurtarma sonrası yeni imza kimliği üretilir (deftere yeni satır — kanıtlı key değişimi)
 10. Cihaz kilidi (ops.): WebAuthn PRF'ten cihaz KEK'i → private key'ler + auth_material XChaCha20 ile sarılıp IndexedDB'ye (`pgv-device`, `crypto/devicekey.ts`) — F5'te parmak izi/PIN, şifre akışı fallback. Cihaz payload'u `sk` (Ed25519 private) içerir; eski kayıtlarda yoksa açılışta tamamlanır
 11. Anahtar defteri: kayıtta public key + imza public key `key_log`'a append-only satır düşer; istemci boot'ta `GET /keys/log` ile zinciri doğrular, kendi kaydını kontrol eder, head'i localStorage'a yazar (`lib/keytransparency.ts`); doğrulanmış zincirdeki imza anahtarları `lib/signkeys.ts` haritasına beslenir (artımlı tazeleme: `loadBootstrap` tetikli)
@@ -200,6 +200,7 @@ Client → server:
 | `auth` | `token?` | socket kimliği (çerez yeterli) |
 | `voice_state` | `channel_id`, `state: joined\|left` | ses odası presence'ı |
 | `call:ring` / `call:accept` / `call:decline` / `call:cancel` | `channel_id` | 1:1 DM arama sinyali (yalnız DM üyesi; media LiveKit'te) |
+| `dh_update` | `channel_id`, `payload` | self-update duyurusu (Faz 5c): b64 kanon+imza **opak relay** — sunucu saklamaz/yorumlamaz; kanal→topluluk broadcast, gdm→üyeler, dm→karşı taraf; sığ sınır: b64 + ≤512 karakter |
 
 Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s)`):
 
@@ -227,8 +228,9 @@ Server → client (hub: oda bazlı `broadcast`, kullanıcı bazlı `sendToUser(s
 | `call:incoming` | `channel_id`, `from` | karşı taraf arıyor |
 | `call:accepted` / `call:declined` / `call:cancelled` | `channel_id` | arama yanıtları |
 | `call:ended` | `channel_id`, `reason` (`declined`\|`cancelled`\|`peer_disconnected`) | arama kapandı — socket düşüşünde de hub üretir |
+| `dh_update` | `channel_id`, `payload`, `from` | self-update duyurusunun opak aynası (5c) — `from` gönderici socket kullanıcı id'si, sunucu tarafından eklenir; kriptografik doğrulama alıcıdadır |
 
-İstemci kablo dağılımı: `appStore.wireEvents` (bootstrap yenileme + üyelik olayları), `chatStore` (`message:new`/`message:deleted`), `dmChatStore` (`dm:message`/`gdm:message`/`message:deleted`), `voiceStore` (`voice:update`, `channel:rotated`, tüm `call:*`). Mesaj frame'lerinin `message` payload'u (`message:new`, `dm:message`, `gdm:message`) `expires_at` taşır (ms epoch; null = TTL kapalı); canlı dağıtımda süresi çoktan geçmiş frame sunucu tarafından yayınlanmaz.
+İstemci kablo dağılımı: `appStore.wireEvents` (bootstrap yenileme + üyelik olayları + `dh_update` doğrulama/pin), `chatStore` (`message:new`/`message:deleted`), `dmChatStore` (`dm:message`/`gdm:message`/`message:deleted`), `voiceStore` (`voice:update`, `channel:rotated`, tüm `call:*`). Mesaj frame'lerinin `message` payload'u (`message:new`, `dm:message`, `gdm:message`) `expires_at` taşır (ms epoch; null = TTL kapalı); canlı dağıtımda süresi çoktan geçmiş frame sunucu tarafından yayınlanmaz.
 
 ## Dağıtım bütünlüğü
 
@@ -278,14 +280,15 @@ içeriğin yayıldığı varsayımıyla anlamlıdır.
 | `crypto/invite.ts` | davet linki kur/ayrıştır (`#/davet/<code>/<eph-priv>` fragment); ephemeral anahtarla açma |
 | `crypto/joinpw.ts` | katılım şifresi JW anahtarı altında kanal anahtarı seal/open |
 | `crypto/message.ts` | XChaCha20-Poly1305 mesaj AEAD; AAD = scope + kanal + epok + client binding (+v4'de DH public); per-gönderici ratchet zinciri (msg_key_i) + boyut bucket padding; v3: AEAD çıktısına Ed25519 imza eklenir + cutover politika; v4: DH header'lı ratchet formatı + DH zincir taraması |
-| `crypto/dhratchet.ts` | Faz 5b DH ratchet çekirdeği: chain_seed/dh_out/step_root/msg_key türetimi (stateless alıcı), M/T pencere sayaçları (`pgv.dhstep.*`), ephemeral üretimi, self-update duyuru kanonu + Ed25519 doğrulaması (5c canlı bağlar) |
+| `crypto/dhratchet.ts` | Faz 5b/5c DH ratchet çekirdeği: chain_seed/dh_out/step_root/msg_key türetimi (stateless alıcı), M/T pencere sayaçları (`pgv.dhstep.*`), ephemeral üretimi, **epok DH çapası** (`dhAnchor` — kanal/gdm'de peer_static_pub rolü), self-update duyuru kanonu + Ed25519 doğrulaması |
 | `crypto/devicekey.ts` | WebAuthn PRF cihaz kilidi: passkey üret/enroll, cihaz KEK türetimi, blob sar/çöz, IndexedDB `pgv-device` |
 | `crypto/recovery.ts` | kurtarma ifadesinden Argon2id anahtar türetme (şifre yoluyla aynı zincir) |
 | `crypto/sodium.ts` | libsodium hazır olma sözü (WASM) |
 | `state/authStore.ts` | kayıt/giriş/reauth (needs_password)/şifre değişimi/kurtarma; KEK memory-only; passkey unlock boot dalı |
 | `state/appStore.ts` | bootstrap hidrasyonu, topluluk/kanal seçimi, üye/rol/davet/başvuru yönetimi, WS kabloları |
-| `state/chatStore.ts` | kanal geçmişi + sayfalama + canlı mesaj akışı, anahtar açma |
-| `state/dmChatStore.ts` | DM + grup DM sohbet state'i, gizli mesaj filtresi; DM gönderiminde v4 DH adımı yönetimi (M/T pencere + bellek-içi ephemeral), gdm 5c'ye kadar v3 |
+| `state/chatStore.ts` | kanal geçmişi + sayfalama + canlı mesaj akışı, anahtar açma; v4 gönderim/okuma (epok çapası) |
+| `state/dhstep.ts` | Faz 5c — v4 DH adım parametresi yönetimi, tüm scope'lar: bellek-içi ephemeral cache + M/T pencere sayaçları; dm'de peer kimlik anahtarı, kanal/gdm'de epok çapası |
+| `state/dmChatStore.ts` | DM + grup DM sohbet state'i, gizli mesaj filtresi; dm/gdm v4 DH adımı yönetimi (dhstep.ts üzerinden) |
 | `state/ttlStore.ts` | kaybolan mesaj TTL tercihi — kanal/DM başına (localStorage `pgv_msg_ttl`); gönderimde `expires_at` üretir |
 | `lib/ttl.ts` | TTL seçenekleri + `isExpired`/`useExpiryTick` — süresi dolan satırların tombstone render'ı için 30 sn'lik tick |
 | `state/voiceStore.ts` | LiveKit bağlantısı, SFrame E2EE, ses durumu, 1:1 arama akışı (zil/kabul/PiP) |
@@ -302,6 +305,7 @@ içeriğin yayıldığı varsayımıyla anlamlıdır.
 | `lib/keypins.ts` | TOFU public-key pin store — sunucu anahtar değişimini yakalar |
 | `lib/keytransparency.ts` | anahtar defteri: zincir doğrulama, head localStorage, kendi kayıt kontrolü, head damga formatı |
 | `lib/signkeys.ts` | gönderen atfı: doğrulanmış defterden Ed25519 public key haritası (kullanıcı başına çoklu — key yenilemesi), artımlı tazeleme; imzalı mesaj doğrulaması yalnız bu haritadan beslenir |
+| `lib/dhupdate.ts` | Faz 5c self-update duyurusu: kanon ayrıştırma + Ed25519 doğrulama (defter anahtarlarıyla), TOFU pin (`pgv.dhupdates.v1` — sır içermez); geçersiz imza/biçim koşulsuz reddedilir |
 | `lib/nick.ts` | userId → nick çözümleyici (tüm bilinen kaynaklardan) |
 | `lib/replay.ts` | client_id dedupe — sunucu ciphertext'i yeni satır olarak yeniden enjekte edemez |
 | `lib/safety.ts` | 30 haneli safety number (sıralı public key hash) |
@@ -357,7 +361,7 @@ içeriğin yayıldığı varsayımıyla anlamlıdır.
 | `routes/users.ts` | pubkey dağıtımı + kalıcı hesap silme |
 | `routes/keys.ts` | anahtar defteri: appendKeyLog (tek yazı yolu), GET /keys/log, boot backfill |
 | `ws/hub.ts` | socket kaydı, oda/kullanıcı yayını, ses kadro haritası, DM arama takibi |
-| `ws/index.ts` | WS upgrade + auth-first-frame (10 sn'de 4004 timeout) + voice_state/call sinyal işleme |
+| `ws/index.ts` | WS upgrade + auth-first-frame (10 sn'de 4004 timeout) + voice_state/call sinyal işleme + `dh_update` opak relay (saklamaz, yorumlamaz — yalnız kanal kitlesine iletir) |
 | `lib/access.ts` | üyelik/rol/kanal/topluluk erişim sorguları (isStaff, needsRekey) |
 | `lib/social.ts` | arkadaş/DM yardımcıları (areFriends, findDmByPair, dm id üretimi) |
 | `lib/ttl.ts` | kaybolan mesaj TTL doğrulaması (`parseExpiresAt`, 30 gün tavan) + `isExpired` |

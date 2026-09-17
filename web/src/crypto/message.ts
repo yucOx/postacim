@@ -86,8 +86,8 @@ function paddedSize(total: number): number {
 // Forward secrecy dürüst sınırı: msg_key_i kullanıldıktan sonra atılır ve root_i'den
 // geriye (root_{i-1}, msg_key_{i-1}) türetilemez → güncel bir kök/msg anahtarı
 // sızs bile GEÇMİŞ mesajlar korunur. Buna karşılık ileriye doğru kökler her zaman
-// türetilebilir olduğundan gelecek korunmaz — DM yolu bunu v4 DH ratchet ile
-// kapatır (aşağıda); kanal/gdm 5c'ye kadar bu simetrik zincirde kalır.
+// türetilebilir olduğundan gelecek korunmaz — tüm scope'lar bunu v4 DH adımıyla
+// kapatır (aşağıda; kanal/gdm'de DH karşıtı epok çapasıdır, 5c).
 // (Epoch anahtarının kendisi sızarsa zincir baştan türetilebilir; bu riski
 // anahtar rotasyonu (epoch) sınırlar, ratchet değil.)
 const enc = new TextEncoder();

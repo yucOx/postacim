@@ -28,6 +28,15 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   zincir yeniden türetilebilir; v1/v2/v3 geçmiş aynen okunur (resarmlama
   yok). KAT vektörleri + FS/PCS-lite sızıntı simülasyonu testleri
   (`f8e8989`, `474a72f`)
+- **Faz 5c — kanal/gdm v4 + DH-rekey broadcast + self-update relay**:
+  kanal ve grup DM gönderimi v4 DH ratchet'e taşındı — çoklu üye scope'ta
+  DH karşıtı epok anahtarından deterministik türetilen grup DH çapası
+  (alıcı stateless kalır, pencere M/T DM ile aynı); üye değişimi rekey'i
+  artık zincir seed'i + çapayı birlikte çevirir: atılan üye broadcast'i
+  yakalasa bile gelecekteki mesajları türetemez (PCS-lite). Self-update:
+  ele geçirilen cihazın yerini alan kurban Ed25519 imzalı `dh_update`
+  duyurusu yayınlar — sunucu yalnız opak relay (saklamaz/yorumlamaz),
+  alıcı defter anahtarıyla doğrulayıp TOFU pin'ler (`76839cd`)
 
 ### Önceki sprintler (özet)
 

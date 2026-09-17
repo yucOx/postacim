@@ -115,6 +115,11 @@ cutover kuralı v4 için de geçerlidir (cutover sonrası imzasız v4 reddedilir
 
 - Yeni mesajlar **yalnız DM scope'unda** v4 üretilir; kanal/gdm v3 üretmeye
   devam eder (5c). v4 okuma yolu scope gözetmez çalışır.
+  > **5c güncellemesi:** kanal/gdm artık v4 üretir. Çoklu üye scope'ta
+  > `peer_static_pub` rolünü epok anahtarından deterministik türetilen grup
+  > DH çapası üstlenir (`dhAnchor` — `dhratchet.ts`): tüm üyeler aynı çifti
+  > türettiğinden gönderici/alıcı simetrisi ve stateless alıcı korunur; ek
+  > dağıtım gerekmez. Pencere M/T değişmez.
 - Eski istemciler v4 mesajını ÇÖZEMEZ (açamaz) — v2'nin tanıttığı aynı
   kesme maliyeti, bilinçli kabul: geçiş "yeni mesajlar v4" kuralıyla ilerler,
   geçmiş etkilenmez.
@@ -155,6 +160,16 @@ arası karışma yok: yanlış adımın anahtarı MAC'ten geçemez.
 bilinçli bir sertliktir (gönderici M'de rotasyonu ZORUNLU kılar).
 
 ## 6. Self-update protokolü (yalnız TASARIM — 5c'de uygulanır)
+
+> **5c uygulama notu:** uygulanmış haliyle — taşıma (a) seçildi: WS `dh_update`
+> frame'i, sunucu yalnız opak relay (saklamaz/yorumlamaz; sığ b64 + ≤512
+> karakter sınırı; kanal→topluluk broadcast, gdm→üyeler, dm→karşı taraf,
+> `from` sunucu tarafından eklenir). İstemci `lib/dhupdate.ts`: kanon
+> ayrıştırma + defter Ed25519 anahtarıyla doğrulama + TOFU pin
+> (`pgv.dhupdates.v1`); UI metni yok (Faz 6 gossip'ine bağlanır). Anahtar
+> geçişinin fiili tamamlayıcısı mevcut rekey broadcast'idir (rotate): yeni
+> epok sarmalayarak yalnız kalan üyelere gider; kanal/gdm çapası epoktan
+> türetildiğinden atılan/çıkarılan taraf yeni adımları türetemez.
 
 Kanal/gdm tarafında (5c) gönderici DH-rekey broadcast'i üye başına sarma ile
 yapılır. Buradaki "self-update" bileşeni: ele geçirilen cihazın DH anahtarı
