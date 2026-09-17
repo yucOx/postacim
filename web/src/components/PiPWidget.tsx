@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RoomContext, useTracks, useSpeakingParticipants, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
-import { Maximize2, Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, ChevronUp, Maximize2, Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
@@ -11,44 +11,71 @@ import { nickFor } from '../lib/nick';
 import { useSafeIsSpeaking } from '../lib/speaking';
 import Avatar from './Avatar';
 
-const WIDGET_W = 310; // w-[310px]
-const WIDGET_H = 260; // header + video + controls
+const WIDGET_W_NORMAL = 310;
+const WIDGET_W_LARGE = 460;
 const MARGIN = 16;
+const PIP_SIZE_KEY = 'postacim.pipSize';
 
 /** The minimized call — a draggable corner window over the chat, with snap
  *  back to the corner on double-click. Everything underneath stays interactive. */
 export default function PiPWidget(): React.ReactNode {
   const { t } = useT();
   const room = useVoiceStore((s) => s.room);
+  const isDmCall = useVoiceStore((s) => s.isDmCall);
   const callState = useVoiceStore((s) => s.callState);
+  const joinedVoiceChannel = useVoiceStore((s) => s.joinedChannelId);
   const setPip = useVoiceStore((s) => s.setPip);
   const cancelCall = useVoiceStore((s) => s.cancelCall);
+  const leave = useVoiceStore((s) => s.leave);
   const pipPos = useVoiceStore((s) => s.pipPos);
   const setPipPos = useVoiceStore((s) => s.setPipPos);
   const dms = useAppStore((s) => s.dms);
+  const selectChannel = useAppStore((s) => s.selectChannel);
+  const channel = useAppStore((s) => s.communities.flatMap((c) => c.channels).find((ch) => ch.id === joinedVoiceChannel));
+
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      return localStorage.getItem(PIP_SIZE_KEY) === 'large';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleExpanded = (): void => {
+    const next = !expanded;
+    setExpanded(next);
+    try {
+      localStorage.setItem(PIP_SIZE_KEY, next ? 'large' : 'normal');
+    } catch {
+      // ignore
+    }
+  };
+
+  const widgetWidth = expanded ? WIDGET_W_LARGE : WIDGET_W_NORMAL;
+  const widgetHeight = expanded ? 360 : 260;
 
   const ref = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ dx: number; dy: number; pointerId: number } | null>(null);
 
   const snapToCorner = useCallback((): void => {
     if (typeof window === 'undefined') return;
-    setPipPos({ x: window.innerWidth - WIDGET_W - MARGIN, y: window.innerHeight - WIDGET_H - MARGIN });
-  }, [setPipPos]);
+    setPipPos({ x: window.innerWidth - widgetWidth - MARGIN, y: window.innerHeight - widgetHeight - MARGIN });
+  }, [setPipPos, widgetWidth, widgetHeight]);
 
   // compute effective position: -1 sentinel → snap to bottom-right based on viewport
   const pos =
     pipPos.x < 0 || pipPos.y < 0
-      ? { x: Math.max(0, (typeof window !== 'undefined' ? window.innerWidth : 1000) - WIDGET_W - MARGIN), y: Math.max(0, (typeof window !== 'undefined' ? window.innerHeight : 800) - WIDGET_H - MARGIN) }
+      ? { x: Math.max(0, (typeof window !== 'undefined' ? window.innerWidth : 1000) - widgetWidth - MARGIN), y: Math.max(0, (typeof window !== 'undefined' ? window.innerHeight : 800) - widgetHeight - MARGIN) }
       : pipPos;
 
   const clamp = useCallback((x: number, y: number): { x: number; y: number } => {
-    const maxX = Math.max(0, window.innerWidth - WIDGET_W - MARGIN);
-    const maxY = Math.max(0, window.innerHeight - WIDGET_H - MARGIN);
+    const maxX = Math.max(0, window.innerWidth - widgetWidth - MARGIN);
+    const maxY = Math.max(0, window.innerHeight - widgetHeight - MARGIN);
     return {
       x: Math.min(Math.max(0, x), maxX),
       y: Math.min(Math.max(0, y), maxY),
     };
-  }, []);
+  }, [widgetWidth, widgetHeight]);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
@@ -88,8 +115,28 @@ export default function PiPWidget(): React.ReactNode {
     return () => window.removeEventListener('resize', onResize);
   }, [clamp, pos.x, pos.y, pipPos.x, pipPos.y, setPipPos]);
 
-  if (!callState) return null;
-  const peerNick = dms.find((d) => d.id === callState.channelId)?.peer.nick ?? '?';
+  if (!isDmCall && !joinedVoiceChannel) return null;
+  if (isDmCall && !callState) return null;
+
+  const title = isDmCall
+    ? dms.find((d) => d.id === callState?.channelId)?.peer.nick ?? '?'
+    : channel?.name ?? t('pip.roomName');
+
+  const onMaximize = (): void => {
+    setPip(false);
+    if (isDmCall && callState) {
+      useAppStore.getState().openDmChat(callState.channelId);
+      useAppStore.setState({ view: 'dm' });
+    } else if (!isDmCall && joinedVoiceChannel) {
+      selectChannel(joinedVoiceChannel);
+      useAppStore.setState({ view: 'community', activeDmId: null });
+    }
+  };
+
+  const onHangUp = (): void => {
+    if (isDmCall) void cancelCall();
+    else void leave();
+  };
 
   return (
     <div
@@ -99,22 +146,27 @@ export default function PiPWidget(): React.ReactNode {
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onDoubleClick={snapToCorner}
-      className="fixed z-40 w-[310px] cursor-grab select-none overflow-hidden rounded-xl border border-brass-600/70 bg-night-950 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] active:cursor-grabbing"
+      className={`fixed z-40 cursor-grab select-none overflow-hidden rounded-xl border border-brass-600/70 bg-night-950 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] transition-all duration-200 active:cursor-grabbing ${
+        expanded ? 'w-[460px]' : 'w-[310px]'
+      }`}
       style={{ left: pos.x, top: pos.y, touchAction: 'none' }}
     >
       <div className="flex items-center gap-2 border-b border-night-700 bg-night-900/80 px-3 py-2">
-        <span className="plate !text-[10px]">{t('call.plate')}</span>
+        <span className="plate !text-[10px]">{isDmCall ? t('call.plate') : t('pip.roomName')}</span>
         <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50">
-          {peerNick}
+          {title}
         </span>
+        {/* Discord tarzı pencere boyutunu büyütüp küçültme butonu */}
         <button
-          onClick={() => {
-            setPip(false);
-            if (callState) {
-              useAppStore.getState().openDmChat(callState.channelId);
-              useAppStore.setState({ view: 'dm' });
-            }
-          }}
+          onClick={toggleExpanded}
+          className="rounded p-1 text-paper-400 transition-colors hover:bg-night-800 hover:text-paper-100"
+          title={expanded ? 'Pencereyi küçült (310px)' : 'Pencereyi büyüt (460px)'}
+          aria-label={expanded ? 'Pencereyi küçült' : 'Pencereyi büyüt'}
+        >
+          {expanded ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+        </button>
+        <button
+          onClick={onMaximize}
           className="rounded p-1 text-paper-400 transition-colors hover:bg-night-800 hover:text-paper-100"
           title={t('pip.maximize')}
           aria-label={t('pip.maximizeAria')}
@@ -122,7 +174,7 @@ export default function PiPWidget(): React.ReactNode {
           <Maximize2 size={15} />
         </button>
         <button
-          onClick={() => void cancelCall()}
+          onClick={onHangUp}
           className="rounded p-1 text-paper-400 transition-colors hover:bg-stamp-100 hover:text-stamp-400"
           title={t('pip.endCall')}
           aria-label={t('pip.endCallAria')}
@@ -131,13 +183,13 @@ export default function PiPWidget(): React.ReactNode {
         </button>
       </div>
       {!room ? (
-        <div className="flex h-44 flex-col items-center justify-center gap-2 text-paper-500">
-          <Avatar userId={callState.channelId} label={peerNick} size={48} />
+        <div className={`flex ${expanded ? 'h-64' : 'h-44'} flex-col items-center justify-center gap-2 text-paper-500`}>
+          <Avatar userId={callState?.channelId ?? joinedVoiceChannel ?? ''} label={title} size={48} />
         </div>
       ) : (
         <RoomContext.Provider value={room}>
-          <PiPStage />
-          <PiPControls onEnd={() => void cancelCall()} />
+          <PiPStage expanded={expanded} />
+          <PiPControls onEnd={onHangUp} />
         </RoomContext.Provider>
       )}
     </div>
@@ -148,13 +200,15 @@ export default function PiPWidget(): React.ReactNode {
  *  - Ana ekranda konuşan kişi (veya karşı tarafın ekranı/kamerası/avatarı)
  *  - Sağ alt köşede küçük pencere (bizim kendi kameramız veya avatarımız)
  */
-function PiPStage(): React.ReactNode {
+function PiPStage({ expanded }: { expanded?: boolean }): React.ReactNode {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: false,
   });
   const speaking = useSpeakingParticipants();
+  const isDmCall = useVoiceStore((s) => s.isDmCall);
   const callState = useVoiceStore((s) => s.callState);
-  const peerId = callState?.channelId ?? '';
+  const joinedVoiceChannel = useVoiceStore((s) => s.joinedChannelId);
+  const peerId = (isDmCall ? callState?.channelId : joinedVoiceChannel) ?? '';
 
   // 1. Ana görünüm: Konuşan katılımcı varsa onun kamerası, yoksa ekran paylaşımı -> kamera -> avatar
   const remoteTracks = tracks.filter((t) => !t.participant.isLocal && !(t.publication?.isMuted ?? false));
@@ -178,7 +232,7 @@ function PiPStage(): React.ReactNode {
   const isSelfSpeaking = useSafeIsSpeaking(useVoiceStore((s) => s.room?.localParticipant as Participant | undefined));
 
   return (
-    <div className="relative h-44 w-full overflow-hidden bg-night-900 flex items-center justify-center">
+    <div className={`relative ${expanded ? 'h-64' : 'h-44'} w-full overflow-hidden bg-night-900 flex items-center justify-center transition-all duration-200`}>
       {/* Ana büyük pencere (Karşı taraf / Konuşan) */}
       {pick ? (
         <div className={`relative h-full w-full ${isMainSpeaking ? 'ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]' : ''}`}>
@@ -189,14 +243,14 @@ function PiPStage(): React.ReactNode {
         </div>
       ) : (
         <div className={`flex h-full w-full flex-col items-center justify-center gap-2 bg-night-850 ${isMainSpeaking ? 'ring-2 ring-emerald-500' : ''}`}>
-          <Avatar userId={peerId} label={nickFor(peerId)} size={52} srcOverride={null} />
+          <Avatar userId={peerId} label={nickFor(peerId)} size={expanded ? 64 : 52} srcOverride={null} />
           <span className="font-display text-[11px] uppercase tracking-[0.14em] text-paper-300">{nickFor(peerId)}</span>
         </div>
       )}
 
       {/* Bizim küçük penceremiz (Discord tarzı sağ alt köşe inset) */}
       <div
-        className={`absolute bottom-2 right-2 h-14 w-20 overflow-hidden rounded-md border bg-night-950 shadow-lg transition-all ${
+        className={`absolute bottom-2 right-2 ${expanded ? 'h-20 w-28' : 'h-14 w-20'} overflow-hidden rounded-md border bg-night-950 shadow-lg transition-all ${
           isSelfSpeaking ? 'border-emerald-500 ring-2 ring-emerald-500' : 'border-brass-700/60'
         }`}
       >
@@ -207,7 +261,7 @@ function PiPStage(): React.ReactNode {
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center bg-night-850">
-            {user && <Avatar userId={user.id} label={user.nick} size={24} srcOverride={user.avatar_updated_at ? undefined : null} />}
+            {user && <Avatar userId={user.id} label={user.nick} size={expanded ? 32 : 24} srcOverride={user.avatar_updated_at ? undefined : null} />}
             <span className="font-display text-[8px] uppercase tracking-wider text-paper-400">sen</span>
           </div>
         )}

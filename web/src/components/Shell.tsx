@@ -76,6 +76,12 @@ export default function Shell() {
   const joinedVoiceChannel = useVoiceStore((s) => s.joinedChannelId);
   const pip = useVoiceStore((s) => s.pip);
   const isCallMinimized = isDmCall && !!room && (pip || view !== 'dm' || activeDm?.id !== callDmId);
+  const isCommunityVoiceMinimized =
+    !isDmCall &&
+    !!joinedVoiceChannel &&
+    !!room &&
+    !(view === 'community' && channel?.type === 'voice' && activeChannelId === joinedVoiceChannel);
+  const showPiP = isCallMinimized || isCommunityVoiceMinimized;
   const dms = useAppStore((s) => s.dms);
   const gdms = useAppStore((s) => s.gdms);
   const openDmChat = useAppStore((s) => s.openDmChat);
@@ -347,11 +353,7 @@ export default function Shell() {
       {profileModal && <ProfileModal onClose={() => setProfileModal(false)} />}
       {settingsModal && <SettingsModal onClose={() => setSettingsModal(false)} />}
       {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
-      {isCallMinimized && <PiPWidget />}
-      {/* ongoing community call, minimized while browsing other rooms */}
-      {!isDmCall && joinedVoiceChannel && !(view === 'community' && channel?.type === 'voice' && activeChannelId === joinedVoiceChannel) && (
-        <VoicePip />
-      )}
+      {showPiP && <PiPWidget />}
       {room && (
         <RoomContext.Provider value={room}>
           <GlobalCallAudio />
