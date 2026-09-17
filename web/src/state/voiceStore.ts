@@ -251,7 +251,10 @@ async function connectRoom(
   try {
     await keyProvider.setKey(key.slice().buffer as ArrayBuffer);
     await room.setE2EEEnabled(true);
-    await room.connect(url, token);
+    // varsayılan 15s: mDNS candidate çözümü + TURN probing'i bekleyen yavaş
+    // ICE yollarında "could not establish pc connection" veriyordu — ara-ara
+    // düşüp geri gelme ses odasının bu limiti kaybetmesiydi. 25s headroom.
+    await room.connect(url, token, { peerConnectionTimeout: 25_000 });
   } catch (err) {
     // a failed attempt must not leak its half-connected room + worker
     cleanup(room);
