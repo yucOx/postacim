@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowUpRight, Plus } from 'lucide-react';
+import { ArrowUpRight, Plus, X } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppStore } from '../state/appStore';
 import { useDmChatStore } from '../state/dmChatStore';
@@ -22,6 +22,26 @@ const loadOrder = (): string[] => {
   }
 };
 
+const DM_ORDER_KEY = 'pgv_dm_rail_order';
+const loadDmOrder = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(DM_ORDER_KEY) ?? '[]') as unknown;
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const DM_HIDDEN_KEY = 'pgv_dm_rail_hidden';
+const loadHiddenDms = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(DM_HIDDEN_KEY) ?? '[]') as unknown;
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+};
+
 export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useT();
   const communities = useAppStore((s) => s.communities);
@@ -37,11 +57,47 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
   useUnreadStore((s) => s.readMap);
   const dmUnread = dms.reduce((n, d) => n + unreadCount(d.id, dmMessages[d.id]), 0);
 
+  const [hiddenDmIds, setHiddenDmIds] = useState<string[]>(loadHiddenDms);
+  const [dmOrder, setDmOrder] = useState<string[]>(loadDmOrder);
+  const [dragDmId, setDragDmId] = useState<string | null>(null);
+
   const messagedDms = useMemo(() => {
-    return dms
-      .filter((d) => d.last_message_at !== null || (dmMessages[d.id] && dmMessages[d.id].length > 0))
-      .sort((a, b) => (b.last_message_at ?? 0) - (a.last_message_at ?? 0));
-  }, [dms, dmMessages]);
+    const visible = dms.filter(
+      (d) =>
+        !hiddenDmIds.includes(d.id) &&
+        (d.last_message_at !== null || (dmMessages[d.id] && dmMessages[d.id].length > 0))
+    );
+    const idx = (id: string): number => {
+      const i = dmOrder.indexOf(id);
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return [...visible].sort((a, b) => {
+      const diff = idx(a.id) - idx(b.id);
+      if (diff !== 0) return diff;
+      return (b.last_message_at ?? 0) - (a.last_message_at ?? 0);
+    });
+  }, [dms, dmMessages, hiddenDmIds, dmOrder]);
+
+  const persistDmOrder = (next: string[]): void => {
+    setDmOrder(next);
+    try {
+      localStorage.setItem(DM_ORDER_KEY, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const hideDm = (id: string, e?: React.MouseEvent): void => {
+    e?.stopPropagation();
+    e?.preventDefault();
+    const next = Array.from(new Set([...hiddenDmIds, id]));
+    setHiddenDmIds(next);
+    try {
+      localStorage.setItem(DM_HIDDEN_KEY, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -111,38 +167,73 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
         )}
       </button>
 
-      {/* Önceden mesajlaşılmış kişiler (Discord tarzı sol ray ikonları) */}
+      {/* Önceden mesajlaşılmış kişiler (Discord tarzı sol ray ikonları — sürüklenebilir + gizlenebilir) */}
       {messagedDms.map((d) => {
         const active = view === 'dm' && activeDmId === d.id;
         const unread = unreadCount(d.id, dmMessages[d.id]);
         return (
-          <button
+          <div
             key={d.id}
-            onClick={() => {
-              if (useVoiceStore.getState().isDmCall && !useVoiceStore.getState().pip) {
-                useVoiceStore.getState().setPip(true);
-              }
-              openDmChat(d.id);
-              onNavigate?.();
+            draggable
+            onDragStart={(e) => {
+              setDragDmId(d.id);
+              e.dataTransfer.effectAllowed = 'move';
             }}
-            title={d.peer.nick}
-            className={`group relative flex h-11 w-11 items-center justify-center transition-all ${
-              active
-                ? 'rounded-2xl ring-2 ring-lamp-500 bg-night-800'
-                : 'rounded-full border border-brass-700/50 bg-night-800 hover:rounded-2xl hover:border-brass-500'
-            }`}
+            onDragEnd={() => setDragDmId(null)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const from = dragDmId;
+              setDragDmId(null);
+              if (!from || from === d.id) return;
+              const ids = messagedDms.map((s) => s.id);
+              const fromI = ids.indexOf(from);
+              const toI = ids.indexOf(d.id);
+              if (fromI < 0 || toI < 0) return;
+              ids.splice(toI, 0, ids.splice(fromI, 1)[0]!);
+              persistDmOrder(ids);
+            }}
+            className="group relative flex h-11 w-11 cursor-pointer items-center justify-center"
           >
-            <Avatar userId={d.peer.id} label={d.peer.nick} size={38} />
-            {unread > 0 && !active && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-night-900 bg-lamp-500 px-0.5 font-display text-[9px] font-bold text-night-950">
-                {unread > 99 ? '99+' : unread}
-              </span>
-            )}
-            {/* Discord tarzı sol aktif beyaz çentik */}
-            {active && (
-              <span className="absolute -left-3 top-1/2 h-8 w-1.5 -translate-y-1/2 rounded-r-full bg-paper-50" />
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (useVoiceStore.getState().isDmCall && !useVoiceStore.getState().pip) {
+                  useVoiceStore.getState().setPip(true);
+                }
+                openDmChat(d.id);
+                onNavigate?.();
+              }}
+              onContextMenu={(e) => hideDm(d.id, e)}
+              title={`${d.peer.nick} (sağ tık: listeden gizle)`}
+              className={`relative flex h-11 w-11 items-center justify-center transition-all ${
+                active
+                  ? 'rounded-2xl ring-2 ring-lamp-500 bg-night-800'
+                  : 'rounded-full border border-brass-700/50 bg-night-800 hover:rounded-2xl hover:border-brass-500'
+              }${dragDmId === d.id ? ' opacity-40' : ''}`}
+            >
+              <Avatar userId={d.peer.id} label={d.peer.nick} size={38} />
+              {unread > 0 && !active && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-night-900 bg-lamp-500 px-0.5 font-display text-[9px] font-bold text-night-950">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
+              {/* Discord tarzı sol aktif beyaz çentik */}
+              {active && (
+                <span className="absolute -left-3 top-1/2 h-8 w-1.5 -translate-y-1/2 rounded-r-full bg-paper-50" />
+              )}
+            </button>
+            {/* Discord tarzı hoverda çıkan gizle/kapat butonu */}
+            <button
+              type="button"
+              onClick={(e) => hideDm(d.id, e)}
+              title="Listeden gizle"
+              aria-label="Listeden gizle"
+              className="absolute -right-1 -top-1 z-20 hidden h-4 w-4 items-center justify-center rounded-full border border-night-700 bg-night-950/95 text-paper-400 opacity-0 shadow transition-all hover:border-stamp-500 hover:text-stamp-400 group-hover:flex group-hover:opacity-100"
+            >
+              <X size={10} />
+            </button>
+          </div>
         );
       })}
 
