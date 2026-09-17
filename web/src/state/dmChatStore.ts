@@ -113,9 +113,19 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
   }
   try {
     // v4 okuma yolu (dm + gdm): alıcı private'ı başlıktaki ephemeral public ile
-    // DH çıktısını üretir (stateless türetim) — dm'de kimlik private, gdm'de
-    // epok çapası private (row'un kendi epok anahtarından türetilir)
-    const myPriv = kind === 'dm' ? useAuthStore.getState().privateKey : key ? dhAnchor(key).privateKey : null;
+    // DH çıktısını üretir (stateless türetim). dm'de (sender, peer) sorted çifti
+    // anchor'ı belirler (Faz 5b hotfix) — taraflar aynı çifti türetir, kendi
+    // mesajımız da açılabilir; gdm'de epok çapası (klasik 5c).
+    let myPriv: Uint8Array | null = null;
+    if (kind === 'dm') {
+      const me = useAuthStore.getState().user?.id;
+      if (me) {
+        const sorted = [me, raw.sender_id].sort() as [string, string];
+        myPriv = dhAnchor('dm', key, sorted).privateKey;
+      }
+    } else if (key) {
+      myPriv = dhAnchor(kind, key).privateKey;
+    }
     return {
       id: raw.id,
       channelId: raw.channel_id,

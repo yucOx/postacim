@@ -39,10 +39,18 @@ export async function dhParamsFor(
       peerPub = peerPubOf();
     }
     if (!peerPub) return undefined;
+    // DM: sıralı (sender_id, peer_id) çiftinden deterministik DH çapası türetilir
+    // (Faz 5b hotfix — spec §1). Karşılıklı taraflar aynı çifti hesaplar; X25519
+    // simetrisi gereği kendi mesajımız da açılabilir. peer_static_pub olarak
+    // anchor.publicKey kullanılır — kimlik X25519 public'i değil.
+    const me = useAuthStore.getState().user?.id;
+    if (!me) return undefined;
+    const sorted = [me, peerId].sort() as [string, string];
+    const anchor = dhAnchor('dm', key, sorted);
     const eph = stepEph(channelId, version, index, deviceId);
-    return { ...eph, peerStaticPub: unb64(peerPub) };
+    return { ...eph, peerStaticPub: anchor.publicKey };
   }
-  const anchor = dhAnchor(key);
+  const anchor = dhAnchor(kind, key);
   const eph = stepEph(channelId, version, index, deviceId);
   return { ...eph, peerStaticPub: anchor.publicKey };
 }

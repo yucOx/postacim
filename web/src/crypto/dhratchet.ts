@@ -47,8 +47,35 @@ export function chainSeed(epochKey: Uint8Array, senderId: string): Uint8Array {
 // stateless alıcı korunur, ek dağıtım/sarma gerekmez. Üye değişimi → rotate
 // (yeni epok anahtarı) çifte zincir tohumu + çapayı birlikte çevirir: atılan
 // üye eski epok bilgisiyle geleceği türetemez (DH-rekey broadcast, spec §6).
-export function dhAnchor(epochKey: Uint8Array): { publicKey: Uint8Array; privateKey: Uint8Array } {
-  const privateKey = H(new Uint8Array([...epochKey, ...enc.encode('dh-anchor')]));
+//
+// Faz 5b hotfix: DM scope'unda karşılıklı türetilebilen çift gerekli. 1:1
+// tarafların kimlik anahtarları farklı olduğundan statik-static DH'de
+// "kendi mesajımı kendim açamam" sorunu çıkar (gönderen X25519(eph, peer_pub)
+// ≠ X25519(my_priv, my_eph) çünkü tarafların anahtarları farklı). Bunun yerine
+// DM çifti (sender_id, peer_id) sıralı çiftinden deterministik türetilir — her
+// iki taraf aynı çifti hesaplar, X25519 simetrisi gereği gönderen/alıcı
+// türevleri aynı 32B çıktıyı üretir (stateless alıcı korunur). Geriye dönük
+// kırılganlık: 5b spec'inde DM için eşdeğer çapa tanımlı değildi; eski v4
+// DM'ler (kimlik-çifti türevi) yeni sürümde okunamaz — body null düşer.
+export function dhAnchor(
+  scope: 'dm' | 'gdm' | 'ch',
+  epochKey: Uint8Array,
+  sortedIds?: [string, string],
+): { publicKey: Uint8Array; privateKey: Uint8Array } {
+  let privateKey: Uint8Array;
+  if (scope === 'dm') {
+    if (!sortedIds) throw new Error('dm anchor: sortedIds gerekli');
+    privateKey = H(
+      new Uint8Array([
+        ...epochKey,
+        ...enc.encode('dm-anchor'),
+        ...enc.encode(sortedIds[0]),
+        ...enc.encode(sortedIds[1]),
+      ]),
+    );
+  } else {
+    privateKey = H(new Uint8Array([...epochKey, ...enc.encode('dh-anchor')]));
+  }
   return { privateKey, publicKey: sodium.crypto_scalarmult_base(privateKey) };
 }
 
@@ -173,7 +200,7 @@ export function dhVoiceKey(epochKey: Uint8Array, dhOut: Uint8Array): Uint8Array 
 
 /** kanal/gdm ses anahtarı — çapa türetimi dahil; her üye aynı anahtarı alır */
 export function dhVoiceKeyAnchor(epochKey: Uint8Array): Uint8Array {
-  const anchor = dhAnchor(epochKey);
+  const anchor = dhAnchor('ch', epochKey);
   return dhVoiceKey(epochKey, dhShared(anchor.privateKey, anchor.publicKey));
 }
 

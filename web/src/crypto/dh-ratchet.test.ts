@@ -389,15 +389,15 @@ describe('Faz 5c — epok DH çapası (kanal/gdm)', () => {
   const K2 = new Uint8Array(32).fill(7); // rekey broadcast ile dağıtılan yeni epok
 
   it('çapa deterministik: aynı epok → aynı çift; clamp türetimi tutarlı', () => {
-    const a = dhAnchor(K1);
-    const b = dhAnchor(K1);
+    const a = dhAnchor('ch', K1);
+    const b = dhAnchor('ch', K1);
     expect(b64(a.publicKey)).toBe(b64(b.publicKey));
     expect(b64(sodium.crypto_scalarmult_base(a.privateKey))).toBe(b64(a.publicKey));
-    expect(b64(dhAnchor(K2).publicKey)).not.toBe(b64(a.publicKey));
+    expect(b64(dhAnchor('ch', K2).publicKey)).not.toBe(b64(a.publicKey));
   });
 
   it('kanal (ch) + gdm v4 roundtrip: çapa public ile şifrele, çapa private ile çöz', () => {
-    const anchor = dhAnchor(K1);
+    const anchor = dhAnchor('ch', K1);
     for (const [scope, ch] of [['ch', 'ch_v4'], ['gdm', 'gdm_v4']] as const) {
       const eph = newDhEphemeral();
       const enc = encryptText(ch, 1, K1, `${scope} gövde`, scope, undefined, false, { senderId: SENDER, index: 0 }, { signPrivateKey: senderSign.signPrivateKey }, {
@@ -413,7 +413,7 @@ describe('Faz 5c — epok DH çapası (kanal/gdm)', () => {
 
   it('karışık kanal geçmişi: v1/v2/v3 satırlar çapa dhCtx ile de okunur', () => {
     const ch = 'ch_mix';
-    const anchor = dhAnchor(K1);
+    const anchor = dhAnchor('ch', K1);
     const v1 = encryptText(ch, 1, K1, 'bir', 'ch');
     const v2 = encryptText(ch, 1, K1, 'iki', 'ch', undefined, false, { senderId: SENDER, index: 0 });
     const v3 = encryptText(ch, 1, K1, 'üç', 'ch', undefined, false, { senderId: SENDER, index: 1 }, { signPrivateKey: senderSign.signPrivateKey });
@@ -426,8 +426,8 @@ describe('Faz 5c — epok DH çapası (kanal/gdm)', () => {
 
   it('PCS-lite kanal ölçeği: rekey broadcast sonrası atılan üye (eski epok elinde) geleceği OKUYAMAZ', () => {
     const ch = 'ch_rekey';
-    const anchor1 = dhAnchor(K1);
-    const anchor2 = dhAnchor(K2);
+    const anchor1 = dhAnchor('ch', K1);
+    const anchor2 = dhAnchor('ch', K2);
     const eph2 = newDhEphemeral();
     // rekey sonrası kalan üye mesajı: yeni epok, yeni çapa, yeni seed
     const after = encryptText(ch, 2, K2, 'rekey sonrası', 'ch', undefined, false, { senderId: SENDER, index: 40 }, { signPrivateKey: senderSign.signPrivateKey }, {
@@ -460,8 +460,8 @@ describe('Faz 5c — epok DH çapası (kanal/gdm)', () => {
 
   it('gdm rekey: broadcast yakalayan ayrılmış üye sonraki mesajları açamaz (gdm scope)', () => {
     const ch = 'gdm_rekey';
-    const anchor1 = dhAnchor(K1);
-    const anchor2 = dhAnchor(K2);
+    const anchor1 = dhAnchor('ch', K1);
+    const anchor2 = dhAnchor('ch', K2);
     const eph2 = newDhEphemeral();
     const after = encryptText(ch, 2, K2, 'ayrılma sonrası', 'gdm', undefined, false, { senderId: SENDER, index: 9 }, { signPrivateKey: senderSign.signPrivateKey }, {
       dhPriv: eph2.privateKey, dhPub: eph2.publicKey, dhStep: 0, stepBase: 9, peerStaticPub: anchor2.publicKey,
@@ -497,7 +497,7 @@ describe('Faz 5d — ses anahtarı: DH zincirinden türetim', () => {
   it('KAT: kanal/gdm ses anahtarı fikstürle bit-bit aynı (çapa türetimi)', () => {
     expect(toHex(dhVoiceKeyAnchor(epoch))).toBe(vk.anchor_voice_key_hex);
     // elle yeniden hesap: her üye aynı çifti türetir → aynı DH çıktısı
-    const anchor = dhAnchor(epoch);
+    const anchor = dhAnchor('ch', epoch);
     expect(toHex(dhVoiceKey(epoch, dhShared(anchor.privateKey, anchor.publicKey))))
       .toBe(vk.anchor_voice_key_hex);
     // determinizm: aynı epok → aynı anahtar (arama başına pin, taraf başına ayrım yok)
@@ -528,7 +528,7 @@ describe('Faz 5d — ses anahtarı: DH zincirinden türetim', () => {
     expect(b64(dhVoiceKeyAnchor(epoch))).not.toBe(b64(epoch));
     expect(b64(dhVoiceKeyDm(epoch, alicePriv, fromHex(vk.dm_bob_pub_hex)))).not.toBe(b64(epoch));
     // mesaj zincirinin j=0 kökünden de farklı (voice seed ayrı alan)
-    const anchor = dhAnchor(epoch);
+    const anchor = dhAnchor('ch', epoch);
     const msgChainRoot = dhStepRoot(chainSeed(epoch, vectors.inputs.sender_id), dhShared(anchor.privateKey, anchor.publicKey), 0);
     expect(b64(dhVoiceKey(epoch, dhShared(anchor.privateKey, anchor.publicKey)))).not.toBe(b64(msgChainRoot));
   });

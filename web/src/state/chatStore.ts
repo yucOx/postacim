@@ -122,7 +122,7 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
         // sync beklenmeden decode başarır; başkaları için defter kullanılır.
         { signPublicKey: resolveSignKeys(raw.sender_id, useAuthStore.getState().user?.id, useAuthStore.getState().signPublicKey), sentAt: raw.sent_at },
         // v4 okuma yolu: epok çapası private (row'un kendi epok anahtarından)
-        { myPriv: dhAnchor(key).privateKey },
+        { myPriv: dhAnchor('ch', key).privateKey },
       ).body,
       ...expiry,
       ...meta,
