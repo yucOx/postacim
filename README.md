@@ -352,18 +352,108 @@ npm test    # 293 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 
 ## Tehdit modeli ve bilinen sınırlar
 
-- **Model**: sunucu kör ama kötü olabilir; ağ pasif dinleyici değildir (TLS overlay ile).
-- **Forward secrecy**: tüm scope'larda (DM/kanal/gdm) gönderici tarafında **tam** — DH ratchet (v4): ephemeral private'lar adım sonunda atılır; göndericinin güncel adım state'i çalınsa bile önceki adımların mesajları çözülemez ve bir sonraki adımdan itibaren gelecek yeniden güvenlidir (sızıntı penceresi: 100 mesaj / 24 saat; reload = zorunlu yeni adım). DM'de DH karşıtı karşı tarafın kimlik anahtarı; kanal/gdm'de epok anahtarından türetilen grup DH çapası — üye değişiminde rotate (DH-rekey broadcast) epok + çapayı birlikte çevirir: atılan üye eski epok bilgisiyle ve broadcast'i yakalasa bile gelecekteki mesaj anahtarlarını türetemez. PCS-lite: ele geçirilen cihaz kurban Ed25519 imzalı `dh_update` duyurusuyla yeni DH public'ini yayınlar (WS relay, sunucu opak), alıcılar doğrulayıp pin'ler; anahtar geçişi mevcut rekey broadcast'iyle tamamlanır. **Faz 7 çoklu cihaz:** her cihaz bağımsız X25519 + Ed25519 keypair; per-cihaz DH step ayrı namespace → bir cihazdaki state sızıntısı diğerini etkilemez (5c per-sender modelinin doğal uzantısı). Cihaz iptali = rekey zorunlu: iptal edilen cihaz yeni mesajları açamaz (eski private yeni DH çıktısını üretemez). Dürüst sınırlar: (i) epok anahtarı sızarsa o epoğun zinciri **ve kanal/gdm çapası** baştan türetilebilir (DM'de çapa yoktur — ephemeral silinmesi epok sızıntısına karşı da korur); (ii) **PCS-formel yok** — toparlanma penceresi rekey/self-update frekansıyla sınırlı, MLS Update akışı yoktur; alıcının kimlik private'ı sızarsa gözlemlenen mesajlar çözülür (stateless türetimin bedeli; Signal'de alıcıda da ileri silme vardır, burada yok); (iii) MLS değil — çalınan cihazın *iptal edilmesi* mevcut akış (Faz 7), ancak **primary cihazın tam kaybı hesap erişimini kilitler** (kurtarma ifadesi tek çıkış); (iv) linking akışı iki cihazın aynı anda online olmasını gerektirir (WS tabanlı MVP) — async QR/off-band linking roadmap'te.
-- **Web JS trust** — uygulama JS'i sunucudan dağıtılır; kötü niyetli/gözden geçirilmemiş sunucu değişmiş JS ile KEK'i çalabilir. Signed release/ayrı origin olmadan tarayıcı E2EE'de kapatılamaz — Faz 4 azaltımı: her `v*` tag'inde bundle SHA manifest'i GitHub Release'de yayınlanır, sunucudan inen JS ile karşılaştırılabilir ([Doğrulama](#doğrulama-js-integrity-release-manifest)); tam kapanmaz — kötü sunucu manifest'i de değiştirebilir. (KEK artık memory-only: reload'da şifre yeniden istenir; opsiyonel passkey cihaz kilidi blob'u cihaz donanımından türeyen anahtarla saklar — zararlı JS ancak aktif WebAuthn onayıyla kullanır, çalıp götüremez.)
-- **Sansür/sıralama** — kör sunucu mesaj gizleyebilir, sıralamayı ve timestamp'i manipüle edebilir (client timestamp + UUID AAD'ye bağlı, tespit edilebilir; gizleme engellenemez).
-- **Metadata** — sosyal graf (kim kiminle), zamanlama, mesaj boyutu (bucket padding'iyle seviyesi indirilir), presence, çağrı katılım/mute durumu sunucuda görünür.
-- **IP metadata** — istemcinin IP'si sunucuya görünür (TLS arkasında), sunucunun IP'si DNS/sertifika kayıtlarından çıkar. İkisi de Tor onion service ile kapatılır: [deploy/tor-hidden-service.md](deploy/tor-hidden-service.md) (v3 onion rehberi — https-onion önerilen; düz http onion varyantında oturum çerezi `Secure=false` üretmek zorunda kalınır, kararın bedeli rehberde yazılı).
-- **WebRTC medya Tor'dan geçmez** — sesli/görüntülü arama ve ekran paylaşımı UDP (LiveKit ICE) taşır; Tor SOCKS üzerinden akmaz. Mesajlaşma onion'da tam çalışır; aramada medya doğrudan gider (tarafların IP'si çağrı esnasında açılır — dürüst bedel) ya da kapalı moda alınır: `SCREEN_SHARE=off` + medya portları kapalı. Detay: [deploy/tor-hidden-service.md §7](deploy/tor-hidden-service.md).
-- **Ses/görüntü gönderen atfı** — metin mesajları Ed25519 imzalıdır; SFrame medya çerçeveleri üyeliği kanıtlar ama gönderen kimliğini kanıtlamaz (SFU içinde per-sender imza yok).
-- **Nick enumeration** — login/kurtarma pseudo-salt ile kapalı; kalan kanal kayıt sırasındaki "nick alınmış" (rate-limited).
-- **Public key doğrulama** — sunucu üye public key'lerini dağıtır. Katmanlar: TOFU keypin + güvenlik numarası (bant dışı) + anahtar defteri (append-only hash zinciri: kendi kayıt kontrolü + head damgası) + istemci-arası head gossip (5dk periyodik WS, fork = kırmızı bant). **Dürüst sınır (Faz 6):** gossip gözlemseldir — tam CONIKS/Keybase MAP kanıt ağacı kapsamda değildir; iki online istemci aynı toplulukta etkileşirken çelişkiyi görür, çevrimdışı çatışma çözümü hâlâ **bant dışı damga karşılaştırmasıdır** (profildeki 16 hex). Tek online istemci hiçbir çelişki yakalayamaz (gözlemci yok).
-- **DM anahtarları** arkadaşlık bitse de taraflarda kalır (geçmiş okunabilir, gelecek okunamaz — grup/DM anahtarı yenilenmediği sürece).
-- **Session TTL**: 7 gün (env ile ayarlanabilir); şifre değişimi tüm oturumları düşürür.
+> v1.0.0 için sıfırdan sınıflandırma (Faz 8). Yol haritasının 6 boşluğu
+> (Faz 1–7) bu komut dizisiyle kapatıldı; kalan sınırlar aşağıda
+> **KAPATILDI / KISMEN / AYNI / GELECEK** etiketiyle dürüstçe ayrıldı.
+> Dış audit için paket: [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md).
+
+### Aktörler
+
+- **Sunucu**: kör ama kötü niyetli olabilir (malicious-server model).
+  İçeriği görmez, **görmemesi gerektiğini** kanıtlayan invariant testle
+  sabit (`server/test/hardening.test.ts`).
+- **Ağ pasif dinleyici**: TLS overlay ile kapatılır
+  ([HTTPS/WSS](#httpswss-tls-overlay) — self-host için `docker-compose.tls.yml`).
+- **Ağ aktif (MITM)**: TLS + sertifika pin (tarayıcı CA deposu); onion
+  varyantı için [deploy/tor-hidden-service.md](deploy/tor-hidden-service.md).
+- **Cihaz üzerindeki saldırgan**: çalınmış tarayıcı, malware, fiziksel
+  erişim — kapsam dışı (SECURITY.md "Kapsam dışı").
+
+### 1. Roadmap boşluklarının akıbeti
+
+| # | Boşluk (orijinal ifade) | Akıbet | Kanıt |
+|---|---|---|---|
+| 1 | Gönderen atfı kriptografik değil — `sender_id` sunucu kolonu | **KAPATILDI** (Faz 1) | `web/src/crypto/signature.test.ts` — imza doğrulama, sahte gönderici reddi, ciphertext/AAD modifiye reddi; cutover sonrası imzasız mesaj reddi |
+| 2 | Kaybolan mesajlar yok (UX/gizlilik beklentisi) | **KAPATILDI** (Faz 2) | `web/src/lib/ttl.test.ts` + `crypto/ttl-aad.test.ts` + `server/test/ttl.test.ts` — TTL seçici, AAD dışı, janitor tombstone, WS süresi geçen frame reddi; PRİVACY.md'ye metadata notu |
+| 3 | IP metadata (istemci/sunucu) | **KISMEN** (Faz 3 — rehber, kapanmaz) | `deploy/tor-hidden-service.md` — v3 onion + https-onion rehberi; istemci IP'si onion arkasında gizlenir, sunucu IP'si DNS/sertifika kayıtlarından çıkar; rehber uygulanmazsa sınır AYNI |
+| 4 | Web JS trust — kötü sunucu değişmiş JS ile anahtar çalabilir | **KISMEN** (Faz 4 — azaltım, kapanmaz) | `scripts/bundle-hashes.sh` + `.github/workflows/release.yml` — her `v*` tag'inde bundle SHA-256 + SRI manifest GitHub Release asset'i; [Doğrulama](#doğrulama-js-integrity-release-manifest); sınır AYNI: kötü sunucu manifest'i değiştirebilir (karşılaştırma bant dışı kanaldan) |
+| 5 | Forward secrecy kısmi — DH ratchet/MLS bekleyen kurul | **KAPATILDI** (Faz 5, **PCS-formel değil**) | `web/src/crypto/dh-ratchet.test.ts` — KAT vektörleri, FS/PCS-lite sızıntı simülasyonu, adım içi backward secrecy, out-of-order, self-update doğrulama, epok DH çapası + rekey broadcast negatifleri, ses anahtarı türetimi; spec: `docs/faz5-dh-ratchet-design.md` + `docs/faz5-ratchet-research.md` |
+| 6 | Tam anti-forking — istemciler arası gossip gerektirir | **KAPATILDI** (Faz 6, **gözlemsel**) | `web/src/lib/keygossip.test.ts` (4 durum makinesi) + `web/src/lib/keytransparency.test.ts` + `server/test/keygossip.test.ts` (relay invariant, sığ sınır, plaintext invariant); spec: `docs/faz6-keygossip-design.md`; sınır AYNI: CONIKS/Keybase MAP kanıt ağacı yok |
+| 7 | Tek kimlik blob'u (cihaz iptali yok) | **KAPATILDI** (Faz 7) | `web/src/crypto/identity.test.ts` (v3 blob) + `web/src/lib/dhstep-device.test.ts` (per-cihaz DH step) + `server/test/devices.test.ts` (12 link/revoke flow); spec: `docs/faz7-multidevice-design.md` |
+
+### 2. Kalan sınırlar (kapanmış boşluk değil — yapısal/kaynak kısıtı)
+
+- **Web JS trust kalıntısı (Faz 4 azaltımı sonrası)** — AYNI.
+  Kötü sunucu manifest'i de değiştirebilir; karşılaştırma manifest'i
+  bant dışı kanaldan (GitHub Release) almalı. Derleme reproducible
+  değil: manifest tek bir release derlemesine bağlı. Tarayıcı uzantısı
+  (manifest v3, yalnız hash kontrolü) opsiyonel artı — karar kullanıcıda.
+  (KEK memory-only: reload'da şifre yeniden istenir; opsiyonel passkey
+  cihaz kilidi blob'u cihaz donanımından türeyen anahtarla saklar —
+  zararlı JS ancak aktif WebAuthn onayıyla kullanır.)
+- **Tor rehberi opsiyonel (Faz 3)** — AYNI. Sunucu operatörü rehberi
+  uygulamazsa istemci/sunucu IP'si açık. Onion varyantı düz http'de
+  `Secure=false` çerez üretir (karar rehberde yazılı).
+- **Rate-limit anonimleştirme** — AYNI (Faz 3'te keşfedilen yapısal sınır).
+  Anonim istekler IP kovasına düşer; onion arkasında tüm kullanıcılar
+  tek kova → birbirini sınırlandırır (kayıt 3/sa, giriş 5/dk).
+  `trustProxy:true` + nginx `$remote_addr` overwrite ile XFF spoof
+  kapatıldı; onion arkasında IP anonimdir ama ortak kova nedeniyle
+  bireysel hedefleme zorlaşır (yan etki: aynı çıkış düğümündeki
+  anonimler birbirini yavaşlatır). TURN açıkken TURN operatörü IP
+  eşlemesi görebilir — E2EE içerik gizli kalır, metadata görünür.
+- **Sansür/sıralama** — AYNI. Kör sunucu mesaj gizleyebilir, sıralamayı
+  ve timestamp'i manipüle edebilir. Client binding (UUID + client
+  timestamp) AAD'ye bağlı → tespit edilebilir, engellenemez.
+- **Metadata** — AYNI. Sosyal graf (kim kiminle), zamanlama, mesaj
+  boyutu (bucket padding'iyle seviyesi indirilir), presence, çağrı
+  katılım/mute durumu, topluluk/kanal/üye listesi, roller, davet
+  metadata'sı sunucuda görünür. Kaybolan mesajların `expires_at`'ı
+  içerik değil ama ömür bilgisi (PRIVACY.md'ye yazıldı).
+- **MLS-formel yok** — GELECEK tetikleyicisi. Şu an PCS-lite
+  (per-sender DH + epok rekey penceresi M=100 / T=24h + self-update
+  + cihaz iptali = rekey). Rekey/self-update frekansı toparlanma
+  penceresini sınırlar; alıcı kimlik private'ı sızarsa gözlemlenen
+  mesajlar açılır (stateless türetimin bedeli). `dh_update` duyurusu
+  Ed25519 imzalı, TOFU pin, WS opak relay. Kanal/gdm'de epok anahtarı
+  sızarsa o epoğun zinciri + çapası baştan türetilebilir; DM'de
+  çapa yok, ephemeral silinmesi epok sızıntısına karşı da korur.
+  Tetikleyici: openmls-wasm stabil sürüm + IndexedDB storage docs
+  + resmî npm paketi → Faz 9'da yeniden değerlendirilir.
+- **Ses/görüntü gönderen atfı** — AYNI. Metin mesajları Ed25519 imzalı;
+  SFrame medya çerçeveleri üyeliği kanıtlar ama gönderen kimliğini
+  kanıtlamaz (SFU içinde per-sender imza yok). Aynı kanalda iki
+  katılımcının aynı SFrame anahtarıyla yayın yapması **teknik olarak
+  mümkün**; ses/görüntü için "kimin söylediği" kriptografik değil,
+  senkronizasyon + DM arama (1:1, statik DH) ile dolaylı.
+- **WebRTC medya Tor'dan geçmez** — AYNI (Faz 3). Sesli/görüntülü
+  arama ve ekran paylaşımı UDP (LiveKit ICE) taşır; Tor SOCKS
+  üzerinden akmaz. Mesajlaşma onion'da tam çalışır; aramada medya
+  doğrudan gider (tarafların IP'si çağrı esnasında açılır) ya da
+  kapalı moda alınır: `SCREEN_SHARE=off` + medya portları kapalı.
+- **Key transparency gossip gözlemsel (Faz 6)** — AYNI. Tam CONIKS
+  kanıt ağacı yok; iki online istemci aynı toplulukta etkileşirken
+  çelişkiyi görür, çevrimdışı çatışma çözümü bant dışı damga
+  karşılaştırmasıdır (profildeki 16 hex). Tek online istemci hiçbir
+  çelişki yakalayamaz.
+- **Çoklu cihaz linking MVP (Faz 7)** — GELECEK. WS tabanlı onay iki
+  cihazın aynı anda online olmasını gerektirir; async QR/off-band
+  linking roadmap'te. Primary cihazın tam kaybı hesap erişimini
+  kilitler (kurtarma ifadesi tek çıkış).
+- **Şifre + kurtarma ifadesi ikisi birden kaybolursa** — AYNI.
+  Hesap kurtarılamaz (ifade kimlik gibi uçtan uca sarılı — sunucu
+  açamaz). Yapısal sınır; e2e şifreleme bunu gerektirir.
+- **DB at-rest şifreleme (SQLCipher)** — GELECEK. Bilinçli ertelendi:
+  E2EE içeriği zaten koruyor, metadata katkısı marjinal, better-sqlite3
+  derlemesi imajı kırılganlaştırır. Operatör isterse LUKS/dm-crypt
+  ile volumes-layer koruma uygulayabilir.
+- **Nick enumeration** — AYNI. Login/kurtarma pseudo-salt ile kapalı;
+  kalan kanal kayıt sırasındaki "nick alınmış" (rate-limited).
+- **DM anahtarları** — AYNI. Arkadaşlık bitse de taraflarda kalır
+  (geçmiş okunabilir, gelecek okunamaz — grup/DM anahtarı yenilenmediği
+  sürece).
+- **Session TTL** — AYNI. 7 gün (env ile ayarlanabilir); şifre değişimi
+  tüm oturumları düşürür.
 
 ## Durum
 
