@@ -199,6 +199,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             Date.now(),
           );
           appendKeyLog(id, body.public_key, body.sign_public_key);
+          // Faz 7: kayıt anındaki cihaz primary olarak yazılır. `id` alanı
+          // client'ın identity blob'una gömülür (v3 device_id) — aynı
+          // kullanıcının farklı cihazları farklı device_id taşır. Eski
+          // v1/v2 blob'lu kullanıcılar için cihaz id 'primary' alias olur
+          // (authStore'da deviceId null → primary kabul).
+          db.prepare(
+            'INSERT INTO users_devices(id, user_id, name, x25519_public_key, ed25519_public_key, is_primary, linked_at) VALUES (?, ?, ?, ?, ?, 1, ?)',
+          ).run(id + ':primary', id, body.nick, body.public_key, body.sign_public_key ?? null, Date.now());
         });
         tx();
         const token = issueSession(id);
