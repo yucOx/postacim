@@ -13,13 +13,24 @@ interface SecurityState {
   keylogStamp: string | null;
   /** zincir / own-key çelişkisi — boş değilse kırmızı uyarı */
   keylogWarning: string | null;
+  /** dh_update self-update duyurusu imza doğrulamasını geçemedi (Faz 5d) —
+   *  kırmızı bant; yalnız 'bad-signature' tetikler (bkz. dhupdate.bandFromIngest) */
+  dhUpdateWarning: string | null;
   runKeyLogCheck: (userId: string, publicKey: Uint8Array) => Promise<void>;
+  flagDhUpdateRejected: (code: 'bad-signature') => void;
 }
 
 export const useSecurityStore = create<SecurityState>((set) => ({
   keylogHead: null,
   keylogStamp: null,
   keylogWarning: null,
+  dhUpdateWarning: null,
+
+  flagDhUpdateRejected: (code) => {
+    // konsola da düş: gözlemci, imzalı-geçersiz duyuru yayını fark etsin
+    console.error('dh_update duyurusu reddedildi:', code);
+    set({ dhUpdateWarning: code });
+  },
 
   runKeyLogCheck: async (userId, publicKey) => {
     try {

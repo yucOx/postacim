@@ -59,6 +59,7 @@ export default function Shell() {
   const dmMessages = useDmChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap);
   const keylogWarning = useSecurityStore((s) => s.keylogWarning);
+  const dhUpdateWarning = useSecurityStore((s) => s.dhUpdateWarning);
 
   // browser-tab badge: total unread DMs
   const dmUnreadTotal = dms.reduce((n, d) => n + unreadCount(d.id, dmMessages[d.id]), 0);
@@ -244,6 +245,14 @@ export default function Shell() {
           <p className="text-xs font-semibold text-stamp-400">
             {t('shell.keylogWarning', { message: keylogWarning })}
           </p>
+        </div>
+      )}
+
+      {/* dh_update self-update duyurusu imza doğrulamasını geçemedi (Faz 5d) —
+          aynı kırmızı bant altyapısı */}
+      {dhUpdateWarning && (
+        <div className="shrink-0 border-b border-stamp-500/70 bg-stamp-100 px-3 py-1.5">
+          <p className="text-xs font-semibold text-stamp-400">{t('shell.dhUpdateWarning')}</p>
         </div>
       )}
 

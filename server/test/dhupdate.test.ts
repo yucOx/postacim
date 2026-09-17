@@ -71,7 +71,7 @@ describe('dh_update relay — topluluk kanalı', () => {
     const listener = await wsCollect(owner.token);
     const listenerOut = await wsCollect(outsider.token);
 
-    const { encodeDhUpdatePayload } = await import('../../web/src/lib/dhupdate');
+    const { encodeDhUpdatePayload, ingestDhUpdate } = await import('../../web/src/lib/dhupdate');
     const { generateSignIdentity } = await import('../../web/src/crypto/identity');
     const { newDhEphemeral } = await import('../../web/src/crypto/dhratchet');
     const sign = generateSignIdentity();
@@ -84,9 +84,33 @@ describe('dh_update relay — topluluk kanalı', () => {
     expect(got).toHaveLength(1);
     expect(got[0]).toMatchObject({ channel_id: chId, payload, from: member.userId });
     expect(updatesOf(listenerOut.events)).toHaveLength(0);
+    // Faz 5d — uçtan uca: relay edilen frame alıcıda doğrulanır ve pin düşer
+    expect(ingestDhUpdate(member.userId, chId, got[0]!.payload as string, [sign.signPublicKey])).toBe('ok');
     sender.close();
     listener.close();
     listenerOut.close();
+  });
+
+  it('relay bozuk duyuruyu da geçirir (opak) — alıcı doğrulaması bad-signature ile reddeder', async () => {
+    const sender = await wsCollect(member.token);
+    const listener = await wsCollect(owner.token);
+    const { encodeDhUpdatePayload, ingestDhUpdate } = await import('../../web/src/lib/dhupdate');
+    const { b64, unb64 } = await import('../../web/src/crypto/bytes');
+    const { generateSignIdentity } = await import('../../web/src/crypto/identity');
+    const { newDhEphemeral } = await import('../../web/src/crypto/dhratchet');
+    const sign = generateSignIdentity();
+    const raw = unb64(encodeDhUpdatePayload(chId, 1, newDhEphemeral().publicKey, sign.signPrivateKey));
+    raw[10] ^= 1; // kanon gövdesinde tek bayt — imza düşer, boyut/b64 korunur
+    const payload = b64(raw);
+    sender.send({ type: 'dh_update', channel_id: chId, payload });
+    await settle();
+    const got = updatesOf(listener.events);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.payload).toBe(payload); // sunucu yargılamaz — aynen geçer
+    // alıcı tarafı: imza doğrulaması düşer → SecurityStore bandı bunu tetikler
+    expect(ingestDhUpdate(member.userId, chId, got[0]!.payload as string, [sign.signPublicKey])).toBe('bad-signature');
+    sender.close();
+    listener.close();
   });
 
   it('sığ sınır: b64 olmayan / 512 üstü payload relay edilmez', async () => {

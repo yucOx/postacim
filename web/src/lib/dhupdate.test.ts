@@ -5,7 +5,7 @@ import { b64, toHex, unb64 } from '../crypto/bytes';
 import { generateSignIdentity } from '../crypto/identity';
 import { newDhEphemeral } from '../crypto/dhratchet';
 import { sodium, sodiumReady } from '../crypto/sodium';
-import { encodeDhUpdatePayload, ingestDhUpdate, resetDhUpdatePins, verifyNotice } from './dhupdate';
+import { encodeDhUpdatePayload, bandFromIngest, ingestDhUpdate, resetDhUpdatePins, verifyNotice } from './dhupdate';
 
 await sodiumReady;
 
@@ -73,5 +73,17 @@ describe('dh_update duyurusu', () => {
   it('gönderenin defter anahtarı bilinmiyorsa unknown-sender (koşulsuz red)', () => {
     expect(ingestDhUpdate('u_ghost', CH, payloadOf(), null)).toBe('unknown-sender');
     expect(ingestDhUpdate('u_ghost', CH, payloadOf(), [])).toBe('unknown-sender');
+  });
+});
+
+// Faz 5d — ingest sonucu → SecurityStore kırmızı bant eşlemesi:
+// yalnız kriptografik çelişki (imza reddi) bant üretir; çöp frame spam'i
+// güvenlik uyarısını enflasyonuna kapatılır
+describe('bant eşlemesi (bandFromIngest)', () => {
+  it('yalnız bad-signature bant tetikler; ok/malformed/unknown-sender sessiz', () => {
+    expect(bandFromIngest('bad-signature')).toBe('bad-signature');
+    expect(bandFromIngest('ok')).toBeNull();
+    expect(bandFromIngest('malformed')).toBeNull();
+    expect(bandFromIngest('unknown-sender')).toBeNull();
   });
 });

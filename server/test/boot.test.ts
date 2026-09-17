@@ -38,9 +38,12 @@ it('refuses to boot with a weak LIVEKIT_SECRET', async () => {
 }, 15_000);
 
 it('boots a fresh DB through the whole migration chain', async () => {
-  const { code, err } = await bootOnce({
-    LIVEKIT_SECRET: 'boot-test-secret-0123456789abcdef-9876543210',
-  });
+  const { code, err } = await bootOnce(
+    { LIVEKIT_SECRET: 'boot-test-secret-0123456789abcdef-9876543210' },
+    // tsx derlemesi paralel suite yükünde 6s'yi aşabiliyordu (Faz 5d test
+    // eklemesiyle belirginleşti) — pencere test timeout'unun altında genişletildi
+    12_000,
+  );
   expect(code).toBe(null); // survived the full window → migrations applied, listening
   expect(err).toMatch(/listening|Server/);
 }, 15_000);

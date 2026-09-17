@@ -22,6 +22,17 @@ export interface DhUpdateNotice {
 
 export type IngestResult = 'ok' | 'malformed' | 'unknown-sender' | 'bad-signature';
 
+/**
+ * Faz 5d — hangi ingest sonucu güvenlik bandı tetikler? Yalnız 'bad-signature':
+ * doğru boyutlu ama defter anahtarıyla doğrulanamayan duyuru = gerçek kriptografik
+ * çelişki adayı. 'malformed' (boyut/b64 çöpü) ve 'unknown-sender' (defter kaydı
+ * henüz senkronlanmamış) bant tetiklemez — herkesin duyurabileceği çöp frame'ler
+ * kırmızı güvenlik uyarısını spam'e çevirmesin (dürüst takas: tam sessiz red).
+ */
+export function bandFromIngest(r: IngestResult): 'bad-signature' | null {
+  return r === 'bad-signature' ? 'bad-signature' : null;
+}
+
 // TOFU pin: (kanal, gönderen) → son geçerli duyuru; localStorage'da sır yok
 // (public key + epok numarası) — keypins.ts deseni, sır taşımaz
 const STORE_KEY = 'pgv.dhupdates.v1';
