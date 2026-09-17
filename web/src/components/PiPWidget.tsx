@@ -6,7 +6,7 @@ import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { nickFor } from '../lib/nick';
-import { PigeonMark } from './Brand';
+import Avatar from './Avatar';
 import CallControls from './CallControls';
 
 const WIDGET_W = 288; // w-72
@@ -105,7 +105,13 @@ export default function PiPWidget(): React.ReactNode {
           {peerNick}
         </span>
         <button
-          onClick={() => setPip(false)}
+          onClick={() => {
+            setPip(false);
+            if (callState) {
+              useAppStore.getState().openDmChat(callState.channelId);
+              useAppStore.setState({ view: 'dm' });
+            }
+          }}
           className="rounded p-1 text-paper-500 transition-colors hover:bg-night-800 hover:text-paper-100"
           title={t('pip.maximize')}
           aria-label={t('pip.maximizeAria')}
@@ -122,8 +128,8 @@ export default function PiPWidget(): React.ReactNode {
         </button>
       </div>
       {!room ? (
-        <div className="flex h-40 items-center justify-center text-paper-500">
-          <PigeonMark size={22} className="text-brass-600" />
+        <div className="flex h-40 flex-col items-center justify-center gap-2 text-paper-500">
+          <Avatar userId={callState.channelId} label={peerNick} size={48} />
         </div>
       ) : (
         <RoomContext.Provider value={room}>
@@ -135,10 +141,9 @@ export default function PiPWidget(): React.ReactNode {
   );
 }
 
-/** prefers the remote screen share, then camera; falls back to anything */
+/** prefers the remote screen share, then camera; falls back to avatar */
 function PiPTile(): React.ReactNode {
-  const { t } = useT();
-  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare, Track.Source.Microphone], {
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: true,
   });
   // muted = camera/screen off (livekit keeps muted tracks published) — those
@@ -146,19 +151,21 @@ function PiPTile(): React.ReactNode {
   const remote = tracks.filter((t) => !t.participant.isLocal && !(t.publication?.isMuted ?? false));
   const pick =
     remote.find((t) => t.source === Track.Source.ScreenShare) ??
-    remote.find((t) => t.source === Track.Source.Camera) ??
-    remote[0];
+    remote.find((t) => t.source === Track.Source.Camera);
+  const callState = useVoiceStore((s) => s.callState);
+  const peerId = callState?.channelId ?? '';
+
   if (!pick) {
     return (
       <div className="flex h-40 flex-col items-center justify-center gap-2 bg-night-850 text-paper-500">
-        <PigeonMark size={24} className="text-brass-600" />
-        <span className="font-display text-[11px] uppercase tracking-[0.18em]">{t('pip.waitingPeer')}</span>
+        <Avatar userId={peerId} label={nickFor(peerId)} size={56} srcOverride={null} />
+        <span className="font-display text-[11px] uppercase tracking-[0.18em] text-paper-300">{nickFor(peerId)}</span>
       </div>
     );
   }
   return (
-    <div className="relative h-40 bg-night-850">
-      <ParticipantTile trackRef={pick} className="h-full w-full" />
+    <div className="relative h-40 bg-night-850 [&_video]:object-contain">
+      <ParticipantTile trackRef={pick} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
       <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-1.5 py-px font-display text-[10px] font-semibold uppercase tracking-[0.1em] text-paper-50">
         {nickFor(pick.participant.identity)}
       </span>

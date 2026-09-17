@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { RoomContext, AudioTrack, useTracks } from '@livekit/components-react';
+import { Track } from 'livekit-client';
 import { Bell, LogOut, Menu, Settings as SettingsIcon } from 'lucide-react';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
@@ -32,6 +34,26 @@ import { useVoiceStore } from '../state/voiceStore';
 import { useSecurityStore } from '../state/securityStore';
 import { readRoute } from '../router';
 
+function GlobalCallAudio(): React.ReactNode {
+  const tracks = useTracks([Track.Source.Microphone, Track.Source.ScreenShareAudio], { onlySubscribed: true });
+  const volume = useVoiceStore((s) => s.volume);
+  const deafened = useVoiceStore((s) => s.deafened);
+  return (
+    <div style={{ display: 'none' }}>
+      {tracks
+        .filter((t) => !t.participant.isLocal)
+        .map((t) => (
+          <AudioTrack
+            key={t.participant.identity + '-' + t.source}
+            trackRef={t}
+            volume={deafened ? 0 : volume}
+            muted={deafened}
+          />
+        ))}
+    </div>
+  );
+}
+
 export default function Shell() {
   const { t } = useT();
   const user = useAuthStore((s) => s.user);
@@ -47,11 +69,13 @@ export default function Shell() {
   const view = useAppStore((s) => s.view);
   const activeChannelId = useAppStore((s) => s.activeChannelId);
   const activeDm = useAppStore((s) => (s.activeDmId ? s.dms.find((d) => d.id === s.activeDmId) ?? null : null));
+  const room = useVoiceStore((s) => s.room);
   const isDmCall = useVoiceStore((s) => s.isDmCall);
   const callState = useVoiceStore((s) => s.callState);
   const callDmId = callState?.channelId ?? null;
   const joinedVoiceChannel = useVoiceStore((s) => s.joinedChannelId);
   const pip = useVoiceStore((s) => s.pip);
+  const isCallMinimized = isDmCall && !!room && (pip || view !== 'dm' || activeDm?.id !== callDmId);
   const dms = useAppStore((s) => s.dms);
   const gdms = useAppStore((s) => s.gdms);
   const openDmChat = useAppStore((s) => s.openDmChat);
@@ -276,7 +300,7 @@ export default function Shell() {
 
         {view === 'dm' ? (
           <main className="flex min-w-0 flex-1 flex-col">
-            {isDmCall && !pip && callDmId && activeDm?.id === callDmId ? (
+            {isDmCall && !isCallMinimized ? (
               <CallView />
             ) : activeDm ? (
               <DmChat dmId={activeDm.id} />
@@ -323,10 +347,15 @@ export default function Shell() {
       {profileModal && <ProfileModal onClose={() => setProfileModal(false)} />}
       {settingsModal && <SettingsModal onClose={() => setSettingsModal(false)} />}
       {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
-      {isDmCall && pip && <PiPWidget />}
+      {isCallMinimized && <PiPWidget />}
       {/* ongoing community call, minimized while browsing other rooms */}
       {!isDmCall && joinedVoiceChannel && !(view === 'community' && channel?.type === 'voice' && activeChannelId === joinedVoiceChannel) && (
         <VoicePip />
+      )}
+      {room && (
+        <RoomContext.Provider value={room}>
+          <GlobalCallAudio />
+        </RoomContext.Provider>
       )}
       <IncomingCall />
     </div>
