@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **postacim** — end-to-end encrypted messaging · operated by yuxor.ltd
-Effective: September 11, 2026
+Effective: September 17, 2026
 
 This explains what we store — and what we **cannot** see. The code is open and every claim here is verifiable against it. When we say "the server cannot see it," that is a cryptographic guarantee, not a promise.
 
@@ -14,7 +14,8 @@ This explains what we store — and what we **cannot** see. The code is open and
 - **your username (nick)** — unique, case-insensitive
 - **password verification material**: your password never leaves your browser; the browser derives 32 bytes from it via Argon2id, and the server stores only the **Argon2id hash** of that material (neither the password nor a directly usable form of it is ever stored)
 - **a wrapped copy of your encryption key** (key blob): your private key is sealed on your device under a key derived from your password — the server cannot open it
-- **your public key** (X25519) — so other users can seal channel keys to you and verify your safety number
+- **your public keys** (X25519 + Ed25519 signing key; one pair per linked device if you use multi-device) — so other users can seal channel keys to you, verify the sender attribution of your messages and compare your safety number; these are also written to the public **key ledger** (an append-only hash chain)
+- **your device list** (multi-device, optional): the public key pair and linking time of each device you connect — the server knows which devices are attached to your account; it cannot see the contents of your devices (messages, keys in the clear). Revoking a device forces a key rotation (rekey)
 - **a wrapped copy of your recovery key** (optional): a 12-word phrase provides a second wrap of your private key — the server never sees the words themselves
 - **avatar** (optional): a 64×64 JPEG (~3–8 KB), stored unencrypted by design — it is a public profile component
 - **account creation date** and session records (creation + expiry timestamps; sessions live ~7 days and are refreshed while you use the app; session tokens are stored only as SHA-256 hashes)
@@ -28,7 +29,7 @@ This explains what we store — and what we **cannot** see. The code is open and
 
 - email address, phone number — **neither is asked for, neither is stored**
 - your contact list / address book
-- device identifiers, fingerprints
+- browser/hardware fingerprints, device make/model — not collected (except the **public-key** list of your linked devices — disclosed above)
 - analytics, advertising, tracking cookies, third-party statistics
 - location
 - **read receipts**: they never leave your device (stored in your browser, never sent to the server)

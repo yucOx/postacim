@@ -1,7 +1,7 @@
 # Gizlilik Politikası
 
 **postacim** — uçtan uca şifreli mesajlaşma · yuxor.ltd tarafından işletilir
-Yürürlük: 11 Eylül 2026
+Yürürlük: 17 Eylül 2026
 
 Bu sunucunun ne saktığını ve neyi **saktığını** anlatıyor. Kod her iddiayı doğrulayacak şekilde açık — "sunucu göremez" derken bunu kripto garantisi olarak kastediyoruz, vaat olarak değil.
 
@@ -14,11 +14,13 @@ Bu sunucunun ne saktığını ve neyi **saktığını** anlatıyor. Kod her iddi
 - **kullanıcı adı (nick)** — benzersiz olmalı, büyük/küçük harf duyarsız
 - **şifre doğrulama verisi**: şifreniz tarayıcıdan asla çıkmaz; tarayıcı şifrenizden Argon2id ile türettiği 32 baytlık malzeme gönderilir, sunucu bunun **Argon2id hash'ini** saklar (düz metin veya türetilebilir hali asla saklanmaz)
 - **şifreleme anahtarınızın sarmalı** (key blob): özel anahtarınız, şifrenizden türeyen bir anahtarla sizin cihazınızda şifrelenir — sunucu açamaz
-- **genel anahtarınız** (X25519) — diğer kullanıcıların sizin için şifreli anahtar sarmalayabilmesi ve güvenlik numaranızı doğrulayabilmesi için
+- **genel anahtarlarınız** (X25519 + Ed25519 imza anahtarı; çoklu cihaz kullandıysanız cihaz başına ayrı çift) — diğer kullanıcıların size şifreli anahtar sarmalayabilmesi, mesajlarınızın gönderen atfını doğrulaması ve güvenlik numaranızı karşılaştırabilmesi için; bunlar kamuya açık **anahtar defterine** (append-only hash zinciri) da yazılır
+- **cihaz listeniz** (çoklu cihaz, isteğe bağlı): bağladığınız her cihazın genel anahtar çifti ve bağlantı zamanı — sunucu hesabınıza hangi cihazların bağlı olduğunu bilir; cihazlarınızdaki içerigi (mesajlar, anahtarların açık hali) göremez. Bir cihazı iptal etmeniz anahtar yenilemeyi (rekey) zorunlu kılar
 - **kurtarma ifadesinin sarmalı** (isteğe bağlı): 12 kelimelik ifade, özel anahtarınızın ikinci bir sarmasıdır — sunucu ifadenin kendisini asla görmez
 - **avatar** (isteğe bağlı): 64×64 küçük JPEG (~3–8 KB), şifresiz — bilerek şifresizdir, herkese açık profil parçasıdır
 - **hesap oluşturma tarihi** ve oturum kayıtları (oluşturma + sona erme zamanı, ~7 günlük süresi etkinlikle yenilenir; oturum token'ı yalnızca SHA-256 hash'i olarak saklanır)
 - **mesajlar**: yalnızca şifreli zarf (nonce + ciphertext), gönderici kimliği, saat, boyut — **içerik sunucuda asla okunabilir halde değildir**
+- **kaybolan mesaj süresi** (isteğe bağlı): mesaj başına seçilen TTL (`expires_at`) sunucu için **görünür metadata'dır** — süreyi bilir, içeriği bilmez. Yaşam döngüsü: süresi dolan mesaj sunucuda tombstone'a çevrilir (nonce/ciphertext silinir), istemcide de süresi dolanlar render'dan düşer; yani erişim + ömür sınırlaması bu ikisinin kombinasyonudur
 - **sosyal graf**: kim hangi topluluğa/kanala üye, kim kime DM açmış, arkadaşlıklar, davetiyeler, roller
 - **topluluk / kanal / grup adları** (şifresiz)
 - **sesli arama/konferanslar**: kim katıldı, hangi kanalda, ne zaman — ses/görüntü içeriği uça-uca şifrelidir (SFrame); medya sunucusu (LiveKit, kendi sunucumuzda) içeriği göremez, katılım bilgisini görür
@@ -27,7 +29,7 @@ Bu sunucunun ne saktığını ve neyi **saktığını** anlatıyor. Kod her iddi
 
 - e-posta adresi, telefon numarası — **hiçbiri istenmez, saklanmaz**
 - rehber/kişi listesi
-- cihaz bilgisi, parmak izi, tarayıcı fingerprinti
+- tarayıcı/donanım parmak izi (fingerprint), cihaz marka-model bilgisi — toplanmaz (bağladığınız cihazların **genel anahtar** listesi hariç — yukarıda bildirildi)
 - analitik, reklam, izleyici çerezi, üçüncü taraf istatistik servisi
 - konum
 - **okundu bilgisi**: cihazınızın dışına çıkmaz (tarayıcınızda saklanır, sunucuya gitmez)
