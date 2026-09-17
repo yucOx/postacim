@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Room, RoomEvent, Track, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets } from 'livekit-client';
+import { Room, RoomEvent, Track, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets, DisconnectReason } from 'livekit-client';
 import type { LocalParticipant, TrackPublishOptions, VideoCaptureOptions } from 'livekit-client';
 import { api } from '../api/client';
 import type { VoiceTokenResponse } from '../api/types';
@@ -143,6 +143,10 @@ function loadQuality(): CallQuality {
  *  adaptiveStream + dynacast on the room this is the fast-transfer path: the SFU
  *  forwards each receiver only the layer its bandwidth supports, and unused
  *  layers are not published at all. */
+// son LiveKit disconnect sebebi — teşhis amaçlı (sunucu tarafı SFU loguyla
+// birlikte "3 kez düşme" döngüsünün kökenini adlandırır)
+let lastDisconnectReason: string | null = null;
+
 const qualityTiers: Record<
   CallQuality,
   { camCapture: VideoCaptureOptions; camPublish: TrackPublishOptions; screenPublish: TrackPublishOptions }
@@ -248,6 +252,22 @@ async function connectRoom(
     useVoiceStore.setState({ error: 'E2EE hatası: anahtarlar uyuşmuyor' });
   });
   room.on(RoomEvent.Disconnected, onDisconnected);
+  // mid-call kesilmelerin teşhisi: LiveKit reconnect döngüsünü kendi içinde
+  // yönetir; burada yalnız gözlemliyoruz. "Sunucudaki odaya girince 3 kez
+  // düşüp toparlanma" şikayetinin kökeni — SFU'nun disconnect sebebini ya
+  // bu konsol satırları ya docker logs livekit verecek.
+  room.on(RoomEvent.Reconnecting, () => {
+    console.warn('[livekit] reconnecting —', new Date().toISOString());
+  });
+  room.on(RoomEvent.Reconnected, () => {
+    console.warn('[livekit] reconnected —', new Date().toISOString());
+  });
+  room.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
+    if (reason != null) {
+      console.warn('[livekit] disconnected —', DisconnectReason[reason] ?? reason, `(${reason})`, new Date().toISOString());
+      lastDisconnectReason = DisconnectReason[reason] ?? String(reason);
+    }
+  });
   try {
     await keyProvider.setKey(key.slice().buffer as ArrayBuffer);
     await room.setE2EEEnabled(true);
