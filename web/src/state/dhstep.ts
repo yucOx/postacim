@@ -2,10 +2,13 @@
 // 5b'de dmChatStore içinde yaşayan mantık kanal/gdm ile paylaşılacak şekilde
 // genellendi: pencere (M=100/T=24h) ve per-sender ephemeral disiplini AYNI
 // (spec: docs/faz5-dh-ratchet-design.md §4).
+// Faz 7: per-cihaz namespace — authStore.deviceId geçirilir (eski blob
+// → null = primary alias, geriye uyumlu).
 import type { DhSendParams, MsgScope } from '../crypto/message';
 import { dhAnchor, loadDhStep, newDhEphemeral, nextDhStep, saveDhStep, shouldDhStep } from '../crypto/dhratchet';
 import { unb64 } from '../crypto/bytes';
 import { useAppStore } from './appStore';
+import { useAuthStore } from './authStore';
 
 // adım ephemeral'ları — YALNIZ bellek (localStorage'a secret yazılmaz);
 // sayfa yenilenince ephemeral kaybolur → sonraki mesaj yeni DH adımı açar (FS).
@@ -22,6 +25,7 @@ export async function dhParamsFor(
   key: Uint8Array,
   index: number,
 ): Promise<DhSendParams | undefined> {
+  const deviceId = useAuthStore.getState().deviceId;
   if (kind === 'dm') {
     const peerId = useAppStore.getState().dms.find((d) => d.id === channelId)?.peer.id;
     if (!peerId) return undefined;
@@ -35,11 +39,11 @@ export async function dhParamsFor(
       peerPub = peerPubOf();
     }
     if (!peerPub) return undefined;
-    const eph = stepEph(channelId, version, index);
+    const eph = stepEph(channelId, version, index, deviceId);
     return { ...eph, peerStaticPub: unb64(peerPub) };
   }
   const anchor = dhAnchor(key);
-  const eph = stepEph(channelId, version, index);
+  const eph = stepEph(channelId, version, index, deviceId);
   return { ...eph, peerStaticPub: anchor.publicKey };
 }
 
@@ -48,16 +52,25 @@ function stepEph(
   channelId: string,
   version: number,
   index: number,
+  deviceId: Uint8Array | null,
 ): { dhPriv: Uint8Array; dhPub: Uint8Array; dhStep: number; stepBase: number } {
-  const ck = `${channelId}.${version}`;
+  const didStr = deviceId ? deviceIdToB64(deviceId) : '';
+  const ck = `${channelId}.${version}.${didStr || 'primary'}`;
   const now = Date.now();
-  let step = loadDhStep(channelId, version);
+  let step = loadDhStep(channelId, version, didStr);
   let eph = ephCache.get(ck);
   if (shouldDhStep(step, index, now, !!eph)) {
     step = nextDhStep(step?.j ?? -1, index, now);
-    saveDhStep(channelId, version, step);
+    saveDhStep(channelId, version, step, didStr);
     eph = newDhEphemeral();
     ephCache.set(ck, eph);
   }
   return { dhPriv: eph!.privateKey, dhPub: eph!.publicKey, dhStep: step!.j, stepBase: step!.base };
+}
+
+// 16B device UUID → URL-safe base64 (localStorage anahtarında kullanılır)
+function deviceIdToB64(bytes: Uint8Array): string {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/[+/=]/g, '_');
 }

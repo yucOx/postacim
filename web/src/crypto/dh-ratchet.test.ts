@@ -172,7 +172,7 @@ describe('pencere sayaçları (PCS-lite: M=100 / T=24h)', () => {
     saveDhStep('dm_c', 1, st);
     expect(loadDhStep('dm_c', 1)).toEqual(st);
     expect(loadDhStep('dm_c', 2)).toBeNull(); // başka epok — ayrı anahtar
-    store.set('pgv.dhstep.dm_c.1', '{{bozuk');
+    store.set('pgv.dhstep.dm_c.1.primary', '{{bozuk');
     expect(loadDhStep('dm_c', 1)).toBeNull();
     vi.unstubAllGlobals();
   });

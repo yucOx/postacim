@@ -5,6 +5,7 @@ import { b64, unb64 } from '../crypto/bytes';
 import { deriveKeys, newKdfSaltHex } from '../crypto/argon2';
 import { deriveRecoveryKeys } from '../crypto/recovery';
 import {
+  generateDeviceId,
   generateIdentity,
   generateSignIdentity,
   openIdentityBlob,
@@ -28,10 +29,12 @@ function authedPatch(user: AuthedUser, kek: Uint8Array, am: Uint8Array | null) {
   const publicKey = unb64(user.public_key);
   let privateKey: Uint8Array;
   let signPrivateKey: Uint8Array | null;
+  let deviceId: Uint8Array | null;
   try {
     const opened = openIdentityBlob(user.key_blob, kek);
     privateKey = opened.privateKey;
     signPrivateKey = opened.signPrivateKey;
+    deviceId = opened.deviceId;
   } catch {
     throw new ApiError(401, 'şifre hatalı');
   }
@@ -46,6 +49,7 @@ function authedPatch(user: AuthedUser, kek: Uint8Array, am: Uint8Array | null) {
     privateKey,
     signPublicKey: signPrivateKey ? signPublicKeyFromPrivate(signPrivateKey) : null,
     signPrivateKey,
+    deviceId,
     kek,
     authMaterial: am,
   };
@@ -66,6 +70,7 @@ function deviceAuthedPatch(user: AuthedUser, u: DeviceUnlock) {
     privateKey: u.privateKey,
     signPublicKey: u.signPrivateKey ? signPublicKeyFromPrivate(u.signPrivateKey) : null,
     signPrivateKey: u.signPrivateKey,
+    deviceId: u.deviceId,
     kek: null,
     authMaterial: unb64(u.authMaterial),
   };
@@ -81,6 +86,9 @@ interface AuthState {
    *  ensureSignIdentity üretip yayınlar */
   signPublicKey: Uint8Array | null;
   signPrivateKey: Uint8Array | null;
+  /** Faz 7: 16B device UUID (v3 blob). v1/v2 blob'lu hesaplar null → primary
+   *  alias (per-cihaz DH step state + fingerprint namespace). */
+  deviceId: Uint8Array | null;
   kek: Uint8Array | null;
   // şifre türevi auth material — RAM'de, kek ile aynı ömür. Cihaz kilidi
   // kurulurken blob'a sarılmak için lazım; asla plaintext persist edilmez.
@@ -119,6 +127,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   privateKey: null,
   signPublicKey: null,
   signPrivateKey: null,
+  deviceId: null,
   kek: null,
   authMaterial: null,
 
@@ -128,6 +137,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { authMaterial, kek } = await deriveKeys(password, kdfSalt);
     const identity = generateIdentity();
     const sign = generateSignIdentity();
+    const deviceId = generateDeviceId();
     // second wrap of the identity under the recovery phrase — losing the
     // password no longer loses the account (v2 payload: imza anahtarı da içinde)
     let recovery: { kdf_salt: string; auth_material: string; blob: string } | undefined;
@@ -137,7 +147,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       recovery = {
         kdf_salt: recSalt,
         auth_material: b64(rec.authMaterial),
-        blob: sealIdentityBlob(identity.privateKey, rec.kek, sign.signPrivateKey),
+        blob: sealIdentityBlob(identity.privateKey, rec.kek, sign.signPrivateKey, deviceId),
       };
     }
     const res = await api<{ token: string; user: { id: string; nick: string } }>(
@@ -150,7 +160,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           auth_material: b64(authMaterial),
           public_key: b64(identity.publicKey),
           sign_public_key: b64(sign.signPublicKey),
-          key_blob: sealIdentityBlob(identity.privateKey, kek, sign.signPrivateKey),
+          device_id: b64(deviceId), // Faz 7: cihaz tekil kimliği
+          key_blob: sealIdentityBlob(identity.privateKey, kek, sign.signPrivateKey, deviceId),
           ...(recovery ? { recovery } : {}),
           ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
         },
@@ -163,6 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       privateKey: identity.privateKey,
       signPublicKey: sign.signPublicKey,
       signPrivateKey: sign.signPrivateKey,
+      deviceId,
       kek,
       authMaterial,
     });
@@ -176,10 +188,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       sign_public_key: b64(sign.signPublicKey),
       auth_material: b64(s.authMaterial),
     };
-    // KEK hâlâ RAM'deyse key_blob v2'ye yeniden sarılır — imza private key
-    // şifre akışında kalıcı olur; cihaz kilidi yolu bunu atlar (sk cihaz
-    // blob'una enroll ile girer)
-    if (s.kek) body.key_blob = sealIdentityBlob(s.privateKey, s.kek, sign.signPrivateKey);
+    // KEK hâlâ RAM'deyse key_blob v3'e yeniden sarılır — imza private key +
+    // deviceId birlikte; cihaz kilidi yolu bunu atlar (sk cihaz blob'una
+    // enroll ile girer).
+    if (s.kek) {
+      body.key_blob = sealIdentityBlob(
+        s.privateKey,
+        s.kek,
+        sign.signPrivateKey,
+        s.deviceId ?? undefined,
+      );
+    }
     await api('/keys/sign', { method: 'POST', body });
     set({ signPublicKey: sign.signPublicKey, signPrivateKey: sign.signPrivateKey });
   },
@@ -231,9 +250,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   enrollDeviceUnlock: async () => {
     await sodiumReady;
-    const { user, privateKey, signPrivateKey, authMaterial } = get();
+    const { user, privateKey, signPrivateKey, deviceId, authMaterial } = get();
     if (!user || !privateKey || !authMaterial) throw new Error('giriş yapılmamış');
-    await enrollDeviceUnlockRecord(browserWebAuthn, user, authMaterial, privateKey, signPrivateKey);
+    await enrollDeviceUnlockRecord(
+      browserWebAuthn,
+      user,
+      authMaterial,
+      privateKey,
+      signPrivateKey,
+      deviceId,
+    );
   },
 
   removeDeviceUnlock: async () => {
@@ -263,7 +289,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   changePassword: async (oldPassword, newPassword) => {
     await sodiumReady;
     const nick = get().user?.nick;
-    const { publicKey, privateKey, signPrivateKey } = get();
+    const { publicKey, privateKey, signPrivateKey, deviceId } = get();
     if (!nick || !publicKey || !privateKey) throw new Error('giriş yapılmamış');
     const params = await api<{ kdf_salt: string }>(
       `/auth/kdf-params?nick=${encodeURIComponent(nick)}`,
@@ -277,7 +303,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         old_auth_material: b64(old.authMaterial),
         new_kdf_salt: newSalt,
         new_auth_material: b64(next.authMaterial),
-        new_key_blob: sealIdentityBlob(privateKey, next.kek, signPrivateKey ?? undefined),
+        new_key_blob: sealIdentityBlob(
+          privateKey,
+          next.kek,
+          signPrivateKey ?? undefined,
+          deviceId ?? undefined,
+        ),
       },
     });
     set({ kek: next.kek, authMaterial: next.authMaterial });
@@ -288,7 +319,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // attach a recovery phrase to a logged-in account (old accounts)
   setupRecovery: async (recoveryWords) => {
     await sodiumReady;
-    const { privateKey, signPrivateKey } = get();
+    const { privateKey, signPrivateKey, deviceId } = get();
     if (!privateKey) throw new Error('giriş yapılmamış');
     if (recoveryWords.length !== 12) throw new Error('ifade 12 kelime olmalı');
     const recSalt = newKdfSaltHex();
@@ -298,7 +329,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       body: {
         kdf_salt: recSalt,
         auth_material: b64(rec.authMaterial),
-        blob: sealIdentityBlob(privateKey, rec.kek, signPrivateKey ?? undefined),
+        blob: sealIdentityBlob(
+          privateKey,
+          rec.kek,
+          signPrivateKey ?? undefined,
+          deviceId ?? undefined,
+        ),
       },
     });
   },
@@ -318,7 +354,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       '/auth/recover/unlock',
       { method: 'POST', body: { nick, recovery_auth_material: proof } },
     );
-    const privateKey = openIdentityBlob(unlock.recovery_blob, rec.kek).privateKey;
+    const opened = openIdentityBlob(unlock.recovery_blob, rec.kek);
+    const privateKey = opened.privateKey;
+    // v1/v2 kurtarma blob'u imza anahtarı + deviceId taşımaz; yeni cihaz
+    // kimliği üretilir (cihazı bu cihazla sınırlar — kullanıcı diğer
+    // cihazlarını linking ile ekleyebilir).
+    const deviceId = opened.deviceId ?? generateDeviceId();
     const newSalt = newKdfSaltHex();
     const next = await deriveKeys(newPassword, newSalt);
     const res = await api<{ token: string; user: AuthedUser }>('/auth/recover/finish', {
@@ -328,7 +369,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         recovery_auth_material: proof,
         new_kdf_salt: newSalt,
         new_auth_material: b64(next.authMaterial),
-        new_key_blob: sealIdentityBlob(privateKey, next.kek),
+        new_key_blob: sealIdentityBlob(privateKey, next.kek, undefined, deviceId),
       },
     });
     set({
@@ -342,6 +383,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       privateKey,
       signPublicKey: null,
       signPrivateKey: null,
+      deviceId,
       kek: next.kek,
       authMaterial: next.authMaterial,
     });
@@ -363,6 +405,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       privateKey: null,
       signPublicKey: null,
       signPrivateKey: null,
+      deviceId: null,
       kek: null,
       authMaterial: null,
     });
