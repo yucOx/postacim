@@ -419,9 +419,19 @@ npm test    # 293 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
   mesajlar açılır (stateless türetimin bedeli). `dh_update` duyurusu
   Ed25519 imzalı, TOFU pin, WS opak relay. Kanal/gdm'de epok anahtarı
   sızarsa o epoğun zinciri + çapası baştan türetilebilir; DM'de
-  çapa yok, ephemeral silinmesi epok sızıntısına karşı da korur.
+  (5b hotfix) sıralı (sender, peer) çiftinden türetilen DM çapası
+  + ephemeral silinmesi birlikte epok sızıntısına karşı korur.
   Tetikleyici: openmls-wasm stabil sürüm + IndexedDB storage docs
   + resmî npm paketi → Faz 9'da yeniden değerlendirilir.
+- **Faz 5b hotfix: v4 DM geriye dönük kırılganlık** — KISMEN. 5b
+  çıktığından bu yana gönderilen DM'ler kimlik-çifti türevi
+  (X25519(eph, peer_static_pub)) ile şifrelendi; yeni sürüm çifti
+  sorted(sender, peer) çiftinden türetilen DM çapasına
+  (X25519base(H(epoch‖'dm-anchor'‖…))) çevirdiğinden eski v4 DM'ler
+  yeni istemcide okunamaz (AEAD reddi → body null → "anahtar bu
+  epoch" mesajı). Geçiş: yeni mesajlar yeni formatla; kullanıcı
+  geçmiş DM'leri yeniden göndermeli. Kanal/gdm etkilenmedi (5c
+  çapası zaten doğruydu).
 - **Ses/görüntü gönderen atfı** — AYNI. Metin mesajları Ed25519 imzalı;
   SFrame medya çerçeveleri üyeliği kanıtlar ama gönderen kimliğini
   kanıtlamaz (SFU içinde per-sender imza yok). Aynı kanalda iki

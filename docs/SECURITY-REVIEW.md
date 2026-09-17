@@ -124,7 +124,9 @@ msg_key     = H(root_{j,l} ‖ 'msg')
 ```
 
 - `chain_seed = H(epoch_key ‖ 'ratchet' ‖ sender_user_id)` (v2 ile aynı)
-- **DM**: `DH_out = X25519(eph_priv, peer_static_pub)` (alıcı: `X25519(my_static_priv, dh_pub)`)
+- **DM (5b hotfix)**: `anchor_dm = X25519base(H(epoch‖'dm-anchor'‖sorted(sender)‖sorted(peer)))`;
+  `DH_out = X25519(eph_priv, anchor_dm.publicKey)` (alıcı: `X25519(anchor_dm.privateKey, dh_pub)`).
+  Her iki taraf aynı çifti türetir → kendi mesajını da açar.
 - **Kanal/gdm**: `DH_out = X25519(eph_priv, anchor_pub)`; `anchor = dhAnchor(epoch_key)`
   tüm üyeler aynı çifti türetir (alıcı stateless)
 - Pencere: M=100 mesaj / T=24h (reload = zorunlu yeni adım)
@@ -173,7 +175,7 @@ Test: `web/src/crypto/identity.test.ts` (seal+open + geriye uyum + yanlış KEK 
 | `web/src/crypto/fingerprint.test.ts` | ~6 | Safety number simetrisi, bilinen vektörler (v1 + v2 imza katkılı), biçim |
 | `web/src/crypto/signature.test.ts` | ~12 | Gönderen atfı: imza doğrulama, sahte gönderici reddi, ciphertext/AAD modifiye reddi, bilinmeyen imza anahtarı reddi, cutover geçiş davranışı, imza düşürme (downgrade) reddi |
 | `web/src/crypto/ratchet.test.ts` | ~10 | Per-gönderici ratchet: zincir tek yönlülüğü, index/AAD reddi, stateless yeniden türetim, out-of-order |
-| `web/src/crypto/dh-ratchet.test.ts` | ~25 | DH ratchet v4: KAT vektörleri (`dh-ratchet.vectors.json`), FS/PCS-lite sızıntı simülasyonu (gönderici state sızıntısı → eski adım kapalı, sonraki adım güvenli), adım içi backward secrecy, out-of-order, tarama sınırı, AAD/imza/başlık takası negatifleri, self-update doğrulama, 5c epok DH çapası (kanal/gdm roundtrip) + rekey broadcast negatifleri, 5d ses anahtarı türetimi (çapa/DM KAT, iki tarafın aynı anahtarı, epok ayrımı, mesaj zincirinden alan ayrımı) |
+| `web/src/crypto/dh-ratchet.test.ts` | ~30 | DH ratchet v4: KAT vektörleri (`dh-ratchet.vectors.json`), FS/PCS-lite sızıntı simülasyonu (gönderici state sızıntısı → eski adım kapalı, sonraki adım güvenli), adım içi backward secrecy, out-of-order, tarama sınırı, AAD/imza/başlık takası negatifleri, self-update doğrulama, 5c epok DH çapası (kanal/gdm roundtrip) + rekey broadcast negatifleri, 5d ses anahtarı türetimi (çapa/DM KAT, iki tarafın aynı anahtarı, epok ayrımı, mesaj zincirinden alan ayrımı), **5b hotfix DM çapası (sıralı çift simetrisi, cross-device roundtrip, kendi mesajını açma, eski v4 okunamaz negatif)** |
 | `web/src/crypto/devicekey.test.ts` | ~8 | Cihaz kilidi: blob sar/çöz, yanlış KEK/AAD reddi, enroll→unlock, PRF fallback |
 | `web/src/crypto/identity.test.ts` | ~8 | v3 kimlik blob'u: deviceId ile seal+open, v1/v2 geriye uyumlu açılış, yanlış KEK reddi |
 | `web/src/crypto/ttl-aad.test.ts` | ~5 | TTL'in AAD/imza dışı olması (sunucu metadata'sı) |

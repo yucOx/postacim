@@ -20,8 +20,14 @@ sırda reddeder (küçük-alt-grup/identity koruması).
 
 ```
 chain_seed  = H(epoch_key ‖ 'ratchet' ‖ sender_user_id)          // v2'den DEĞİŞMEDİ
-dh_out_j    = X25519(eph_priv_j, peer_static_pub)                 // gönderen tarafı
-            = X25519(my_static_priv, dh_pub_j)                    // alıcı tarafı — aynı 32B
+// 5b hotfix — DM: iki taraf kimlik X25519 çiftinin yarısını paylaşmadığından
+// "peer_static_pub" rolünü (sender, peer) sıralı çiftinden deterministik
+// türetilen DH çapası üstlenir. 5c'deki kanal/gdm çapasının DM eşdeğeri.
+anchor_dm   = X25519base(H(epoch_key ‖ 'dm-anchor' ‖ sorted(sender) ‖ sorted(peer)))
+dh_out_j    = X25519(eph_priv_j, anchor_dm.publicKey)            // gönderen tarafı
+            = X25519(anchor_dm.privateKey, dh_pub_j)              // alıcı tarafı — aynı 32B
+// kanal/gdm'de 5c çapası kullanılır (değişmedi):
+// anchor_gdm = X25519base(H(epoch_key ‖ 'dh-anchor'))
 step_root_j = H(chain_seed ‖ 'dh' ‖ u32LE(j) ‖ dh_out_j)
 root_{j,0}  = step_root_j
 root_{j,l}  = H(root_{j,l-1} ‖ 'step')                            // v2 'step' adımıyla aynı
@@ -31,25 +37,39 @@ msg_key_{j,l} = H(root_{j,l} ‖ 'msg')                             // v2 'msg' 
 - `j` = gönderici başına DH adım sayacı (0'dan başlar; u32).
 - `l` = adım içi yerel mesaj index'i (0..M-1). Global index `i = step_base + l`
   (v2'deki zincir index'iyle aynı sayaç, aynı localStorage anahtarı).
-- `peer_static_pub` = karşı tarafın **kimlik X25519 anahtarı** (bootstrap
-  `public_keys` / arkadaş kaydı). Yeni bir published anahtar kolonu GEREKMEZ —
-  sunucu değişikliği yok. Kimlik anahtarının sealed-box'ta da kullanılması
-  çapraz-protokol riski doğurmaz: DH çıktısı `chain_seed` + `'dh'` etiketiyle
-  etki alanı ayrımıyla karıştırılır; tek başına hiçbir yerde anahtar olarak
-  kullanılmaz.
+- DM `anchor_dm`: (sender_id, peer_id) **sıralanmış** çiftinden deterministik
+  türetilen X25519 çifti. Her iki taraf aynı çifti hesaplar (sıralama
+  gönderen/alıcı farkını ortadan kaldırır), `X25519` simetrisi gereği
+  gönderen/alıcı `dh_out_j`'leri bit-bit aynı 32B üretir. Sunucuda yeni
+  published anahtar GEREKMEZ — DM anahtarı zaten sarılı epok anahtarının
+  parçası; tek gerekli girdi sorted çiftidir. `chain_seed` + `'dh'` etiketi
+  etki alanı ayrımını korur (DM çapası tek başına hiçbir yerde anahtar olarak
+  kullanılmaz).
+- Kanal/gdm `anchor_gdm`: 5c'de tanımlı, bu hotfix'te DEĞİŞMEDİ. Üye değişimi
+  → rotate (yeni epok) çifte zincir tohumu + çapayı birlikte çevirir.
 
 ### Neden bu şekil
 
 - **Stateless alıcı korunur** (mevcut mimarinin en değerli özelliği): alıcı
-  `dh_out_j`'yi her mesajın başlığındaki `dh_pub_j` + kendi kalıcı static
-  private'ından O(1) hesaplar. Kalıcı ratchet state yok — F5, pagination,
-  çoklu sekme, localStorage kaybı doğal çalışır. IndexedDB/LocalStorage tamamen
-  silinse bile: epoch anahtarı (sunucudaki sarılı kopyadan açılır) + kimlik
-  private + mesaj başlıkları = zincir baştan türetilebilir.
+  `dh_out_j`'yi her mesajın başlığındaki `dh_pub_j` + sorted(sender, peer)
+  çiftinden türetilen `anchor_dm.privateKey`'dan O(1) hesaplar. Kalıcı
+  ratchet state yok — F5, pagination, çoklu sekme, localStorage kaybı doğal
+  çalışır. IndexedDB/LocalStorage tamamen silinse bile: epoch anahtarı
+  (sunucudaki sarılı kopyadan açılır) + mesaj başlıkları = zincir baştan
+  türetilebilir.
+- **5b hotfix gerekçesi**: orijinal 5b DM türevi
+  `dh_out = X25519(eph_priv, peer_static_pub)` idi; alıcıda
+  `X25519(my_private, dh_pub)`. Bu yalnız A↔B sırasında çalışır: gönderen
+  KENDİ mesajını kendi alıcı rolüyle açamaz (kendi kimlik private × kendi
+  ephemeral public, peer'ınkini vermez). 5c'de kanal/gdm için
+  `X25519base(H(epoch‖'dh-anchor'))` çapası bu sorunu çözmüştü; DM için
+  eşdeğer çapa eksikti. Bu hotfix sıralı çifti anchor materyali olarak
+  kullanır — kimlik X25519 public'ine başvurmaz, sunucu değişikliği yok.
 - **FS tam (gönderici tarafı)**: `eph_priv_j` adım sonunda atılır. Eski adımın
-  `dh_out_j`'sini bilmenin yolu `eph_priv_j` (silindi) veya alıcının static
-  private'ıdır. Göndericinin TÜM durumu (epoch anahtarı + sayaçlar + güncel
-  adım ephemeral'ı) sızsa bile önceki adımların mesajları çözülemez.
+  `dh_out_j`'sini bilmenin yolu `eph_priv_j` (silindi) veya alıcının
+  `anchor_dm.privateKey`'ıdır (sadece bu iki kişi türetebilir). Göndericinin
+  TÜM durumu (epoch anahtarı + sayaçlar + güncel adım ephemeral'ı) sızsa bile
+  önceki adımların mesajları çözülemez.
 - **Adım içi backward secrecy korunur**: `root_{j,l}` ileri zincirlenir —
   güncel `root_{j,l}` sızarsa aynı adımın `l' > l` anahtarları türetilir ama
   `l' < l` türetilemez (v2 garantisiyle aynı, gerileme yok).
