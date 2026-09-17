@@ -369,7 +369,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           };
           const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
           wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
-          set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: false, camOn: false, isDmCall: false });
+          let micOpened = false;
+          try {
+            await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
+            micOpened = true;
+          } catch {
+            // mic permission denied or no mic
+          }
+          set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: micOpened, camOn: false, isDmCall: false });
           return;
         } catch (err) {
           lastErr = err;
@@ -516,6 +523,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       };
       const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
       wsSend({ type: 'call:ring', channel_id: dmId });
+      // open mic by default
+      let micOpened = false;
+      try {
+        await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
+        micOpened = true;
+      } catch {
+        // mic permission denied or no mic
+      }
       // open camera first so the callee can see the caller immediately on accept
       let camOpened = false;
       if (video) {
@@ -531,7 +546,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         room,
         keyProvider,
         joinedChannelId: dmId,
-        micOn: false,
+        micOn: micOpened,
         camOn: camOpened,
         screenOn: false,
         isDmCall: true,
@@ -571,7 +586,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         }
       };
       const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
-      set({ room, keyProvider, joinedChannelId: call.channelId, micOn: false, camOn: false, isDmCall: true, callState: { phase: 'active', channelId: call.channelId } });
+      let micOpened = false;
+      try {
+        await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
+        micOpened = true;
+      } catch {
+        // mic error / permission denied
+      }
+      set({ room, keyProvider, joinedChannelId: call.channelId, micOn: micOpened, camOn: false, isDmCall: true, callState: { phase: 'active', channelId: call.channelId } });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
       throw err;

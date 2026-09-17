@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsSpeaking } from '@livekit/components-react';
+import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsSpeaking, useIsMuted } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
-import { Volume2, VolumeX } from 'lucide-react';
+import { MicOff, Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
 import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
@@ -58,12 +58,42 @@ function ShareAudio({ volume, muted, activeIds }: { volume: number; muted: boole
   );
 }
 
+function MuteBadgeInner({ participant }: { participant: Participant }): React.ReactNode {
+  const isMuted = useIsMuted({ participant, source: Track.Source.Microphone });
+  if (!isMuted) return null;
+  return (
+    <div
+      className="pointer-events-none absolute bottom-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-stamp-500/70 bg-night-950/90 text-stamp-400 shadow-md"
+      title="Mikrofon kapalı"
+    >
+      <MicOff size={13} />
+    </div>
+  );
+}
+
+function MuteBadge({ participant, isScreen }: { participant?: Participant; isScreen?: boolean }): React.ReactNode {
+  if (!participant || isScreen) return null;
+  return <MuteBadgeInner participant={participant} />;
+}
+
+function NamePlateMuteIcon({ participant }: { participant: Participant }): React.ReactNode {
+  const isMuted = useIsMuted({ participant, source: Track.Source.Microphone });
+  if (!isMuted) return null;
+  return (
+    <span className="flex items-center text-stamp-400" title="Mikrofon kapalı">
+      <MicOff size={11} />
+    </span>
+  );
+}
+
 function NamePlate({
+  participant,
   identity,
   isLocal,
   isScreen,
   isFocus,
 }: {
+  participant?: Participant;
   identity: string;
   isLocal: boolean;
   isScreen: boolean;
@@ -71,13 +101,14 @@ function NamePlate({
 }): React.ReactNode {
   const { t } = useT();
   return (
-    <span className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
+    <span className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-3rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
       <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
         {nickFor(identity)}
         {isLocal && ` (${t('call.nameSelf')})`}
       </span>
       {isScreen && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameScreen')}</span>}
       {isFocus && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameFocus')}</span>}
+      {!isScreen && participant && <NamePlateMuteIcon participant={participant} />}
     </span>
   );
 }
@@ -177,11 +208,13 @@ function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocu
     >
       <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
       <NamePlate
+        participant={trackRef.participant}
         identity={trackRef.participant.identity}
         isLocal={trackRef.participant.isLocal}
         isScreen={isScreen}
         isFocus={isFocus}
       />
+      <MuteBadge participant={trackRef.participant} isScreen={isScreen} />
       {overlay}
     </SpeakingTile>
   );
@@ -212,7 +245,8 @@ function PlaceholderTile({
       }`}
     >
       <Avatar userId={identity} label={nickFor(identity)} size={56} srcOverride={null} />
-      <NamePlate identity={identity} isLocal={isLocal} isScreen={false} isFocus={active} />
+      <NamePlate participant={participant} identity={identity} isLocal={isLocal} isScreen={false} isFocus={active} />
+      <MuteBadge participant={participant} isScreen={false} />
     </SpeakingTile>
   );
 }
@@ -454,7 +488,8 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           trackRef={cam}
           className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
         />
-        <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+        <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+        <MuteBadge participant={p} isScreen={false} />
         {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </SpeakingTile>
     ) : (
@@ -467,7 +502,8 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         className="flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
       >
         <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
-        <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+        <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+        <MuteBadge participant={p} isScreen={false} />
         {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </SpeakingTile>
     );
@@ -536,7 +572,13 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
             trackRef={v.trackRef}
             className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
           />
-          <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
+          <NamePlate
+            participant={v.trackRef.participant}
+            identity={v.identity}
+            isLocal={v.trackRef.participant.isLocal}
+            isScreen={v.isScreen}
+          />
+          <MuteBadge participant={v.trackRef.participant} isScreen={v.isScreen} />
           {own && stopBtn(true)}
         </SpeakingTile>
       );
@@ -563,7 +605,8 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
               >
                 <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
-                <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+                <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+                <MuteBadge participant={p} isScreen={false} />
               </SpeakingTile>
             ))}
         </div>
@@ -605,7 +648,13 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 trackRef={v.trackRef}
                 className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
               />
-              <NamePlate identity={v.identity} isLocal={v.trackRef.participant.isLocal} isScreen={v.isScreen} />
+              <NamePlate
+                participant={v.trackRef.participant}
+                identity={v.identity}
+                isLocal={v.trackRef.participant.isLocal}
+                isScreen={v.isScreen}
+              />
+              <MuteBadge participant={v.trackRef.participant} isScreen={v.isScreen} />
               {own && stopBtn(true)}
             </SpeakingTile>
           );
@@ -620,7 +669,8 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           className="relative flex h-full aspect-video shrink-0 items-center justify-center overflow-hidden rounded-md border bg-night-850"
         >
           <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
-          <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+          <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+          <MuteBadge participant={p} isScreen={false} />
         </SpeakingTile>
       );
     };
@@ -705,7 +755,8 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                   className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
                 >
                   <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
-                  <NamePlate identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
+                  <NamePlate participant={focusPerson} identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
+                  <MuteBadge participant={focusPerson} isScreen={false} />
                 </SpeakingTile>
               )
             )}
@@ -754,7 +805,8 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                     <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
                   </div>
                 )}
-                <NamePlate identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+                <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+                <MuteBadge participant={p} isScreen={false} />
                 {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
               </SpeakingTile>
             );

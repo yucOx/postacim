@@ -276,7 +276,7 @@ export default function Shell() {
 
         {view === 'dm' ? (
           <main className="flex min-w-0 flex-1 flex-col">
-            {isDmCall && callDmId && activeDm?.id === callDmId ? (
+            {isDmCall && !pip && callDmId && activeDm?.id === callDmId ? (
               <CallView />
             ) : activeDm ? (
               <DmChat dmId={activeDm.id} />
