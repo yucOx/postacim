@@ -10,6 +10,7 @@ import {
   DH_STEP_MSGS,
   DH_STEP_TTL_MS,
   chainSeed,
+  dhAnchor,
   dhMsgKey,
   dhShared,
   dhStepRoot,
@@ -375,5 +376,109 @@ describe('self-update doğrulama yardımcıları (5c öncesi KAT)', () => {
     const t = payload.slice();
     t[10] ^= 1;
     expect(verifyDhUpdate(t, sig, senderSign.signPublicKey)).toBe(false);
+  });
+});
+
+// --- Faz 5c: kanal/gdm v4 — epok DH çapası + rekey broadcast + self-update bağlama ---
+describe('Faz 5c — epok DH çapası (kanal/gdm)', () => {
+  const K1 = new Uint8Array(32).fill(3); // eski epok anahtarı
+  const K2 = new Uint8Array(32).fill(7); // rekey broadcast ile dağıtılan yeni epok
+
+  it('çapa deterministik: aynı epok → aynı çift; clamp türetimi tutarlı', () => {
+    const a = dhAnchor(K1);
+    const b = dhAnchor(K1);
+    expect(b64(a.publicKey)).toBe(b64(b.publicKey));
+    expect(b64(sodium.crypto_scalarmult_base(a.privateKey))).toBe(b64(a.publicKey));
+    expect(b64(dhAnchor(K2).publicKey)).not.toBe(b64(a.publicKey));
+  });
+
+  it('kanal (ch) + gdm v4 roundtrip: çapa public ile şifrele, çapa private ile çöz', () => {
+    const anchor = dhAnchor(K1);
+    for (const [scope, ch] of [['ch', 'ch_v4'], ['gdm', 'gdm_v4']] as const) {
+      const eph = newDhEphemeral();
+      const enc = encryptText(ch, 1, K1, `${scope} gövde`, scope, undefined, false, { senderId: SENDER, index: 0 }, { signPrivateKey: senderSign.signPrivateKey }, {
+        dhPriv: eph.privateKey, dhPub: eph.publicKey, dhStep: 0, stepBase: 0, peerStaticPub: anchor.publicKey,
+      });
+      const msg = decryptText(ch, 1, K1, enc.nonce, enc.ciphertext, scope, undefined, SENDER, sigCtx(), { myPriv: anchor.privateKey });
+      expect(msg.body).toBe(`${scope} gövde`);
+      expect(msg.ratchet?.i).toBe(0);
+      // alıcı simetrisi: X25519(eph_priv, anchor_pub) = X25519(anchor_priv, eph_pub)
+      expect(b64(dhShared(eph.privateKey, anchor.publicKey))).toBe(b64(dhShared(anchor.privateKey, eph.publicKey)));
+    }
+  });
+
+  it('karışık kanal geçmişi: v1/v2/v3 satırlar çapa dhCtx ile de okunur', () => {
+    const ch = 'ch_mix';
+    const anchor = dhAnchor(K1);
+    const v1 = encryptText(ch, 1, K1, 'bir', 'ch');
+    const v2 = encryptText(ch, 1, K1, 'iki', 'ch', undefined, false, { senderId: SENDER, index: 0 });
+    const v3 = encryptText(ch, 1, K1, 'üç', 'ch', undefined, false, { senderId: SENDER, index: 1 }, { signPrivateKey: senderSign.signPrivateKey });
+    const read = (e: { nonce: string; ciphertext: string }) =>
+      decryptText(ch, 1, K1, e.nonce, e.ciphertext, 'ch', undefined, SENDER, sigCtx(), { myPriv: anchor.privateKey });
+    expect(read(v1).body).toBe('bir');
+    expect(read(v2).body).toBe('iki');
+    expect(read(v3).body).toBe('üç');
+  });
+
+  it('PCS-lite kanal ölçeği: rekey broadcast sonrası atılan üye (eski epok elinde) geleceği OKUYAMAZ', () => {
+    const ch = 'ch_rekey';
+    const anchor1 = dhAnchor(K1);
+    const anchor2 = dhAnchor(K2);
+    const eph2 = newDhEphemeral();
+    // rekey sonrası kalan üye mesajı: yeni epok, yeni çapa, yeni seed
+    const after = encryptText(ch, 2, K2, 'rekey sonrası', 'ch', undefined, false, { senderId: SENDER, index: 40 }, { signPrivateKey: senderSign.signPrivateKey }, {
+      dhPriv: eph2.privateKey, dhPub: eph2.publicKey, dhStep: 0, stepBase: 40, peerStaticPub: anchor2.publicKey,
+    });
+    const raw = unb64(after.ciphertext);
+    const nonce = unb64(after.nonce);
+    const body = raw.slice(40, raw.length - 64);
+    const dhPub2 = raw.slice(0, 32);
+    const aadNew = (l: number) => aad('ch', ch, 2, undefined, 40 + l, toHex(dhPub2));
+    // atılan üyenin envanteri: K1 (→ eski seed + eski çapa private), tüm başlıklar
+    // (public), broadcast'i yakaladı (key_version=2'yi biliyor — anahtarın kendisini
+    // saramaz). Aday DH çıktıları eski malzemeyle üretilir:
+    const candidates = [
+      dhShared(anchor1.privateKey, dhPub2), // eski çapa × yeni adım public'i
+      dhShared(anchor1.privateKey, anchor1.publicKey), // eski çapa kendisiyle
+    ];
+    for (const dhOut of candidates) {
+      for (const seed of [chainSeed(K1, SENDER), chainSeed(K2, SENDER)]) {
+        const sroot = dhStepRoot(seed, dhOut, 0);
+        for (let l = 0; l < DH_STEP_MSGS; l++) {
+          expect(openWith(nonce, body, aadNew(l), dhMsgKey(sroot, l))).toBe(false);
+        }
+      }
+    }
+    // dürüst kalan üye (yeni epok bootstrap'tan) açar
+    const ok = decryptText(ch, 2, K2, after.nonce, after.ciphertext, 'ch', undefined, SENDER, sigCtx(), { myPriv: anchor2.privateKey });
+    expect(ok.body).toBe('rekey sonrası');
+  });
+
+  it('gdm rekey: broadcast yakalayan ayrılmış üye sonraki mesajları açamaz (gdm scope)', () => {
+    const ch = 'gdm_rekey';
+    const anchor1 = dhAnchor(K1);
+    const anchor2 = dhAnchor(K2);
+    const eph2 = newDhEphemeral();
+    const after = encryptText(ch, 2, K2, 'ayrılma sonrası', 'gdm', undefined, false, { senderId: SENDER, index: 9 }, { signPrivateKey: senderSign.signPrivateKey }, {
+      dhPriv: eph2.privateKey, dhPub: eph2.publicKey, dhStep: 0, stepBase: 9, peerStaticPub: anchor2.publicKey,
+    });
+    const raw = unb64(after.ciphertext);
+    const nonce = unb64(after.nonce);
+    const body = raw.slice(40, raw.length - 64);
+    const dhPub2 = raw.slice(0, 32);
+    const sroot = dhStepRoot(chainSeed(K1, SENDER), dhShared(anchor1.privateKey, dhPub2), 0);
+    for (let l = 0; l < DH_STEP_MSGS; l++) {
+      expect(openWith(nonce, body, aad('gdm', ch, 2, undefined, 9 + l, toHex(dhPub2)), dhMsgKey(sroot, l))).toBe(false);
+    }
+    const ok = decryptText(ch, 2, K2, after.nonce, after.ciphertext, 'gdm', undefined, SENDER, sigCtx(), { myPriv: anchor2.privateKey });
+    expect(ok.body).toBe('ayrılma sonrası');
+  });
+
+  it('self-update kanonu kanal+epok bağlar: başka kanal/sürüm için doğrulama düşer', () => {
+    const pub = newDhEphemeral().publicKey;
+    const sig = sodium.crypto_sign_detached(encodeDhUpdate('ch_a', 3, pub), senderSign.signPrivateKey);
+    expect(verifyDhUpdate(encodeDhUpdate('ch_b', 3, pub), sig, senderSign.signPublicKey)).toBe(false);
+    expect(verifyDhUpdate(encodeDhUpdate('ch_a', 4, pub), sig, senderSign.signPublicKey)).toBe(false);
+    expect(verifyDhUpdate(encodeDhUpdate('ch_a', 3, pub), sig, senderSign.signPublicKey)).toBe(true);
   });
 });

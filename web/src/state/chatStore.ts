@@ -4,6 +4,8 @@ import type { ChatMessage } from '../api/types';
 import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
 import { decryptText, encryptText, nextSendIndex } from '../crypto/message';
+import { dhAnchor } from '../crypto/dhratchet';
+import { dhParamsFor } from './dhstep';
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
 import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
@@ -117,6 +119,8 @@ function toDisplay(raw: ChatMessage): DisplayMessage {
         raw.sender_id,
         // gönderen atfı: imza doğrulama + cutover bağlamı
         { signPublicKey: getSignKeys(raw.sender_id), sentAt: raw.sent_at },
+        // v4 okuma yolu: epok çapası private (row'un kendi epok anahtarından)
+        { myPriv: dhAnchor(key).privateKey },
       ).body,
       ...expiry,
       ...meta,
@@ -228,10 +232,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // ratchet index'i per (channel, key_version) sayaçtan tüket; 409 ile
         // version değişirse yeni version'ın sayacı kullanılır
         const index = nextSendIndex(channelId, version);
+        // v4 DH adımı: epok çapası ile per-sender ephemeral (M/T pencere — dmstep ile aynı)
+        const dh = await dhParamsFor(channelId, 'ch', version, key, index);
         const enc = encryptText(channelId, version, key, body, 'ch', { clientId, clientSentAt }, false, {
           senderId,
           index,
-        }, { signPrivateKey });
+        }, { signPrivateKey }, dh);
         try {
           await api(`/channels/${channelId}/messages`, {
             method: 'POST',

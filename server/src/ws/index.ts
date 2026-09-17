@@ -27,7 +27,7 @@ export function attachWs(app: FastifyInstance): void {
     }, 10_000);
 
     ws.on('message', (raw) => {
-      let msg: { type?: string; token?: string; channel_id?: string; state?: string };
+      let msg: { type?: string; token?: string; channel_id?: string; state?: string; payload?: string };
       try {
         msg = JSON.parse(raw.toString());
       } catch {
@@ -89,6 +89,42 @@ export function attachWs(app: FastifyInstance): void {
         if (community) {
           if (!memberRole(community.community_id, userId)) return;
           hub.broadcast(community.community_id, payload);
+          return;
+        }
+        if (msg.channel_id.startsWith('dm_')) {
+          const dm = getDm(msg.channel_id, userId);
+          if (dm) hub.sendToUser(dm.user_a === userId ? dm.user_b : dm.user_a, payload);
+          return;
+        }
+        if (msg.channel_id.startsWith('gdm_')) {
+          const members = db
+            .prepare('SELECT user_id FROM gdm_members WHERE channel_id = ?')
+            .all(msg.channel_id) as { user_id: string }[];
+          for (const m of members) {
+            if (m.user_id !== userId) hub.sendToUser(m.user_id, payload);
+          }
+        }
+      }
+
+      // --- DH self-update duyurusu (Faz 5c): opak relay — payload (b64
+      // kanon+imza) sunucu için anlamsızdır: saklanmaz, yorumlanmaz, yalnız
+      // kanal kitlesine iletilir; kriptografik doğrulama alıcıdadır
+      // (spec: docs/faz5-dh-ratchet-design.md §6). Sunucu plaintext görmez.
+      if (msg?.type === 'dh_update' && typeof msg.channel_id === 'string' && typeof msg.payload === 'string') {
+        // sığ sınır: kanon (~≤160B) + imza 64B, b64 — fazlası iletilmeden düşer
+        if (msg.payload.length > 512 || !/^[A-Za-z0-9+/]+={0,2}$/.test(msg.payload)) return;
+        const ch = db
+          .prepare('SELECT community_id FROM channels WHERE id = ?')
+          .get(msg.channel_id) as { community_id: string } | undefined;
+        const payload = {
+          type: 'dh_update',
+          channel_id: msg.channel_id,
+          payload: msg.payload,
+          from: userId,
+        };
+        if (ch) {
+          if (!memberRole(ch.community_id, userId)) return;
+          hub.broadcast(ch.community_id, payload);
           return;
         }
         if (msg.channel_id.startsWith('dm_')) {

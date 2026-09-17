@@ -8,7 +8,8 @@ import { generateIdentity, unwrapMyKey, wrapKeyFor } from '../crypto/identity';
 import { sealJoinKey } from '../crypto/joinpw';
 import { buildInviteLink } from '../crypto/invite';
 import { onServerEvent } from '../ws/socket';
-import { refreshSignKeys } from '../lib/signkeys';
+import { getSignKeys, refreshSignKeys } from '../lib/signkeys';
+import { ingestDhUpdate } from '../lib/dhupdate';
 
 export interface Channel {
   id: string;
@@ -619,6 +620,11 @@ export const useAppStore = create<AppState>((set, get) => {
         e.type === 'gdm:updated'
       ) {
         void get().loadBootstrap();
+      } else if (e.type === 'dh_update') {
+        // self-update duyurusu (Faz 5c): Ed25519 doğrulaması + TOFU pin —
+        // geçersiz imza sessizce reddedilir (dhupdate.ts)
+        const d = e as unknown as { channel_id: string; payload: string; from: string };
+        ingestDhUpdate(d.from, d.channel_id, d.payload, getSignKeys(d.from));
       }
     });
   },
