@@ -122,6 +122,12 @@ haritası" satırı eklendi.
 
 **Kapatır:** "Forward secrecy kısmi — DH ratchet/MLS bekleyen kurul."
 
+**İlerleme:** 5a tamam (`de1cb48` — karar: (c+) güçlendirilmiş hafif çift-DH,
+spec: `docs/faz5-ratchet-research.md`); **5b tamam** (`474a72f` — v4 format +
+`crypto/dhratchet.ts` + DM yolu, spec: `docs/faz5-dh-ratchet-design.md`, M=100
+/ T=24h pencere). Kalan: 5c kanal/gdm DH-rekey broadcast (+ self-update WS
+frame'i), 5d ses anahtarı türetimi.
+
 - **Önce araştırma sprinti** (kod YAZMA): (a) OpenMLS (Rust→WASM, ~1MB
   ek yük) vs (b) kendi X3DH benzeri init + Double Ratchet (libsodium
   var, ama doğruluk riski yüksek) vs (c) hafif çift-DH ratchet (Signal

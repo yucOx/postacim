@@ -19,7 +19,7 @@ Akış: tarayıcı `web/` nginx'den yüklenir → `/api/*` server'a, `/ws` WS'e,
 2. 64B ikiye bölünür (`authStore.ts`): ilk 32B **authMaterial** → sunucuda argon2id verifier olarak saklanır (şifre gönderilmez); son 32B **KEK** — tarayıcıdan çıkmaz, memory-only (reload'da şifre yeniden istenir)
 3. KEK, X25519 private key blob'unu açar: `key_blob` = nonce(24) ‖ XChaCha20-Poly1305(privateKey), AAD `postacim/v1/identity` (`crypto/identity.ts`)
 4. Private key, kanal anahtarlarının **sealed-box** (`crypto_box_seal`) wrapped_key satırlarını açar (`unwrapMyKey`)
-5. Kanal anahtarı (32B rastgele) → mesaj: **XChaCha20-Poly1305**, AAD = `scope:channelId:v<key_version>` + opsiyonel client binding (`crypto/message.ts`). Scope: `ch` (topluluk kanalı) / `dm` / `gdm`. Per-gönderici ratchet: `msg_key_i = H(root_i)`, zincir `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir — güncel kök sızarsa geçmiş korunur; plaintext boyut bucket padding'li (magic `0x01`/`0x02` v2 ratchet'li)
+5. Kanal anahtarı (32B rastgele) → mesaj: **XChaCha20-Poly1305**, AAD = `scope:channelId:v<key_version>` + opsiyonel client binding (`crypto/message.ts`). Scope: `ch` (topluluk kanalı) / `dm` / `gdm`. Per-gönderici ratchet: `msg_key_i = H(root_i)`, zincir `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir — güncel kök sızarsa geçmiş korunur; plaintext boyut bucket padding'li (magic `0x01`/`0x02` v2 ratchet'li). **DM'de v4 DH ratchet** (`crypto/dhratchet.ts`): ciphertext = 40B DH header (ephemeral public ‖ adım j ‖ step_base, plaintext) ‖ AEAD ‖ [Ed25519 imza]; adım anahtarı `step_root_j = H(chain_seed ‖ 'dh' ‖ u32LE(j) ‖ X25519(eph_priv_j, peer_kimlik_pub))` — gönderici ephemeral private'ı adım sonunda atılır (M=100 mesaj / 24 sa / reload'ta bir adım) → gönderici tarafı tam forward secrecy; alıcı başlıktaki public + kendi kimlik private'ı ile stateless türetir. AAD'ye `d<dh_pub_hex>` eklenir, imza girdisi header‖ct‖AAD (spec: `docs/faz5-dh-ratchet-design.md`; KAT: `web/src/crypto/dh-ratchet.vectors.json`)
 6. Gönderen atfı: v3 mesaj = AEAD çıktısı ‖ Ed25519 detached imza (imza girdisi = ciphertext baytları ‖ utf8(AAD) — AAD epok, index, binding'i kapsar). Alıcı, açmadan ÖNCE göndericinin anahtar defterinden gelen imza public key'iyle doğrular (`lib/signkeys.ts`); `SIGN_CUTOVER_MS`'ten sonraki imzasız mesajlar reddedilir. Eski hesaplar ilk açılışta/imza anahtarı yoksa ilk gönderimde Ed25519 çifti üretip `POST /keys/sign` ile yayınlar (blob v2 rewrap KEK RAM'deyken)
 6. Client binding: UUID + client timestamp AAD'ye girer, sunucu `client_id` + `sent_at_client` kolonlarında echo eder → bant dışı tekrar oynatma ve timestamp sahteciliği tespit edilebilir (`lib/replay.ts` istemcide dedupe eder)
 7. Ses/görüntü: aynı kanal anahtarı → LiveKit **SFrame** (HKDF türevi). DM araması aynı DM anahtarını kullanır
@@ -277,14 +277,15 @@ içeriğin yayıldığı varsayımıyla anlamlıdır.
 | `crypto/identity.ts` | X25519 keypair + Ed25519 imza keypair; blob seal/open (KEK altında; payload v1 = X25519 private, v2 = 0x02 ‖ X25519 ‖ Ed25519); sealed-box wrap/unwrap |
 | `crypto/invite.ts` | davet linki kur/ayrıştır (`#/davet/<code>/<eph-priv>` fragment); ephemeral anahtarla açma |
 | `crypto/joinpw.ts` | katılım şifresi JW anahtarı altında kanal anahtarı seal/open |
-| `crypto/message.ts` | XChaCha20-Poly1305 mesaj AEAD; AAD = scope + kanal + epok + client binding; per-gönderici ratchet zinciri (msg_key_i) + boyut bucket padding; v3: AEAD çıktısına Ed25519 imza eklenir + cutover politika |
+| `crypto/message.ts` | XChaCha20-Poly1305 mesaj AEAD; AAD = scope + kanal + epok + client binding (+v4'de DH public); per-gönderici ratchet zinciri (msg_key_i) + boyut bucket padding; v3: AEAD çıktısına Ed25519 imza eklenir + cutover politika; v4: DH header'lı ratchet formatı + DH zincir taraması |
+| `crypto/dhratchet.ts` | Faz 5b DH ratchet çekirdeği: chain_seed/dh_out/step_root/msg_key türetimi (stateless alıcı), M/T pencere sayaçları (`pgv.dhstep.*`), ephemeral üretimi, self-update duyuru kanonu + Ed25519 doğrulaması (5c canlı bağlar) |
 | `crypto/devicekey.ts` | WebAuthn PRF cihaz kilidi: passkey üret/enroll, cihaz KEK türetimi, blob sar/çöz, IndexedDB `pgv-device` |
 | `crypto/recovery.ts` | kurtarma ifadesinden Argon2id anahtar türetme (şifre yoluyla aynı zincir) |
 | `crypto/sodium.ts` | libsodium hazır olma sözü (WASM) |
 | `state/authStore.ts` | kayıt/giriş/reauth (needs_password)/şifre değişimi/kurtarma; KEK memory-only; passkey unlock boot dalı |
 | `state/appStore.ts` | bootstrap hidrasyonu, topluluk/kanal seçimi, üye/rol/davet/başvuru yönetimi, WS kabloları |
 | `state/chatStore.ts` | kanal geçmişi + sayfalama + canlı mesaj akışı, anahtar açma |
-| `state/dmChatStore.ts` | DM + grup DM sohbet state'i, gizli mesaj filtresi |
+| `state/dmChatStore.ts` | DM + grup DM sohbet state'i, gizli mesaj filtresi; DM gönderiminde v4 DH adımı yönetimi (M/T pencere + bellek-içi ephemeral), gdm 5c'ye kadar v3 |
 | `state/ttlStore.ts` | kaybolan mesaj TTL tercihi — kanal/DM başına (localStorage `pgv_msg_ttl`); gönderimde `expires_at` üretir |
 | `lib/ttl.ts` | TTL seçenekleri + `isExpired`/`useExpiryTick` — süresi dolan satırların tombstone render'ı için 30 sn'lik tick |
 | `state/voiceStore.ts` | LiveKit bağlantısı, SFrame E2EE, ses durumu, 1:1 arama akışı (zil/kabul/PiP) |

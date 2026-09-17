@@ -42,14 +42,15 @@ düz hâlini **hiçbir zaman** görmez.
 | Kanal anahtarı | 32B rastgele; üyelere `crypto_box_seal` (sealed box) ile sarılı |
 | Mesajlar | XChaCha20-Poly1305, AAD = `ch:<kanal>:v<epok>` (yeniden konumlandırmaya dayanıklı) |
 | Gönderen atfı | Her mesaj gönderenin **Ed25519 anahtarıyla imzalı** (`ciphertext‖signature`, imza ciphertext+AAD üzerinden); alıcı açmadan önce anahtar defterinden doğrular — sunucu sahte sender_id ile mesaj uyduramaz. Cutover tarihinden sonraki imzasız mesajlar reddedilir |
+| DH ratchet (DM, v4) | Her mesajda açık taşınan ephemeral X25519 public + karşı tarafın kimlik anahtarıyla DH çıktısı zincire karışır; adım 100 mesajda / 24 saatte bir yenilenir, ephemeral private atılır → **çalınan güncel zincir state'i bir sonraki adımdan itibaren geleceği üretemez** (forward secrecy DM'de tam). Alıcı stateless: mesaj başlığından zincir yeniden türetilebilir (F5/pagination/localStorage kaybı doğal) |
 | Ses/görüntü | Aynı kanal anahtarı → LiveKit SFrame (HKDF) — SFU opak bayt görür |
 | Anahtar epokları | `key_version`; eski epoklar saklanır → rotasyon öncesi geçmiş okunmaya devam eder |
-| Per-gönderici ratchet | `msg_key_i` zinciri `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir; güncel zincir kökü sızarsa geçmiş korunur (geri türetim yok — DH ratchet değil, bkz. tehdit modeli) |
+| Per-gönderici ratchet | `msg_key_i` zinciri `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir; güncel zincir kökü sızarsa geçmiş korunur (geri türetim yok). Kanal/gdm bu simetrik zincirde kalır (DH-rekey broadcast: Faz 5c); DM yukarıdaki v4 DH ratchet'tedir |
 | Mesaj padding | plaintext boyut bucket'larına (256 B / 1 KiB / 4 KiB / 4 KiB-adım) yuvarlanır — sunucu mesaj uzunluğundan içerik çıkarımı yapamaz |
 | Cihaz kilidi (ops.) | WebAuthn PRF'ten türeyen cihaz KEK'i ile blob IndexedDB'de — F5'te parmak izi, şifre fallback akışı korunur |
 | Anahtar defteri | public key'ler append-only hash zincirinde (`key_log`); istemci boot'ta zinciri doğrular, head damgası profilde bant dışı karşılaştırma için. İmza anahtarları da defterden dağıtılır — yalnız zincir bütünlüğü kanıtlanmış kayıtlar imza doğrulamasına beslenir |
 
-**Bilinen sınırlar (MVP):** MLS yok (simetrik ratchet var, DH ratchet yok — çıkarılan üye öncesi mesajları zaten görmüşse okur); tek kimlik blob'u (cihaz iptali yok); şifre **ve** kurtarma ifadesi ikisi birden kaybolursa hesap kurtarılamaz (ifade kurtarma verisi de kimlik gibi uçtan uca sarılı — sunucu açamaz); kanal anahtarı rotasyonu açık davet linklerini ve katılım şifresi anahtarlarını geçersiz kılar (yeni üretilmeli — başvuru onayı etkilenmez); ban, yeni nick açılmasını engellemez (e-postasız sistemde yapısal sınır — katılım şifresi buna karşı direnir); kanal adları/üye listesi/zaman damgaları/roller/davet metadata'sı sunucuya açıktır (içerik değil); **kaybolan mesajların `expires_at`'ı sunucu için görünür metadata'dır** (içerik değil, ömür bilgisi) — erişim + ömür sınırlaması client-side render + sunucu janitor kombinasyonudur, sunucu tarafı silme garanti edilir ama client'ta süreyi görme engellenmez; DB'de at-rest şifreleme (SQLCipher) bilinçli ertelendi — E2EE içeriği zaten koruyor, metadata katkısı marjinal, better-sqlite3 derlemesi imajı kırılganlaştırır. Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
+**Bilinen sınırlar (MVP):** MLS yok — PCS yok (DM'de DH ratchet'li sender-side FS: sızıntı penceresi 100 mesaj/24 sa; kanal/gdm simetrik ratchet, DH-rekey broadcast Faz 5c; çıkarılan üye öncesi mesajları zaten görmüşse okur; alıcı kimlik private'ı sızarsa gözlemlenen mesajlar açılır); tek kimlik blob'u (cihaz iptali yok); şifre **ve** kurtarma ifadesi ikisi birden kaybolursa hesap kurtarılamaz (ifade kurtarma verisi de kimlik gibi uçtan uca sarılı — sunucu açamaz); kanal anahtarı rotasyonu açık davet linklerini ve katılım şifresi anahtarlarını geçersiz kılar (yeni üretilmeli — başvuru onayı etkilenmez); ban, yeni nick açılmasını engellemez (e-postasız sistemde yapısal sınır — katılım şifresi buna karşı direnir); kanal adları/üye listesi/zaman damgaları/roller/davet metadata'sı sunucuya açıktır (içerik değil); **kaybolan mesajların `expires_at`'ı sunucu için görünür metadata'dır** (içerik değil, ömür bilgisi) — erişim + ömür sınırlaması client-side render + sunucu janitor kombinasyonudur, sunucu tarafı silme garanti edilir ama client'ta süreyi görme engellenmez; DB'de at-rest şifreleme (SQLCipher) bilinçli ertelendi — E2EE içeriği zaten koruyor, metadata katkısı marjinal, better-sqlite3 derlemesi imajı kırılganlaştırır. Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
 
 ## Mimari
 
@@ -299,7 +300,7 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Otomatik testler
 
 ```bash
-npm test    # 190 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 231 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
 ```
 
 - `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
@@ -315,6 +316,7 @@ npm test    # 190 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - `server/test/social.test.ts` — arkadaşlık, DM, grup DM rekey, WS canlı olay + sesli durum yayını
 - `server/test/boot.test.ts` — zayıf secret reddi, taze DB migration zinciri
 - `web/src/crypto/ratchet.test.ts` — per-gönderici ratchet: zincir tek yönlülüğü, index/AAD reddi, stateless yeniden türetim, out-of-order
+- `web/src/crypto/dh-ratchet.test.ts` — DH ratchet (v4): KAT vektörleri (`dh-ratchet.vectors.json`), FS/PCS-lite sızıntı simülasyonu (gönderici state sızıntısı → eski adım kapalı, sonraki adım güvenli), adım içi backward secrecy, out-of-order, tarama sınırı, AAD/imza/başlık takası negatifleri, self-update doğrulama
 - `web/src/crypto/devicekey.test.ts` — cihaz kilidi: blob sar/çöz, yanlış KEK/AAD reddi, enroll→unlock, PRF fallback
 - `web/src/lib/keytransparency.test.ts` — anahtar defteri: zincir bütünlüğü, kopuk/çelişkili head reddi, kendi kayıt kontrolü
 - `server/test/hardening.test.ts` — log hijyeni (query/IP düşmez), WS auth zaman aşımı (4004), login kademeli bloğu
@@ -343,7 +345,7 @@ npm test    # 190 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 ## Tehdit modeli ve bilinen sınırlar
 
 - **Model**: sunucu kör ama kötü olabilir; ağ pasif dinleyici değildir (TLS overlay ile).
-- **Forward secrecy kısmi** — per-gönderici simetrik ratchet: zincir kökü/msg_key sızarsa geçmiş korunur (geri türetim yok). Dürüst sınır: **epoch anahtarının kendisi** sızarsa zincir baştan türetilebilir (sender_id açık) — o riski epok rotasyonu sınırlar. Signal tarzı DH ratchet/MLS bekleyen kurul kararı.
+- **Forward secrecy**: DM'de **tam** — DH ratchet (v4): ephemeral private'lar adım sonunda atılır; göndericinin tüm durumu çalınsa bile önceki adımların mesajları çözülemez ve bir sonraki adımdan itibaren gelecek yeniden güvenlidir (sızıntı penceresi: 100 mesaj / 24 saat). Kanal/gdm'de per-gönderici **simetrik** ratchet: zincir kökü/msg_key sızarsa geçmiş korunur, gelecek epok rotasyonuna kadar korunur (DH-rekey broadcast: Faz 5c). Dürüst sınırlar: (i) epoch anahtarı sızarsa simetrik zincir baştan türetilebilir; (ii) **PCS yok** — alıcının kimlik private'ı sızarsa gözlemlenen DM'ler çözülür (stateless türetimin bedeli; Signal'de alıcıda da ileri silme vardır, burada yok); (iii) MLS değil — ele geçirilen cihazın *kaldırılması* + grup recovery Faz 5c/7 konusu.
 - **Web JS trust** — uygulama JS'i sunucudan dağıtılır; kötü niyetli/gözden geçirilmemiş sunucu değişmiş JS ile KEK'i çalabilir. Signed release/ayrı origin olmadan tarayıcı E2EE'de kapatılamaz — Faz 4 azaltımı: her `v*` tag'inde bundle SHA manifest'i GitHub Release'de yayınlanır, sunucudan inen JS ile karşılaştırılabilir ([Doğrulama](#doğrulama-js-integrity-release-manifest)); tam kapanmaz — kötü sunucu manifest'i de değiştirebilir. (KEK artık memory-only: reload'da şifre yeniden istenir; opsiyonel passkey cihaz kilidi blob'u cihaz donanımından türeyen anahtarla saklar — zararlı JS ancak aktif WebAuthn onayıyla kullanır, çalıp götüremez.)
 - **Sansür/sıralama** — kör sunucu mesaj gizleyebilir, sıralamayı ve timestamp'i manipüle edebilir (client timestamp + UUID AAD'ye bağlı, tespit edilebilir; gizleme engellenemez).
 - **Metadata** — sosyal graf (kim kiminle), zamanlama, mesaj boyutu (bucket padding'iyle seviyesi indirilir), presence, çağrı katılım/mute durumu sunucuda görünür.
@@ -368,7 +370,7 @@ npm test    # 190 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Sprint 1 — bütünlük: per-user limitler, pending rekey, LiveKit eviction, oturum düşürme
 - [x] Sprint 2 — TLS/HSTS + CSP + httpOnly çerez + WS dayanıklılık
 - [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
-- [x] Test turu — otomatik test + CI (bugün: 23 dosya, 206 test)
+- [x] Test turu — otomatik test + CI (bugün: 24 dosya, 231 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
 
 **Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):
@@ -378,7 +380,7 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 - [x] Faz 2 — kaybolan mesajlar (disappearing messages)
 - [x] Faz 3 — Tor hidden service rehberi (IP metadata)
 - [x] Faz 4 — signed release / reproducible build (JS trust azaltma)
-- [ ] Faz 5 — DH ratchet / MLS (tam forward secrecy; önce araştırma sprinti)
+- [ ] Faz 5 — DH ratchet (alt fazlar: 5a araştırma ✓, **5b DM v4 DH ratchet ✓**, 5c kanal/gdm DH-rekey, 5d ses anahtarı türetimi)
 - [ ] Faz 6 — key transparency gossip (anti-forking)
 - [ ] Faz 7 — çoklu cihaz (Faz 5 sonrası)
 - [ ] Faz 8 — threat model revizyonu + dış audit hazırlığı (v1.0.0)
