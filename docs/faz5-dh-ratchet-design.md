@@ -188,13 +188,41 @@ hâlâ defterdeyken kurban, YENİ bir DH anahtarı duyurup geleceği kurtarır:
 - **Yeniden değerlendirme**: duyurular TOFU+pin mantığıyla (`lib/keypins.ts`
   deseni) izlenir; defter head'iyle ilişkilendirme Faz 6 gossip'ine bırakılır.
 
-## 7. Ses anahtarı (5d için not)
+## 7. Ses anahtarı (5d'de uygulandı)
 
-Ses SFrame anahtarı bugün ham epok anahtarından LiveKit keyProvider'a
-geçer (`voiceStore`). DH ratchet zincirinden türetim (ör.
-`H(step_root ‖ 'voice')`) 5d'nin konusudur; DM araması DM anahtarını
-kullandığından DM sesi v4 zincirine bağlanabilir, kanal sesi 5c rekey
-broadcast'iyle birlikte değerlendirilir. Bu etapta ses yolunda DEĞİŞİKLİK YOK.
+SFrame anahtarı artık ham epok anahtarı değil, DH zinciri malzemesinden
+türetilir (`crypto/dhratchet.ts`):
+
+- `voice_seed = H(epok ‖ 'voice')`
+- `step_root = H(voice_seed ‖ 'dh' ‖ u32LE(0) ‖ DH_ÇIKTISI)` (bilinen `dhStepRoot`, j=0)
+- `ses_anahtarı = H(step_root ‖ 'voice')`
+
+DH_ÇIKTISI: kanal/gdm'de epok çapasının kendi üstündeki X25519'ü
+(`dhVoiceKeyAnchor` — tüm üyeler aynı), DM'de iki tarafın statik kimlik
+DH'i (`dhVoiceKeyDm` — A tarafı `(myPriv, peerPub)`, B tarafı tersi; aynı
+32B). Eski v1/v2/v3 epoklar ham anahtar türetiminde kalır — epok
+`version` alanı belirler, karışık ortamda her iki istemci aynı epoku aynı
+şekilde türetir.
+
+**Pin kararı (bilinçli): j=0 sabit, canlı adım rotasyonu YOK.** Gerekçe:
+DH adımları göndericiye özgüdür (adım j + göndericinin kendi ephemeral'ı);
+grup sesinde üyelerin üzerinde buluşacağı ortak bir "güncel adım" sayacı
+yoktur — adım başına rotasyon katılımcı başına sapma üretirdi. Ses anahtarı
+bu nedenle epok başına sabittir (arama başında pin), yalnız epok rekey'iyle
+döner (`channel:rotated` → türetilmiş anahtar `setKey`; atılan üye yeni
+ses anahtarını da türetemez). DM'de karşı tarafın kimlik anahtarı
+bulunamazsa eski türetimde kalınır (tek eski-istemci uyum durumu; türetim
+aksi halde iki tarafta deterministiktir).
+
+Aynı bölümün 5c uygulaması — self-update: duyuru yayını Ayarlar →
+Güvenlik'e taşındı (`SettingsModal` DhIdBlock: tek taze ephemeral tüm
+DM/gdm/kanal bağlamlarına, private asla kaydedilmez); alıcı tarafında
+**imza reddi** (`bad-signature`) kırmızı güvenlik bandı tetikler
+(`bandFromIngest`) — `malformed`/`unknown-sender` çöp frame sessiz
+düşer, bant spam'lenmez.
+
+KAT: `dh-ratchet.vectors.json` → `voice` bloğu (çapa türetimi, DM iki
+taraf, epok/alan ayrımı); `dh-ratchet.test.ts` bağımsız yeniden hesaplar.
 
 ## 8. Bilinen sınırlar (dürüst)
 

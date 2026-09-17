@@ -37,6 +37,18 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   ele geçirilen cihazın yerini alan kurban Ed25519 imzalı `dh_update`
   duyurusu yayınlar — sunucu yalnız opak relay (saklamaz/yorumlamaz),
   alıcı defter anahtarıyla doğrulayıp TOFU pin'ler (`76839cd`)
+- **Faz 5d — ses anahtarı DH zincirinden + self-update UI**: LiveKit SFrame
+  passphrase artık ham epok anahtarı değil — `H(step_root ‖ 'voice')` türetimi
+  (kanal sesi epok DH çapasının kendi üstündeki X25519'üne, DM araması iki
+  tarafın statik kimlik DH'ine bağlı; j=0 sabit — DH adımları göndericiye
+  özgü olduğundan grupça ortak "güncel adım" yoktur, ses anahtarı epok
+  başına sabittir ve rekey ile döner; eski v1/v2/v3 epoklar eski türetimde
+  kalır). Self-update Ayarlar → Güvenlik'e taşındı: tek tıkla yeni DH
+  kimliği tüm DM/gdm/kanal bağlamlarına imzalı duyuruyla yayınlanır;
+  imza doğrulamasını geçemeyen `dh_update` duyurusu kırmızı güvenlik
+  bandı tetikler (çöp frame sessiz reddeilir). KAT vektörleri: çapa/DM
+  türetimi, iki tarafın aynı anahtarı, epok ayrımı, alan ayrımı;
+  relay→ingest uçtan uca negatifleri
 
 ### Önceki sprintler (özet)
 
