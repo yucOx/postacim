@@ -39,6 +39,19 @@ export function chainSeed(epochKey: Uint8Array, senderId: string): Uint8Array {
   return H(new Uint8Array([...epochKey, ...enc.encode('ratchet'), ...enc.encode(senderId)]));
 }
 
+// --- Faz 5c: kanal/gdm DH çapası ---
+// Çoklu üyeli scope'ta spec §1'deki peer_static_pub rolünü epok anahtarından
+// deterministik türetilen grup DH çifti üstlenir: tüm üyeler aynı çifti
+// türettiğinden gönderici X25519(eph_priv_j, anchor_pub), alıcı
+// X25519(anchor_priv, başlıktaki dh_pub_j) ile AYNI 32B çıktıyı üretir —
+// stateless alıcı korunur, ek dağıtım/sarma gerekmez. Üye değişimi → rotate
+// (yeni epok anahtarı) çifte zincir tohumu + çapayı birlikte çevirir: atılan
+// üye eski epok bilgisiyle geleceği türetemez (DH-rekey broadcast, spec §6).
+export function dhAnchor(epochKey: Uint8Array): { publicKey: Uint8Array; privateKey: Uint8Array } {
+  const privateKey = H(new Uint8Array([...epochKey, ...enc.encode('dh-anchor')]));
+  return { privateKey, publicKey: sodium.crypto_scalarmult_base(privateKey) };
+}
+
 /** X25519 paylaşılan sırrı — tüm-sıfır çıktıda libsodium fırlatır (identity koruması) */
 export function dhShared(priv: Uint8Array, pub: Uint8Array): Uint8Array {
   return sodium.crypto_scalarmult(priv, pub);
