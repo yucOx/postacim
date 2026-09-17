@@ -26,5 +26,11 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/server/dist ./server/dist
 WORKDIR /app/server
+
+# Container içinde root olarak çalıştırma — escape vulnerability'de host
+# root olma riskini azaltır. node:22-slim image'ı 'node' user içerir (uid
+# 1000). /data volume'unun bu user'a yazılabilir olması gerekir
+# (deploy/data dizini 1000:1000 ile chown edilmiş olmalı).
+USER node
 EXPOSE 4000
 CMD ["node", "dist/index.js"]

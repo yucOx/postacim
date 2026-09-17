@@ -62,6 +62,16 @@ services:
       timeout: 5s
       retries: 3
     restart: unless-stopped
+    # Container hardening — escape yüzeyini küçült.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
 
   web:
     build:
@@ -80,6 +90,23 @@ services:
     depends_on:
       - server
     restart: unless-stopped
+    # Container hardening: sadece 80 portunu bind etme yetkisi + writable
+    # /tmp + /var/cache/nginx + /run (pid file). Diğer her şey read-only.
+    # Escape yüzeyini küçültür.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+      - /var/cache/nginx:size=32M
+      - /run:size=8M
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
 
   # Opsiyonel: Netdata (sistem izleme) — 2 vCPU/3 GB prod hedefinde
   # varsayılan KAPALI (~50-100 MB RAM + sürekli sys collector).
