@@ -141,72 +141,80 @@ export default function DmChat({ dmId }: { dmId: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-night-700 bg-night-900/40 px-4 py-2.5">
-        <button
-          onClick={showDmHome}
-          className="rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
-          title={t('dm.back')}
-          aria-label={t('dm.back')}
-        >
-          <ChevronLeft size={17} />
-        </button>
-        <span className="truncate font-display text-lg font-semibold uppercase tracking-[0.06em] text-paper-50" title={sub ?? undefined}>
-          {dm ? `@ ${title}` : <span className="inline-flex items-center gap-1.5"><Users size={15} className="text-brass-500" />{title}</span>}
-        </span>
-        <span className="sealed-band">
-          <ShieldCheck size={11} />
-          {t('dm.sealed')}
-        </span>
-        {gdm && (
-          <>
-            <button
-              onClick={() => setAdding(true)}
-              className="btn-ghost ml-auto !px-2 !py-1 !text-xs"
-              title={t('dm.addMember')}
-            >
-              <UserPlus size={13} />
-              {t('dm.addMemberLabel')}
-            </button>
-            <button
-              onClick={() => setShowLeave(true)}
-              className="btn-ghost !px-2 !py-1 !text-xs hover:!border-stamp-500/70 hover:!text-stamp-400"
-              title={t('dm.leaveTitle')}
-            >
-              <LogOut size={13} />
-              {t('dm.leave')}
-            </button>
-          </>
-        )}
-        {dm && (
-          <>
-            <button
-              onClick={() => void startDmCall(dmId, false).catch(() => {})}
-              disabled={callLocked}
-              className="btn-ghost ml-auto !px-2.5 !py-1 !text-xs"
-              title={callLocked && callChannelId === dmId ? t('dm.voiceCallActive') : t('dm.voiceCall')}
-            >
-              <Phone size={13} />
-              ara
-            </button>
-            <button
-              onClick={() => void startDmCall(dmId, true).catch(() => {})}
-              disabled={callLocked}
-              className="btn-ghost !px-2.5 !py-1 !text-xs"
-              title={callLocked && callChannelId === dmId ? t('dm.videoCallActive') : t('dm.videoCall')}
-            >
-              <Video size={13} />
-              görüntülü
-            </button>
-            <button
-              onClick={() => setSafety(true)}
-              className="btn-ghost !px-2.5 !py-1 !text-xs"
-              title={t('dm.safety')}
-            >
-              <Fingerprint size={13} />
-              {t('dm.safetyLabel')}
-            </button>
-          </>
-        )}
+      <div className="flex min-w-0 shrink-0 items-center justify-between gap-1.5 border-b border-night-700 bg-night-900/40 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+          <button
+            onClick={showDmHome}
+            className="shrink-0 rounded p-0.5 text-paper-500 transition-colors hover:text-paper-100"
+            title={t('dm.back')}
+            aria-label={t('dm.back')}
+          >
+            <ChevronLeft size={17} />
+          </button>
+          <span className="truncate font-display text-base font-semibold uppercase tracking-[0.06em] text-paper-50" title={sub ?? undefined}>
+            {dm ? `@ ${title}` : <span className="inline-flex items-center gap-1.5"><Users size={15} className="shrink-0 text-brass-500" />{title}</span>}
+          </span>
+          <span className="sealed-band hidden sm:inline-flex shrink-0">
+            <ShieldCheck size={11} />
+            {t('dm.sealed')}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {gdm && (
+            <>
+              <button
+                onClick={() => setAdding(true)}
+                className="btn-ghost !px-2 !py-1 !text-xs"
+                title={t('dm.addMember')}
+              >
+                <UserPlus size={13} />
+                <span className="hidden xl:inline">{t('dm.addMemberLabel')}</span>
+              </button>
+              <button
+                onClick={() => setShowLeave(true)}
+                className="btn-ghost !px-2 !py-1 !text-xs hover:!border-stamp-500/70 hover:!text-stamp-400"
+                title={t('dm.leaveTitle')}
+              >
+                <LogOut size={13} />
+                <span className="hidden xl:inline">{t('dm.leave')}</span>
+              </button>
+            </>
+          )}
+          {dm && (
+            <>
+              {callChannelId !== dmId && (
+                <>
+                  <button
+                    onClick={() => void startDmCall(dmId, false).catch(() => {})}
+                    disabled={callLocked}
+                    className="btn-ghost !px-2 !py-1 !text-xs"
+                    title={callLocked && callChannelId === dmId ? t('dm.voiceCallActive') : t('dm.voiceCall')}
+                  >
+                    <Phone size={13} />
+                    <span className="hidden 2xl:inline">ara</span>
+                  </button>
+                  <button
+                    onClick={() => void startDmCall(dmId, true).catch(() => {})}
+                    disabled={callLocked}
+                    className="btn-ghost !px-2 !py-1 !text-xs"
+                    title={callLocked && callChannelId === dmId ? t('dm.videoCallActive') : t('dm.videoCall')}
+                  >
+                    <Video size={13} />
+                    <span className="hidden 2xl:inline">görüntülü</span>
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setSafety(true)}
+                className="btn-ghost !px-2 !py-1 !text-xs"
+                title={t('dm.safety')}
+              >
+                <Fingerprint size={13} />
+                <span className="hidden xl:inline">{t('dm.safetyLabel')}</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
       {sub && <div className="truncate border-b border-night-700/60 px-4 py-1 text-[11px] text-paper-500">{sub}</div>}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto py-2">

@@ -9,7 +9,7 @@ import { dhParamsFor } from './dhstep';
 import { ReplayFilter } from '../lib/replay';
 import { notifyIncomingMessage } from '../lib/notify';
 import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/reactions';
-import { getSignKeys } from '../lib/signkeys';
+import { resolveSignKeys } from '../lib/signkeys';
 import { ttlSeconds } from './ttlStore';
 import { onServerEvent } from '../ws/socket';
 
@@ -133,8 +133,10 @@ function toDisplay(raw: ChatMessage): DmDisplayMessage {
         kind,
         bind,
         raw.sender_id,
-        // gönderen atfı: imza doğrulama + cutover bağlamı
-        { signPublicKey: getSignKeys(raw.sender_id), sentAt: raw.sent_at },
+        // gönderen atfı: imza doğrulama + cutover bağlamı. Kendi mesajımız için
+        // RAM'deki public yetiyor (KDF/password korumalı) — keytransparency
+        // sync beklenmeden decode başarır; başkaları için defter kullanılır.
+        { signPublicKey: resolveSignKeys(raw.sender_id, useAuthStore.getState().user?.id, useAuthStore.getState().signPublicKey), sentAt: raw.sent_at },
         ...(myPriv ? [{ myPriv }] : []),
       ).body,
       ...expiry,

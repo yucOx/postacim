@@ -4,7 +4,7 @@
 // gelen düz kolon DEĞİL. Bir kullanıcının birden çok kaydı olabilir (imza
 // anahtarı yenilenmesi) — hepsi saklanır, doğrulamada herhangi biri geçerli.
 import { fetchKeyLogPage, entryHash } from './keytransparency';
-import { unb64 } from '../crypto/bytes';
+import { b64, unb64 } from '../crypto/bytes';
 
 // userId → published sign public key'leri (b64)
 const byUser = new Map<string, string[]>();
@@ -28,6 +28,39 @@ export function getSignKeys(userId: string): Uint8Array[] | null {
   const list = byUser.get(userId);
   if (!list || list.length === 0) return null;
   return list.map(unb64);
+}
+
+/**
+ * Gönderen atfı için "kendi mesajımı kendim açar" kısayolu. Keytransparency
+ * defteri yalnız BAŞKALARININ imza anahtarları için güven kaynağı — kendi
+ * anahtarımız RAM'de zaten KDF/password ile korunan KEK'ten türediği için
+ * syncKeyLog tamamlanmadan da güvenli kabul edilir. Harita yine de
+ * birleştirilir: birden çok sign_public_key yayınladıysak (eski hesap
+ * kurtarma sonrası) hepsi geçerli sayılır.
+ */
+export function resolveSignKeys(
+  userId: string,
+  myUserId: string | undefined,
+  mySignPublicKey: Uint8Array | null | undefined,
+): Uint8Array[] | null {
+  const out: Uint8Array[] = [];
+  const seen = new Set<string>();
+  if (userId === myUserId && mySignPublicKey) {
+    const k = b64(mySignPublicKey);
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(mySignPublicKey);
+    }
+  }
+  const list = byUser.get(userId);
+  if (list) {
+    for (const k of list) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(unb64(k));
+    }
+  }
+  return out.length === 0 ? null : out;
 }
 
 /**
