@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { RoomContext, useTracks, useSpeakingParticipants, useIsSpeaking, ParticipantTile } from '@livekit/components-react';
+import { RoomContext, useTracks, useSpeakingParticipants, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import { Maximize2, Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { nickFor } from '../lib/nick';
+import { useSafeIsSpeaking } from '../lib/speaking';
 import Avatar from './Avatar';
 
 const WIDGET_W = 310; // w-[310px]
@@ -169,12 +170,12 @@ function PiPStage(): React.ReactNode {
     remoteTracks[0];
 
   const mainParticipant = pick?.participant;
-  const isMainSpeaking = useIsSpeaking(mainParticipant);
+  const isMainSpeaking = useSafeIsSpeaking(mainParticipant);
 
   // 2. Kendi küçük penceremiz (Discord self-view inset)
   const localCamTrack = tracks.find((t) => t.participant.isLocal && t.source === Track.Source.Camera && !(t.publication?.isMuted ?? false));
   const user = useAuthStore((s) => s.user);
-  const isSelfSpeaking = useIsSpeaking(useVoiceStore((s) => s.room?.localParticipant as Participant | undefined));
+  const isSelfSpeaking = useSafeIsSpeaking(useVoiceStore((s) => s.room?.localParticipant as Participant | undefined));
 
   return (
     <div className="relative h-44 w-full overflow-hidden bg-night-900 flex items-center justify-center">

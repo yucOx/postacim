@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsSpeaking, useIsMuted } from '@livekit/components-react';
+import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsMuted } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
@@ -7,6 +7,7 @@ import { MicOff, LayoutGrid, Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
 import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
+import { useSafeIsSpeaking } from '../lib/speaking';
 import Avatar from './Avatar';
 
 /** Remote mic audio — invisible <audio> elements. Without this nothing in the
@@ -161,7 +162,7 @@ function SpeakingTile({
   title,
   style,
 }: SpeakingTileProps): React.ReactNode {
-  const isSpeaking = useIsSpeaking(participant);
+  const isSpeaking = useSafeIsSpeaking(participant);
   const borderClass = !isScreen && isSpeaking
     ? 'border-emerald-500 ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
     : active
