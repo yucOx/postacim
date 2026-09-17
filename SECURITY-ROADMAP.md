@@ -171,15 +171,15 @@ Kalan: 5d ses anahtarı türetimi.
   hardening (sığ sınır, üye olmayan reddi, plaintext invariant). Spec:
   `docs/faz6-keygossip-design.md`.
 
-## Faz 7 — Çoklu cihaz
+## Faz 7 — Çoklu cihaz — tamamlandı
 
-**Kapatır:** "Tek kimlik blob'u (cihaz iptali yok)." Faz 5 MLS ise
-doğal yol: her cihaz bir MLS leaf; DH-ratchet seçildiyse: cihaz
-linking (QR/onay) + primary cihaz key şerhi + per-cihaz ratchet state.
-
-- Cihaz listesi UI, cihaz iptali (rekey zorunlu), güvenlik numarası
-  per-cihaz.
-- Bu faz Faz 5'in mimari kararına SIKI bağımlı — 5 bitmeden başlama.
+**Kapatır:** "Tek kimlik blob'u (cihaz iptali yok)." Faz 5 (c+) kararına
+sıkı bağlı: her cihaz X25519 + Ed25519 keypair (v3 blob: X25519 priv +
+Ed25519 priv + 16B device_id), per-cihaz DH step namespace, WS tabanlı
+linking flow, cihaz iptali = rekey zorunlu, per-cihaz fingerprint. Spec:
+`docs/faz7-multidevice-design.md`. Testler: 4 v3 blob + 3 per-cihaz DH
+step + 12 server (link/revoke flow, primary iptal reddi, token tek
+kullanımlık, başka user cihazı 404) — 274 → 293.
 
 ## Faz 8 — Kapanış: threat model revizyonu + dış audit hazırlığı
 
