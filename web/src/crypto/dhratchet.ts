@@ -122,10 +122,20 @@ export function nextDhStep(lastJ: number, index: number, now: number): DhStepSta
 }
 
 // --- gönderici adım sayacı (localStorage, sır değil) ---
-const stepKey = (channelId: string, version: number): string => `pgv.dhstep.${channelId}.${version}`;
+// Faz 7: per-cihaz namespace. Eski hesaplar (v1/v2 blob, deviceId null)
+// 'primary' alias'ını kullanır → ad alanı geriye uyumlu (eski tek-cihaz
+// hesabın DH step'i olduğu yerde durur). Yeni cihazlar b64(deviceId)
+// kullanır — farklı cihaz farklı adım sayacı, farklı ephemeral, farklı
+// DH pub (alıcı için ayrı gönderici).
+const stepKey = (channelId: string, version: number, deviceId: string): string =>
+  `pgv.dhstep.${channelId}.${version}.${deviceId || 'primary'}`;
 
-export function loadDhStep(channelId: string, version: number): DhStepState | null {
-  const raw = localStorage.getItem(stepKey(channelId, version));
+export function loadDhStep(
+  channelId: string,
+  version: number,
+  deviceId: string = '',
+): DhStepState | null {
+  const raw = localStorage.getItem(stepKey(channelId, version, deviceId));
   if (!raw) return null;
   try {
     const p = JSON.parse(raw) as DhStepState;
@@ -136,8 +146,13 @@ export function loadDhStep(channelId: string, version: number): DhStepState | nu
   }
 }
 
-export function saveDhStep(channelId: string, version: number, state: DhStepState): void {
-  localStorage.setItem(stepKey(channelId, version), JSON.stringify(state));
+export function saveDhStep(
+  channelId: string,
+  version: number,
+  state: DhStepState,
+  deviceId: string = '',
+): void {
+  localStorage.setItem(stepKey(channelId, version, deviceId), JSON.stringify(state));
 }
 
 // --- ses (SFrame) anahtarı — Faz 5d (spec §7) ---

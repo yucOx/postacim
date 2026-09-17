@@ -27,15 +27,17 @@ Akış: tarayıcı `web/` nginx'den yüklenir → `/api/*` server'a, `/ws` WS'e,
 9. BIP-39 kurtarma: 12 kelime → aynı Argon2id zinciri (`crypto/recovery.ts`) → identity blob ikinci kez sarılır (`recovery_blob`). Şifre kaybı hesap kaybı değil; ikisi de kaybolursa hesap kurtarılamaz. v1 kurtarma blob'u imza private key taşımaz → kurtarma sonrası yeni imza kimliği üretilir (deftere yeni satır — kanıtlı key değişimi)
 10. Cihaz kilidi (ops.): WebAuthn PRF'ten cihaz KEK'i → private key'ler + auth_material XChaCha20 ile sarılıp IndexedDB'ye (`pgv-device`, `crypto/devicekey.ts`) — F5'te parmak izi/PIN, şifre akışı fallback. Cihaz payload'u `sk` (Ed25519 private) içerir; eski kayıtlarda yoksa açılışta tamamlanır
 11. Anahtar defteri: kayıtta public key + imza public key `key_log`'a append-only satır düşer; istemci boot'ta `GET /keys/log` ile zinciri doğrular, kendi kaydını kontrol eder, head'i localStorage'a yazar (`lib/keytransparency.ts`); doğrulanmış zincirdeki imza anahtarları `lib/signkeys.ts` haritasına beslenir (artımlı tazeleme: `loadBootstrap` tetikli). **Faz 6 head gossip:** her istemci doğrulanmış head'ini 5dk'da bir (JIT tetikleme: `syncKeyLog` başarılı olunca anında bir yayın) üyesi olduğu topluluklara WS `keylog_head` ile yayar — sunucu opak relay; alıcı 4 durum makinesi (eşleşme/ileri/aynı-id-farklı-hash/biz-önde-uyuşmazlık) → son ikisi `keylogForkWarning` kırmızı bant tetikler (`lib/keygossip.ts`, `appStore.wireEvents`). Dürüst sınır: gözlemsel — tam CONIKS/Keybase MAP kanıt ağacı yok; tek online istemci hiçbir çelişki yakalayamaz, bant dışı damga karşılaştırması hâlâ en güçlü kanıt (spec: `docs/faz6-keygossip-design.md`).
+12. **Faz 7 çoklu cihaz:** her cihaz bağımsız X25519 + Ed25519 keypair taşır (kimlik blob'u v3: X25519 priv + Ed25519 priv + 16B device_id). Kullanıcı kimliği = `users` + `users_devices` (v17) — primary cihaz hesabı açan, linked cihazlar primary tarafından onaylanır. v1/v2 blob'lu eski hesaplar `deviceId = null` → primary alias (geriye uyumluluk). Per-cihaz DH step state: `localStorage.pgv.dhstep.${channelId}.${version}.${deviceId}` — aynı kullanıcının farklı cihazları farklı adım sayacı tutar, farklı ephemeral, farklı DH pub başlığı (alıcı için ayrı gönderici sayılır — F5 per-sender modelinin doğal uzantısı). Linking: WS tabanlı onay, MVP (`/devices/link/start` → joinee ephemeral pub → server link_token + primary'a `device:link_request` WS push → primary onay → `device:link_approved` joinee'e → joinee `device:link/finish` ile kimlik yazımı). Sunucu opak relay: private key ya da kimlik blob'u hiçbir noktada sunucudan geçmez. Cihaz iptali = rekey zorunlu: primary, hedef cihazı soft-delete + (planlanan identity rotation ile) tüm peer'lara yeni public key yayını. Sunucu invariant'ı korunur: `users_devices` yalnız public key + cihaz adı + linking durumu taşır (kimlik blob'u cihazda). Per-cihaz fingerprint: `fingerprintPair` aynı mantık — peer'ın `users_devices.public_key + sign_public_key`'i ile çalışır; primary ve joinee'lerin farklı sayıları olur. Detay: `docs/faz7-multidevice-design.md`.
 
 ## DB şeması
 
-Kaynak: `server/src/migrations.ts` (v1–v16, sıralı, `schema_version` tablosuyla takip). Tüm tablolar `server/src/db.ts` açar (WAL, FK açık).
+Kaynak: `server/src/migrations.ts` (v1–v17, sıralı, `schema_version` tablosuyla takip). Tüm tablolar `server/src/db.ts` açar (WAL, FK açık).
 
 | Tablo | Kolonlar | Amaç | Yazan/okuyan route'lar |
 |---|---|---|---|
 | `users` | `id` TEXT PK · `nick` TEXT UNIQUE NOCASE · `kdf_salt` TEXT · `verifier` TEXT · `public_key` TEXT · `sign_public_key` TEXT (n) · `key_blob` TEXT · `created_at` INT · `recovery_salt`/`recovery_blob`/`recovery_verifier` TEXT (n) · `avatar_data` BLOB (n) · `avatar_updated_at` INT (n) | Kimlik + argon2id verifier + KEK altında sarılı private key blob'ları (v2 blob: X25519 + Ed25519 private); imza public key dağıtım kolonu; kurtarma ikinci sarma; küçük avatar | auth (register/login/password/recovery/recover), keys (sign), users (pubkey/avatar/me DELETE) |
 | `key_log` | `id` INT PK AUTOINC · `user_id` TEXT (bilinçli FK değil — kanıt hesap silinse de kalır) · `public_key` TEXT · `sign_public_key` TEXT (n) · `prev_hash`/`entry_hash` TEXT · `created_at` INT · `idx_key_log_user` | Append-only public key defteri; `entry_hash = sha256(prev_hash ‖ '\x00' ‖ user_id ‖ '\x00' ‖ public_key)` (imza anahtarı varsa sonuna `‖ '\x00' ‖ sign_public_key`), genesis 64×'0' | keys (appendKeyLog — tek yazı yolu, yalnız INSERT), auth (register), boot (backfill), users (me DELETE dokunmaz) |
+| `users_devices` | `id` TEXT PK · `user_id` FK · `name` TEXT · `x25519_public_key` TEXT · `ed25519_public_key` TEXT (n — eski hesaplar) · `is_primary` INT · `linked_at` INT · `last_seen_at` INT (n) · `revoked_at` INT (n) · `idx_users_devices_user` (partial: `revoked_at IS NULL`) | Kullanıcının aktif cihazları — her cihaz bağımsız X25519 + Ed25519 public key + cihaz adı. Sunucu private key/identity blob SAKLAMAZ. Primary kayıt anında otomatik (`auth/register` tek transaction); linked cihazlar `/devices/link/finish` ile eklenir; iptal soft-delete (`revoked_at` set). ESKİ kullanıcılar v17 backfill ile `id = 'legacy_<uid>'` primary olarak yazılır (v1/v2 blob geriye uyumlu) | devices (GET/list/link/start/approve/finish/revoke), bootstrap (hydrate), auth (register primary ekler) |
 | `sessions` | `token_hash` TEXT PK (sha256) · `user_id` FK · `expires_at` INT · `created_at` INT | Oturum tokenları — ham token hiçbir yerde durmaz | auth (login/logout/password/recover), tüm auth hook (`index.ts`), janitor `pruneSessions` saatlik |
 | `communities` | `id` TEXT PK · `name` TEXT · `owner_id` FK · `created_at` INT · `join_kdf_salt`/`join_verifier` TEXT (n) | Topluluk + opsiyonel katılım şifresi argon2 verifier'ı | communities (create/join-password), bootstrap |
 | `members` | (`community_id`,`user_id`) PK · `role` CHECK(owner/admin/member) · `joined_at` INT | Üyelik + rol | communities (members/admins/bans/join-requests/approve), invites complete, access.ts |
@@ -68,7 +70,7 @@ Mesaj gönderim uçları (kanal/DM/grup) opsiyonel `expires_at` kabul eder — k
 | Uç | Amaç | Auth | Limit |
 |---|---|---|---|
 | GET `/auth/kdf-params?nick=` | istemci KDF salt'ı (bilinmeyen nick → pseudo-salt) | hayır | 20/dk |
-| POST `/auth/register` | hesap aç: kdf_salt + auth_material + public_key + key_blob (+ recovery, turnstile) | hayır | 3/sa |
+| POST `/auth/register` | hesap aç: kdf_salt + auth_material + public_key + sign_public_key + device_id + key_blob (+ recovery, turnstile) — v17: register anında primary cihaz satırı users_devices'e yazılır (id = `${userId}:primary`) | hayır | 3/sa |
 | POST `/auth/login` | auth_material verify → token + cookie + key_blob; pencere içi art arda hatada IP kademeli blok (1→15 dk) | hayır | 5/dk |
 | GET `/auth/me` | reload sonrası oturum/blob geri yükleme | evet | — |
 | POST `/auth/logout` | oturum iptali + çerez sil | evet | — |
@@ -84,7 +86,17 @@ Mesaj gönderim uçları (kanal/DM/grup) opsiyonel `expires_at` kabul eder — k
 
 | Uç | Amaç | Auth |
 |---|---|---|
-| GET `/bootstrap` | tüm uygulama hidrasyonu: topluluklar + üyeler + kanallar + güncel epok sarılı anahtarlarım + public key'ler + arkadaşlar + DM'ler + grup DM'ler | evet |
+| GET `/bootstrap` | tüm uygulama hidrasyonu: topluluklar + üyeler + kanallar + güncel epok sarılı anahtarlarım + public key'ler + arkadaşlar + DM'ler + grup DM'ler + cihazlar | evet |
+
+### Cihazlar (`routes/devices.ts`) — Faz 7
+
+| Uç | Amaç | Auth | Limit |
+|---|---|---|---|
+| GET `/devices` | kullanıcının aktif cihaz listesi (id, name, public keys, is_primary, linked_at, last_seen_at) | evet | 60/dk |
+| POST `/devices/link/start` | joinee: ephemeral X25519 pub + cihaz adı → opak link_token + WS ile primary'a `device:link_request` | evet | 5/sa |
+| POST `/devices/link/approve` | primary: link_token + Ed25519 imzalı approval → WS ile joinee'e `device:link_approved` (sunucu approval'ı yorumlamaz, opak taşır) | evet + primary only | 10/sa |
+| POST `/devices/link/finish` | joinee: link_token + name + x25519_public_key + ed25519_public_key → users_devices INSERT + WS primary'a `device:link_completed` | evet | 5/sa |
+| POST `/devices/:id/revoke` | primary: cihaz iptali (soft-delete, primary iptal edilemez 400) + WS tüm kullanıcıya `device:revoked` | evet + primary only | 10/sa |
 
 ### Topluluklar (`routes/communities.ts`)
 

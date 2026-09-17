@@ -27,6 +27,7 @@ import { dmRoutes } from './routes/dms.js';
 import { gdmRoutes } from './routes/gdms.js';
 import { userRoutes } from './routes/users.js';
 import { keyRoutes, backfillKeyLog } from './routes/keys.js';
+import { deviceRoutes } from './routes/devices.js';
 import { attachWs } from './ws/index.js';
 import { expireExpiredMessages } from './lib/expire.js';
 
@@ -113,6 +114,7 @@ await app.register(dmRoutes, { prefix: '/api' });
 await app.register(userRoutes, { prefix: '/api' });
 await app.register(gdmRoutes, { prefix: '/api' });
 await app.register(keyRoutes, { prefix: '/api' });
+await app.register(deviceRoutes, { prefix: '/api' });
 
 // anahtar defteri: özellikten önce kaydolmuş hesaplar için eksik satırları
 // işle (tek yazı yolu appendKeyLog — sadece ekler)

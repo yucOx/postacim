@@ -63,6 +63,30 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   dışı damga karşılaştırmasıdır. Spec: `docs/faz6-keygossip-design.md`.
   Testler: 12 birim (reducer + hardening) + 7 server (relay invariant
   + sığ sınır + plaintext invariant) — 255 → 274
+- **Faz 7 — çoklu cihaz (per-cihaz X25519 + Ed25519)**: her cihaz
+  bağımsız keypair (kimlik blob'u v3 = X25519 priv + Ed25519 priv + 16B
+  device_id); kullanıcı kimliği = `users` + `users_devices` (v17) — primary
+  kayıt anında, linked cihazlar primary tarafından onaylanır. Sunucu
+  private key/identity blob saklamaz; yalnız public key + cihaz adı + linking
+  durumu. Cihaz iptali = rekey zorunlu: iptal edilen cihaz yeni mesajları
+  açamaz (eski private yeni DH çıktısını üretemez), eski mesajlar eski
+  anahtarla okunur. Per-cihaz DH step namespace: aynı kullanıcının farklı
+  cihazları farklı adım sayacı tutar, farklı ephemeral, farklı DH pub
+  başlığı (alıcı için ayrı gönderici sayılır — F5 per-sender modelinin
+  doğal uzantısı). Per-cihaz fingerprint: `fingerprintPair` aynı mantık;
+  primary ve linked cihazlar farklı sayılar üretir. Linking akışı WS
+  tabanlı (MVP): joinee `/devices/link/start` (ephemeral pub) → server
+  link_token + primary'a `device:link_request` WS push → primary onay
+  (`/devices/link/approve` + Ed25519 imzalı approval) → joinee
+  `device:link_approved` event'i alır → `/devices/link/finish` ile kimlik
+  yazımı. **Dürüst sınırlar:** linking sırasında iki cihaz online olmalı
+  (async QR/off-band linking roadmap'te); primary cihazın tam kaybı
+  hesap erişimini kilitler (kurtarma ifadesi tek çıkış); MLS değil
+  (Faz 5 + 6 kararı korundu). v1/v2 blob'lu eski hesaplar `deviceId = null`
+  → primary alias (geriye uyumluluk). Testler: 4 v3 blob + 3 per-cihaz DH
+  step + 12 server (link/revoke flow, primary iptal reddi, token tek
+  kullanımlık, başka user cihazı 404) — 274 → 293. Spec:
+  `docs/faz7-multidevice-design.md`.
 
 ### Önceki sprintler (özet)
 

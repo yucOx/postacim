@@ -350,4 +350,29 @@ ALTER TABLE messages ADD COLUMN expires_at INTEGER;
 ALTER TABLE dm_messages ADD COLUMN expires_at INTEGER;
 ALTER TABLE gdm_messages ADD COLUMN expires_at INTEGER;
 `,
+  // v17 — çoklu cihaz (Faz 7): her cihaz bağımsız X25519 + Ed25519 keypair
+  // taşır. `users_devices` kullanıcının aktif cihazlarını listeler; primary
+  // cihaz hesabı açandır, diğerleri primary tarafından onaylanır. Sunucu
+  // yalnız public key + cihaz adı saklar (kimlik blob'u primary'da; cihaz
+  // blob'u cihazda). Backfill: mevcut tek-cihaz hesaplar `id = 'legacy_<uid>'`
+  // olarak primary olarak yazılır — v1/v2 blob'lar cihaz iptaline kadar
+  // primary muamelesi görür (identity blob'taki device_id eksik → primary).
+  // (bkz. docs/faz7-multidevice-design.md)
+  `
+CREATE TABLE users_devices(
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  x25519_public_key TEXT NOT NULL,
+  ed25519_public_key TEXT,
+  is_primary INTEGER NOT NULL DEFAULT 0,
+  linked_at INTEGER NOT NULL,
+  last_seen_at INTEGER,
+  revoked_at INTEGER
+);
+CREATE INDEX idx_users_devices_user ON users_devices(user_id) WHERE revoked_at IS NULL;
+INSERT INTO users_devices(id, user_id, name, x25519_public_key, ed25519_public_key, is_primary, linked_at)
+  SELECT 'legacy_' || id, id, nick, public_key, sign_public_key, 1, created_at
+  FROM users;
+`,
 ];

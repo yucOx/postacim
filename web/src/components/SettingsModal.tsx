@@ -6,8 +6,10 @@ import {
   Fingerprint,
   KeyRound,
   MonitorUp,
+  Monitor,
   RefreshCcw,
   ShieldCheck,
+  Trash2,
   User,
   X,
 } from 'lucide-react';
@@ -21,13 +23,17 @@ import { useT } from '../i18n/I18nProvider';
 import { useAuthStore } from '../state/authStore';
 import { useAppStore } from '../state/appStore';
 import { useSecurityStore } from '../state/securityStore';
+import { useDeviceStore, type DeviceInfo } from '../state/deviceStore';
 import { wsSend } from '../ws/socket';
 import { newDhEphemeral } from '../crypto/dhratchet';
 import { encodeDhUpdatePayload } from '../lib/dhupdate';
 import { generateMnemonic, quizPositions } from '../crypto/bip39';
 import { deviceUnlockSupported, hasDeviceUnlock } from '../crypto/devicekey';
+import { generateIdentity, generateSignIdentity, sealIdentityBlob } from '../crypto/identity';
+import { b64, unb64 } from '../crypto/bytes';
+import { shortFingerprint } from '../crypto/fingerprint';
 
-type Tab = 'account' | 'security' | 'notifications';
+type Tab = 'account' | 'security' | 'devices' | 'notifications';
 
 /** Kapsamlı ayarlar: Hesap (profil özet + anahtar defteri durumu), Güvenlik
  *  (passkey, kurtarma ifadesi, şifre değiştir), Bildirimler (ses, masaüstü,
@@ -46,12 +52,16 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
           <TabBtn id="security" current={tab} onPick={setTab} icon={<ShieldCheck size={13} />}>
             {t('settings.tabs.security')}
           </TabBtn>
+          <TabBtn id="devices" current={tab} onPick={setTab} icon={<Monitor size={13} />}>
+            {t('settings.tabs.devices')}
+          </TabBtn>
           <TabBtn id="notifications" current={tab} onPick={setTab} icon={<Bell size={13} />}>
             {t('settings.tabs.notifications')}
           </TabBtn>
         </div>
         {tab === 'account' && <AccountTab />}
         {tab === 'security' && <SecurityTab />}
+        {tab === 'devices' && <DevicesTab />}
         {tab === 'notifications' && <NotificationsTab />}
       </div>
     </Modal>
@@ -542,6 +552,362 @@ function PasswordInline({ onBack }: { onBack: () => void }): React.ReactNode {
         </>
       )}
     </div>
+  );
+}
+
+// ---------- Cihazlar sekmesi ----------
+
+function DevicesTab(): React.ReactNode {
+  const { t } = useT();
+  const devices = useDeviceStore((s) => s.devices);
+  const pendingLink = useDeviceStore((s) => s.pendingLink);
+  const ownLinkInProgress = useDeviceStore((s) => s.ownLinkInProgress);
+  const loadDevices = useDeviceStore((s) => s.loadDevices);
+  const revokeDevice = useDeviceStore((s) => s.revokeDevice);
+  const [linkMode, setLinkMode] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<DeviceInfo | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (devices.length === 0) void loadDevices();
+  }, [devices.length, loadDevices]);
+
+  // primary onay/red modalı otomatik açılır
+  useEffect(() => {
+    if (pendingLink) setLinkMode(true);
+  }, [pendingLink]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-md border border-night-700 bg-night-900 p-3 text-sm">
+        <div className="flex items-start gap-2.5">
+          <Monitor size={18} className="mt-0.5 shrink-0 text-lamp-500" />
+          <div className="flex-1">
+            <div className="text-sm text-paper-100">{t('settings.devices.title')}</div>
+            <p className="mt-0.5 text-[11px] text-paper-500">{t('settings.devices.hint')}</p>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <p className="rounded border border-stamp-500/60 bg-stamp-100 px-2 py-1 text-xs text-stamp-400">
+          {error}
+        </p>
+      )}
+      {success && (
+        <p className="rounded border border-lamp-500/60 bg-lamp-100/40 px-2 py-1 text-xs text-lamp-300">
+          {success}
+        </p>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        {devices.length === 0 ? (
+          <p className="px-2 py-3 text-center text-xs text-paper-500">{t('settings.devices.noDevices')}</p>
+        ) : (
+          devices.map((d) => (
+            <DeviceRow
+              key={d.id}
+              device={d}
+              onRevoke={(dev) => setRevoking(dev)}
+            />
+          ))
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setLinkMode(true)}
+        disabled={ownLinkInProgress || busy}
+        className="btn-lamp !text-xs"
+      >
+        {ownLinkInProgress ? t('settings.devices.linkInProgress') : t('settings.devices.linkBtn')}
+      </button>
+
+      {linkMode && (
+        <LinkModal
+          onClose={() => {
+            setLinkMode(false);
+            useDeviceStore.getState().setPendingLink(null);
+          }}
+          onError={(e) => setError(e)}
+        />
+      )}
+      {revoking && (
+        <RevokeConfirm
+          device={revoking}
+          onConfirm={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await revokeDevice(revoking.id);
+              setSuccess(t('settings.devices.revokeDone'));
+            } catch (e) {
+              setError(e instanceof Error ? e.message : t('settings.devices.revokeFailed'));
+            } finally {
+              setBusy(false);
+              setRevoking(null);
+            }
+          }}
+          onCancel={() => setRevoking(null)}
+          busy={busy}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeviceRow({ device, onRevoke }: { device: DeviceInfo; onRevoke: (d: DeviceInfo) => void }): React.ReactNode {
+  const { t } = useT();
+  return (
+    <div className="flex items-center gap-2.5 rounded border border-night-700 bg-night-900 px-3 py-2">
+      <Monitor size={16} className="shrink-0 text-paper-500" />
+      <div className="flex-1 text-sm">
+        <div className="text-paper-100">
+          {device.name}
+          {device.is_primary === 1 && (
+            <span className="ml-1.5 rounded bg-lamp-100 px-1 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.14em] text-lamp-300">
+              {t('settings.devices.primary')}
+            </span>
+          )}
+        </div>
+        <div className="text-[10px] text-paper-500">
+          {shortFingerprint(unb64(device.x25519_public_key))} ·{' '}
+          {t('settings.devices.linkedAt', { when: new Date(device.linked_at).toLocaleDateString() })}
+        </div>
+      </div>
+      {device.is_primary !== 1 && (
+        <button
+          type="button"
+          onClick={() => onRevoke(device)}
+          className="btn-ghost !text-xs"
+          aria-label={t('settings.devices.revokeBtn')}
+        >
+          <Trash2 size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Primary cihazda: device:link_request WS event'i tetikler, bu modal otomatik
+// açılır (pendingLink state). Joinee tarafında: yeni cihaz butonu modal açar,
+// yeni keypair üretip sunucuya /devices/link/start gönderir, sonra
+// device:link_approved event'ini dinler.
+function LinkModal({ onClose, onError }: { onClose: () => void; onError: (e: string) => void }): React.ReactNode {
+  const { t } = useT();
+  const pendingLink = useDeviceStore((s) => s.pendingLink);
+  const approveLink = useDeviceStore((s) => s.approveLink);
+  const declineLink = useDeviceStore((s) => s.declineLink);
+  const finishLink = useDeviceStore((s) => s.finishLink);
+  const auth = useAuthStore.getState();
+  const loadBootstrap = useAppStore((s) => s.loadBootstrap);
+  const [phase, setPhase] = useState<'idle' | 'starting' | 'waiting' | 'approved' | 'completed'>(
+    pendingLink ? 'approved' : 'idle',
+  );
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [approved, setApproved] = useState<{ link_token: string; approval: string } | null>(null);
+  const [completed, setCompleted] = useState<string | null>(null);
+
+  // primary onay akışı: pendingLink göründüğünde otomatik onay butonu aç
+  if (pendingLink && phase === 'idle') setPhase('approved');
+
+  // joinee: başlat butonu
+  const start = async (): Promise<void> => {
+    setPhase('starting');
+    onError('');
+    try {
+      // 1) yeni cihaz keypair + deviceId üret
+      const id = generateIdentity();
+      const sign = generateSignIdentity();
+      const newDeviceId = window.crypto.getRandomValues(new Uint8Array(16));
+      // joinee'in kimliğini client-side üretiyoruz; sunucuya yalnız
+      // public key'leri + link_token yazacağız
+      // ephemeral keypair linking için
+      const eph = newDhEphemeral();
+      const r = await fetch('/api/devices/link/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${auth.user ? '' : ''}`, // cookie tabanlı
+        },
+        body: JSON.stringify({ name: 'new device', ephemeral_pub: b64(eph.publicKey) }),
+        credentials: 'same-origin',
+      });
+      if (!r.ok) throw new Error(`link start: ${r.status}`);
+      const j = (await r.json()) as { link_token: string };
+      setLinkToken(j.link_token);
+      // joinee'in kendi public key'lerini geçici sakla (finish'te kullanılacak)
+      sessionStorage.setItem(
+        'pgv:device-link',
+        JSON.stringify({
+          link_token: j.link_token,
+          x25519_pub: b64(id.publicKey),
+          ed25519_pub: b64(sign.signPublicKey),
+          x25519_priv: b64(id.privateKey),
+          ed25519_priv: b64(sign.signPrivateKey),
+          device_id: b64(newDeviceId),
+          eph_priv: b64(eph.privateKey),
+        }),
+      );
+      setPhase('waiting');
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'link start failed');
+      setPhase('idle');
+    }
+  };
+
+  // joinee: device:link_approved event'ini dinle
+  useEffect(() => {
+    if (phase !== 'waiting') return;
+    const handler = (ev: Event): void => {
+      const detail = (ev as CustomEvent<{ link_token: string; approval: string }>).detail;
+      setApproved(detail);
+      setPhase('approved');
+    };
+    window.addEventListener('pgv:device-link-approved', handler);
+    return () => window.removeEventListener('pgv:device-link-approved', handler);
+  }, [phase]);
+
+  // joinee: approval geldi → finishLink
+  useEffect(() => {
+    if (phase !== 'approved' || !approved || pendingLink) return;
+    void (async () => {
+      try {
+        const stored = sessionStorage.getItem('pgv:device-link');
+        if (!stored) throw new Error('link state lost');
+        const parsed = JSON.parse(stored) as {
+          link_token: string;
+          x25519_pub: string;
+          ed25519_pub: string;
+        };
+        if (parsed.link_token !== approved.link_token) return;
+        const j = await finishLink({
+          link_token: approved.link_token,
+          x25519_public_key: parsed.x25519_pub,
+          ed25519_public_key: parsed.ed25519_pub,
+        });
+        setCompleted(j.device_id);
+        setPhase('completed');
+        await loadBootstrap();
+      } catch (e) {
+        onError(e instanceof Error ? e.message : 'finish failed');
+        setPhase('idle');
+      }
+    })();
+  }, [phase, approved, pendingLink, finishLink, loadBootstrap, onError]);
+
+  // primary: pendingLink göründüğünde approval üret
+  const approve = async (): Promise<void> => {
+    if (!pendingLink) return;
+    // primary kendi X25519 private + joinee ephemeral pub → shared secret;
+    // Ed25519 imzasıyla approval üret. MVP: basit imza.
+    // (Production: shared secret'i HKDF ile türet, imzaya nonce ekle.)
+    try {
+      const myPriv = auth.privateKey;
+      const mySign = auth.signPrivateKey;
+      if (!myPriv || !mySign) throw new Error('imza anahtarı yok');
+      const ephPub = unb64(pendingLink.ephemeral_pub);
+      // shared secret türet
+      const { sodium } = await import('../crypto/sodium');
+      await sodium;
+      const shared = sodium.crypto_scalarmult(myPriv, ephPub);
+      // approval = sign(shared || ephemeral_pub)
+      const enc = new TextEncoder();
+      const msg = enc.encode(b64(shared) + pendingLink.ephemeral_pub);
+      const sig = sodium.crypto_sign_detached(msg, mySign);
+      // primary'ın kendi public key'ini de ekleyelim ki joinee DH'yi türetebilsin
+      const myPub = auth.publicKey;
+      if (!myPub) throw new Error('public key yok');
+      const approval = b64(sig) + '.' + b64(myPub);
+      await approveLink(pendingLink.device_id, approval);
+      onClose();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'approve failed');
+    }
+  };
+
+  if (pendingLink) {
+    // primary onay modu
+    return (
+      <Modal title={t('settings.devices.linkRequestTitle')} onClose={onClose}>
+        <div className="flex w-80 flex-col gap-3 text-sm text-paper-200">
+          <p>{t('settings.devices.linkRequestBody', { name: pendingLink.device_name })}</p>
+          <p className="text-[11px] text-paper-500">{t('settings.devices.linkRequestHint')}</p>
+          <div className="rounded border border-night-700 bg-night-950 px-3 py-2 font-mono text-xs text-lamp-300">
+            {shortFingerprint(unb64(pendingLink.ephemeral_pub))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost flex-1">{t('settings.devices.linkDecline')}</button>
+            <button
+              onClick={() => void approve()}
+              className="btn-lamp flex-1"
+            >
+              {t('settings.devices.linkApprove')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  // joinee akışı
+  if (phase === 'idle') {
+    return (
+      <Modal title={t('settings.devices.linkBtn')} onClose={onClose}>
+        <div className="flex w-80 flex-col gap-3 text-sm text-paper-200">
+          <p className="text-[11px] text-paper-500">
+            Bu cihazda yeni bir hesap bağlantısı başlatılır. Diğer cihazınızda bu hesap zaten açık olmalı.
+          </p>
+          <button onClick={() => void start()} className="btn-lamp">{t('settings.devices.linkBtn')}</button>
+          <button onClick={onClose} className="btn-ghost">{t('settings.devices.linkDecline')}</button>
+        </div>
+      </Modal>
+    );
+  }
+  if (phase === 'starting' || phase === 'waiting') {
+    return (
+      <Modal title={t('settings.devices.linkBtn')} onClose={onClose}>
+        <div className="flex w-80 flex-col gap-3 text-sm text-paper-200">
+          <p>{t('settings.devices.linkInProgress')}…</p>
+        </div>
+      </Modal>
+    );
+  }
+  if (phase === 'completed') {
+    return (
+      <Modal title={t('settings.devices.linkApprovedTitle')} onClose={onClose}>
+        <div className="flex w-80 flex-col gap-3 text-sm text-paper-200">
+          <p className="text-lamp-300">{t('settings.devices.linkApprovedBody', { name: 'new device' })}</p>
+          <button onClick={onClose} className="btn-lamp">OK</button>
+        </div>
+      </Modal>
+    );
+  }
+  return null;
+}
+
+function RevokeConfirm({
+  device,
+  onConfirm,
+  onCancel,
+  busy,
+}: {
+  device: DeviceInfo;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy: boolean;
+}): React.ReactNode {
+  const { t } = useT();
+  return (
+    <ConfirmDialog
+      title={t('settings.devices.revokeTitle', { name: device.name })}
+      message={t('settings.devices.revokeMsg')}
+      confirmLabel={busy ? '…' : t('settings.devices.revokeConfirm')}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }
 

@@ -57,7 +57,7 @@ describe('identity seal/wrap', () => {
     const { kek: kek1 } = await deriveKeys('a', newKdfSaltHex());
     const { kek: kek2 } = await deriveKeys('b', newKdfSaltHex());
     const blob = sealIdentityBlob(id.privateKey, kek1);
-    expect(openIdentityBlob(blob, kek1)).toEqual({ privateKey: id.privateKey, signPrivateKey: null });
+    expect(openIdentityBlob(blob, kek1)).toEqual({ privateKey: id.privateKey, signPrivateKey: null, deviceId: null });
     expect(() => openIdentityBlob(blob, kek2)).toThrow();
   });
   it('v2 blob carries the sign key; wrong KEK still rejected', async () => {
@@ -66,7 +66,7 @@ describe('identity seal/wrap', () => {
     const { kek } = await deriveKeys('a', newKdfSaltHex());
     const { kek: kek2 } = await deriveKeys('b', newKdfSaltHex());
     const blob = sealIdentityBlob(id.privateKey, kek, sign.signPrivateKey);
-    expect(openIdentityBlob(blob, kek)).toEqual({ privateKey: id.privateKey, signPrivateKey: sign.signPrivateKey });
+    expect(openIdentityBlob(blob, kek)).toEqual({ privateKey: id.privateKey, signPrivateKey: sign.signPrivateKey, deviceId: null });
     expect(signPublicKeyFromPrivate(sign.signPrivateKey)).toEqual(sign.signPublicKey);
     expect(() => openIdentityBlob(blob, kek2)).toThrow();
   });
