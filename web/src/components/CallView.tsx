@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { RoomContext } from '@livekit/components-react';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, MessageSquare, Minimize2 } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
@@ -8,6 +8,7 @@ import { PigeonMark } from './Brand';
 import CallControls from './CallControls';
 import CallStage from './CallStage';
 import CallQualityPicker from './CallQualityPicker';
+import DmChat from './DmChat';
 
 /** 1:1 DM call surface — fullscreen overlay; minimize hands the room to the PiP corner
  *  so the chat underneath stays fully usable during the call. */
@@ -21,6 +22,7 @@ export default function CallView(): React.ReactNode {
   const dms = useAppStore((s) => s.dms);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
+  const [showChat, setShowChat] = useState(false);
 
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -59,8 +61,17 @@ export default function CallView(): React.ReactNode {
         <span className="font-display text-base font-semibold uppercase tracking-[0.08em] text-paper-50">{peerNick}</span>
         <span className="sealed-band">{status}</span>
         <button
+          onClick={() => setShowChat((v) => !v)}
+          className={`btn-ghost ml-auto !px-2 !py-1 ${showChat ? 'bg-night-800 text-paper-50 border-brass-600' : ''}`}
+          title={showChat ? 'Sohbeti Gizle' : 'Sohbeti Göster'}
+          aria-label={showChat ? 'Sohbeti Gizle' : 'Sohbeti Göster'}
+        >
+          <MessageSquare size={14} />
+          <span className="hidden sm:inline text-xs">{showChat ? 'Sohbeti Gizle' : 'Sohbet'}</span>
+        </button>
+        <button
           onClick={() => void toggleFullscreen()}
-          className="btn-ghost ml-auto !px-2 !py-1"
+          className="btn-ghost !px-2 !py-1"
           title={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
           aria-label={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
         >
@@ -83,19 +94,18 @@ export default function CallView(): React.ReactNode {
           <p className="text-sm">{t('call.connecting')}</p>
         </div>
       ) : (
-        // CallStage + alt kontroller ana sütunda — CallStage flex-1 ile kalan
-        // yüksekliği alır; min-h-0 kardeşler içermezse içerideki dikey
-        // yerleşim viewport'a sığar
         <RoomContext.Provider value={room}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {/* CallStage fragment döndürüyor; sarmalayıcı olmadan içerideki
-                flex-1 ebeveyne göre sıfır kalıp sahnenin yüksekliği içeriğe
-                göre şişer, viewport taşar. Sarmalayıcı flex-col: CallStage
-                parçaları (RemoteAudio, ShareAudio, ana div) direkt çocuk olur;
-                ana div flex-1'i kalan yeri kaplar. */}
-            <CallStage />
-            <CallQualityPicker />
-            <CallControls variant="call" onEnd={() => void cancelCall()} endLabel={t('call.end')} onMinimize={() => setPip(true)} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <CallStage />
+              <CallQualityPicker />
+              <CallControls variant="call" onEnd={() => void cancelCall()} endLabel={t('call.end')} onMinimize={() => setPip(true)} />
+            </div>
+            {showChat && (
+              <div className="flex w-80 md:w-96 shrink-0 flex-col border-l border-night-700 bg-night-900 overflow-hidden">
+                <DmChat dmId={callState.channelId} />
+              </div>
+            )}
           </div>
         </RoomContext.Provider>
       )}

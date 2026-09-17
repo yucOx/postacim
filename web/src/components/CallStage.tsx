@@ -3,7 +3,7 @@ import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsSpeaking,
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
-import { MicOff, Volume2, VolumeX } from 'lucide-react';
+import { MicOff, LayoutGrid, Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
 import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
@@ -698,6 +698,18 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 }}
                 overlay={
                   <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        releaseSpot();
+                      }}
+                      className="flex items-center gap-1 rounded-md border border-night-700 bg-night-950/85 px-2 py-1 text-xs font-semibold text-paper-300 transition-colors hover:text-paper-100"
+                      title="Izgara görünümüne dön"
+                    >
+                      <LayoutGrid size={13} />
+                      <span>Izgara</span>
+                    </button>
                     {focusedVideo.trackRef.participant.isLocal && stopBtn(false)}
                     {focusedVideo.isScreen && !focusedVideo.trackRef.participant.isLocal && (
                       <button
