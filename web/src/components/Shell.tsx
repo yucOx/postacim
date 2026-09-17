@@ -59,6 +59,7 @@ export default function Shell() {
   const dmMessages = useDmChatStore((s) => s.messages);
   useUnreadStore((s) => s.readMap);
   const keylogWarning = useSecurityStore((s) => s.keylogWarning);
+  const keylogForkWarning = useSecurityStore((s) => s.keylogForkWarning);
   const dhUpdateWarning = useSecurityStore((s) => s.dhUpdateWarning);
 
   // browser-tab badge: total unread DMs
@@ -253,6 +254,15 @@ export default function Shell() {
       {dhUpdateWarning && (
         <div className="shrink-0 border-b border-stamp-500/70 bg-stamp-100 px-3 py-1.5">
           <p className="text-xs font-semibold text-stamp-400">{t('shell.dhUpdateWarning')}</p>
+        </div>
+      )}
+
+      {/* Faz 6: başka bir istemci farklı anahtar defteri head'i gördü —
+          fork kanıtı (gözlemsel). Daha düşük panik tonu, farklı eylem
+          önerisi (bant dışı damga karşılaştırması) */}
+      {keylogForkWarning && (
+        <div className="shrink-0 border-b border-stamp-500/70 bg-stamp-100 px-3 py-1.5">
+          <p className="text-xs font-semibold text-stamp-400">{t('shell.keylogForkWarning')}</p>
         </div>
       )}
 

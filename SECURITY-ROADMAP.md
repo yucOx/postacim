@@ -155,17 +155,21 @@ Kalan: 5d ses anahtarı türetimi.
 - Test: Signal spec'in test vektörleri + out-of-order + sahte state
   reddi + PCS simülasyonu (kompromize state'ten sonraki mesaj güvenliği).
 
-## Faz 6 — Key transparency gossip
+## Faz 6 — Key transparency gossip — tamamlandı
 
 **Kapatır:** "Tam anti-forking istemciler arası gossip gerektirir."
 
 - Otomatik head damgası paylaşımı: WS'e `keylog_head` frame'i — her
-  istemci, üyesi olduğu topluluklarda periyodik kendi gördüğü head'i
-  yayınlar; uyuşmazlıkta SecurityStore kırmızı bant (mevcut bant
-  altyapısı var).
-- Çatışma çözümü ve kanıt zinciri CONIKS/Keybase modeliyle; çok fazla
-  sunucu mantığı GEREKMEZ (relay only) — invariant korunur.
-- Test: fork tespiti senaryosu (iki farklı head iki istemcide → uyarı).
+  istemci, üyesi olduğu topluluklarda periyodik (5dk) kendi gördüğü
+  head'i yayınlar; uyuşmazlıkta SecurityStore kırmızı bant (mevcut bant
+  altyapısı: `keylogForkWarning` — zincir bozulmasından ayrı alan,
+  farklı eylem önerisi: bant dışı damga karşılaştırması).
+- Çatışma çözümü gözlemsel (CONIKS/Keybase kanıt zinciri kapsam dışı —
+  bu sınır README "Bilinen sınırlar"a yazıldı). Sunucu relay only —
+  invariant korunur (id/hash zaten /keys/log'da public, saklama yok).
+- Test: fork tespiti senaryosu + geride/ileri head + sessiz eşleşme +
+  hardening (sığ sınır, üye olmayan reddi, plaintext invariant). Spec:
+  `docs/faz6-keygossip-design.md`.
 
 ## Faz 7 — Çoklu cihaz
 

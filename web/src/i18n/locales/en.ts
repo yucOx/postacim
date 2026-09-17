@@ -124,6 +124,7 @@ export default {
     passwordTitle: 'change password',
     logoutTitle: 'log out',
     keylogWarning: 'security warning — {message}. do not trust any key on this server until the issue is resolved',
+    keylogForkWarning: 'security warning — another client observed a different keylog head stamp (possible view-splitting: the server may be showing different ledgers to different users). verify with an out-of-band stamp comparison',
     dhUpdateWarning: 'security warning — a DH identity notice (dh_update) failed signature verification and was rejected; the sender or this server may be forging evidence — trust no keys until this is resolved',
     loading: 'loading…',
     selectCommunity: 'pick a community and room from the left',

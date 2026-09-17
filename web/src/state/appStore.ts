@@ -10,6 +10,13 @@ import { buildInviteLink } from '../crypto/invite';
 import { onServerEvent } from '../ws/socket';
 import { getSignKeys, refreshSignKeys } from '../lib/signkeys';
 import { bandFromIngest, ingestDhUpdate } from '../lib/dhupdate';
+import {
+  classifyKeylogHead,
+  isValidIncomingHead,
+  publishKeylogHead,
+  registerGossipPublisher,
+  startGossipLoop,
+} from '../lib/keygossip';
 import { useSecurityStore } from './securityStore';
 
 export interface Channel {
@@ -629,7 +636,44 @@ export const useAppStore = create<AppState>((set, get) => {
         const r = ingestDhUpdate(d.from, d.channel_id, d.payload, getSignKeys(d.from));
         const band = bandFromIngest(r);
         if (band) useSecurityStore.getState().flagDhUpdateRejected(band);
+      } else if (e.type === 'keylog_head') {
+        // Faz 6 — istemci-arası head gossip. Savunmacı ön kontrol
+        // (sunucu da doğrular ama biz bağımsız kalırız). Kendi head'imiz
+        // yoksa sessiz (kendi senkronumuzun sonucunu bekliyoruz).
+        if (!isValidIncomingHead(e)) return;
+        if (e.from === me) return; // kendi yayınımız — yankı yok
+        const sec = useSecurityStore.getState();
+        const myHead = sec.keylogHead;
+        const action = classifyKeylogHead(myHead, e);
+        if (action.kind === 'fork') {
+          sec.flagKeylogFork(
+            `id=${e.id} hash=${e.hash.slice(0, 8)}… görüldü: ${e.from}`,
+          );
+        } else if (action.kind === 'sync') {
+          // gerideyiz → sessiz tetikleyici: yeni keylog çek, doğrula; eşleşirse
+          // bant temizlenir, eşleşmezse syncKeyLog zaten kendi bandını kurar
+          const auth = useAuthStore.getState();
+          if (auth.user && auth.publicKey) {
+            void sec.runKeyLogCheck(auth.user.id, auth.publicKey);
+          }
+        }
       }
     });
+
+    // Faz 6 — gossip publisher kaydı + periyodik loop başlat.
+    // Üye olunan topluluklar bootstrap'ten gelir (yeni topluluk eklendikçe
+    // güncellenir). Head securityStore'dan okunur (syncKeyLog sonrası).
+    const userId = useAuthStore.getState().user?.id;
+    if (userId) {
+      registerGossipPublisher({
+        userId,
+        communities: () => get().communities.map((c) => c.id),
+        head: () => useSecurityStore.getState().keylogHead,
+      });
+      startGossipLoop();
+      // JIT: ilk publish bir sonraki periyotu beklemeden — boot senkronundan
+      // sonra aynı topluluktaki diğer istemciler hemen fark etsin
+      publishKeylogHead();
+    }
   },
 }) });

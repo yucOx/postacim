@@ -49,6 +49,20 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   bandı tetikler (çöp frame sessiz reddeilir). KAT vektörleri: çapa/DM
   türetimi, iki tarafın aynı anahtarı, epok ayrımı, alan ayrımı;
   relay→ingest uçtan uca negatifleri
+- **Faz 6 — key transparency gossip (anti-forking, gözlemsel)**: WS
+  `keylog_head` frame'i — her istemci doğrulanmış anahtar defteri
+  head'ini 5dk'da bir (JIT: `syncKeyLog` başarılı olunca anında) üyesi
+  olduğu topluluklara yayınlar; sunucu opak relay (saklama/yorum yok,
+  sığ sınır: id 32-bit pozitif, hash 64 hex, communities ≤64 string);
+  alıcı 4 durum makinesi (eşleşme / ileri / aynı-id-farklı-hash /
+  biz-önde-uyuşmazlık) → son ikisi `keylogForkWarning` kırmızı bant
+  tetikler (zincir bozulmasından ayrı alan — farklı eylem önerisi:
+  bant dışı damga karşılaştırması). **Dürüst sınır:** gözlemsel —
+  tam CONIKS/Keybase MAP kanıt ağacı kapsam dışı; tek online istemci
+  hiçbir çelişki yakalayamaz, çevrimdışı çatışma çözümü hâlâ bant
+  dışı damga karşılaştırmasıdır. Spec: `docs/faz6-keygossip-design.md`.
+  Testler: 12 birim (reducer + hardening) + 7 server (relay invariant
+  + sığ sınır + plaintext invariant) — 255 → 274
 
 ### Önceki sprintler (özet)
 

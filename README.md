@@ -50,6 +50,7 @@ düz hâlini **hiçbir zaman** görmez.
 | Mesaj padding | plaintext boyut bucket'larına (256 B / 1 KiB / 4 KiB / 4 KiB-adım) yuvarlanır — sunucu mesaj uzunluğundan içerik çıkarımı yapamaz |
 | Cihaz kilidi (ops.) | WebAuthn PRF'ten türeyen cihaz KEK'i ile blob IndexedDB'de — F5'te parmak izi, şifre fallback akışı korunur |
 | Anahtar defteri | public key'ler append-only hash zincirinde (`key_log`); istemci boot'ta zinciri doğrular, head damgası profilde bant dışı karşılaştırma için. İmza anahtarları da defterden dağıtılır — yalnız zincir bütünlüğü kanıtlanmış kayıtlar imza doğrulamasına beslenir |
+| Keylog gossip | her istemci doğrulanmış head'ini 5dk'da bir üyesi olduğu topluluklara WS ile yayınlar; aynı id farklı hash = fork kanıtı → kırmızı bant. Sunucu opak relay (saklama/yorum yok) — invariant korunur. Tam CONIKS kanıt zinciri yok: gözlemsel, bant dışı damga karşılaştırması hâlâ en güçlü kanıt |
 
 **Bilinen sınırlar (MVP):** MLS yok — PCS-formel yok; PCS-lite var (tüm scope'larda DH ratchet'li gönderici-tarafı FS: sızıntı penceresi 100 mesaj/24 sa; üye değişiminde rekey broadcast + imzalı self-update duyurusu ile sınırlı toparlanma; çıkarılan üye öncesi mesajları zaten görmüşse okur; alıcı kimlik private'ı sızarsa gözlemlenen mesajlar açılır; epok anahtarı sızarsa o epoğun zincir + çapası baştan türetilebilir); tek kimlik blob'u (cihaz iptali yok); şifre **ve** kurtarma ifadesi ikisi birden kaybolursa hesap kurtarılamaz (ifade kurtarma verisi de kimlik gibi uçtan uca sarılı — sunucu açamaz); kanal anahtarı rotasyonu açık davet linklerini ve katılım şifresi anahtarlarını geçersiz kılar (yeni üretilmeli — başvuru onayı etkilenmez); ban, yeni nick açılmasını engellemez (e-postasız sistemde yapısal sınır — katılım şifresi buna karşı direnir); kanal adları/üye listesi/zaman damgaları/roller/davet metadata'sı sunucuya açıktır (içerik değil); **kaybolan mesajların `expires_at`'ı sunucu için görünür metadata'dır** (içerik değil, ömür bilgisi) — erişim + ömür sınırlaması client-side render + sunucu janitor kombinasyonudur, sunucu tarafı silme garanti edilir ama client'ta süreyi görme engellenmez; DB'de at-rest şifreleme (SQLCipher) bilinçli ertelendi — E2EE içeriği zaten koruyor, metadata katkısı marjinal, better-sqlite3 derlemesi imajı kırılganlaştırır. Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
 
@@ -356,7 +357,7 @@ npm test    # 255 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - **WebRTC medya Tor'dan geçmez** — sesli/görüntülü arama ve ekran paylaşımı UDP (LiveKit ICE) taşır; Tor SOCKS üzerinden akmaz. Mesajlaşma onion'da tam çalışır; aramada medya doğrudan gider (tarafların IP'si çağrı esnasında açılır — dürüst bedel) ya da kapalı moda alınır: `SCREEN_SHARE=off` + medya portları kapalı. Detay: [deploy/tor-hidden-service.md §7](deploy/tor-hidden-service.md).
 - **Ses/görüntü gönderen atfı** — metin mesajları Ed25519 imzalıdır; SFrame medya çerçeveleri üyeliği kanıtlar ama gönderen kimliğini kanıtlamaz (SFU içinde per-sender imza yok).
 - **Nick enumeration** — login/kurtarma pseudo-salt ile kapalı; kalan kanal kayıt sırasındaki "nick alınmış" (rate-limited).
-- **Public key doğrulama** — sunucu üye public key'lerini dağıtır. Katmanlar: TOFU keypin + güvenlik numarası (bant dışı) + anahtar defteri (append-only hash zinciri: kendi kayıt kontrolü + head damgası). Tam anti-forking istemciler arası gossip gerektirir — head damgası bant dışı karşılaştırılınca view-splitting yakalanır; gossip roadmap'te.
+- **Public key doğrulama** — sunucu üye public key'lerini dağıtır. Katmanlar: TOFU keypin + güvenlik numarası (bant dışı) + anahtar defteri (append-only hash zinciri: kendi kayıt kontrolü + head damgası) + istemci-arası head gossip (5dk periyodik WS, fork = kırmızı bant). **Dürüst sınır (Faz 6):** gossip gözlemseldir — tam CONIKS/Keybase MAP kanıt ağacı kapsamda değildir; iki online istemci aynı toplulukta etkileşirken çelişkiyi görür, çevrimdışı çatışma çözümü hâlâ **bant dışı damga karşılaştırmasıdır** (profildeki 16 hex). Tek online istemci hiçbir çelişki yakalayamaz (gözlemci yok).
 - **DM anahtarları** arkadaşlık bitse de taraflarda kalır (geçmiş okunabilir, gelecek okunamaz — grup/DM anahtarı yenilenmediği sürece).
 - **Session TTL**: 7 gün (env ile ayarlanabilir); şifre değişimi tüm oturumları düşürür.
 
@@ -373,7 +374,7 @@ npm test    # 255 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Sprint 1 — bütünlük: per-user limitler, pending rekey, LiveKit eviction, oturum düşürme
 - [x] Sprint 2 — TLS/HSTS + CSP + httpOnly çerez + WS dayanıklılık
 - [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
-- [x] Test turu — otomatik test + CI (bugün: 28 dosya, 249 test)
+- [x] Test turu — otomatik test + CI (bugün: 28 dosya, 274 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
 
 **Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):
@@ -384,7 +385,7 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 - [x] Faz 3 — Tor hidden service rehberi (IP metadata)
 - [x] Faz 4 — signed release / reproducible build (JS trust azaltma)
 - [x] Faz 5 — DH ratchet (kendi implementasyon: per-sender DH + epok rekey penceresi + self-update; DM/kanal/gdm/ses; PCS-formel değil — dürüst sınırlar tehdit modelinde; araştırma: docs/faz5-ratchet-research.md, spec: docs/faz5-dh-ratchet-design.md)
-- [ ] Faz 6 — key transparency gossip (anti-forking)
+- [x] Faz 6 — key transparency gossip (anti-forking, gözlemsel — 5dk periyodik WS + JIT; spec: docs/faz6-keygossip-design.md)
 - [ ] Faz 7 — çoklu cihaz (Faz 5 sonrası)
 - [ ] Faz 8 — threat model revizyonu + dış audit hazırlığı (v1.0.0)
 

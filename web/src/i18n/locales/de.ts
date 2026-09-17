@@ -125,6 +125,7 @@ export default {
     passwordTitle: 'passwort ändern',
     logoutTitle: 'abmelden',
     keylogWarning: 'sicherheitswarnung — {message}. vertraue keinem schlüssel auf diesem server, bis das problem behoben ist',
+    keylogForkWarning: 'sicherheitswarnung — ein anderer client hat einen anderen schlüsselbuch-stempel gesehen (mögliches view-splitting: der server zeigt möglicherweise verschiedenen nutzern verschiedene bücher). verifiziere durch einen band-externen stempelvergleich',
     dhUpdateWarning: 'sicherheitswarnung — eine DH-identitätsankündigung (dh_update) hat die signaturprüfung nicht bestanden und wurde abgelehnt; absender oder dieser server könnte nachweise fälschen — vertraue keinen schlüsseln, bis das geklärt ist',
     loading: 'lädt…',
     selectCommunity: 'wähle links eine community und einen raum',

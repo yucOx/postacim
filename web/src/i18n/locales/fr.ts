@@ -125,6 +125,7 @@ export default {
     passwordTitle: 'changer le mot de passe',
     logoutTitle: 'se déconnecter',
     keylogWarning: 'avertissement de sécurité — {message}. ne faites confiance à aucune clé sur ce serveur tant que le problème n est pas résolu',
+    keylogForkWarning: 'avertissement de sécurité — un autre client a observé un tampon de registre de clés différent (view-splitting possible : le serveur pourrait montrer des registres différents à des utilisateurs différents). vérifie par une comparaison de tampons hors bande',
     dhUpdateWarning: 'avertissement de sécurité — une annonce d identité DH (dh_update) n a pas passé la vérification de signature et a été rejetée; l expéditeur ou ce serveur pourrait fabriquer des preuves — ne faites confiance à aucune clé tant que ce n est pas éclairci',
     loading: 'chargement…',
     selectCommunity: 'choisis une communauté et un salon à gauche',
