@@ -4,7 +4,7 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) — kategoriler
 Eklenen / Değişen / Düzeltilen / Güvenlik. Her `v*` tag'i CI'da web bundle SHA
 manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
-## [v1.0.0] — YYYY-AA-GG
+## [v1.0.0] — 2026-09-18
 
 > İlk stabil sürüm. 8 fazlık güvenlik yol haritası (SECURITY-ROADMAP.md)
 > tamamlandı: Ed25519 imzalı mesajlar → kaybolan mesajlar → Tor rehberi →
