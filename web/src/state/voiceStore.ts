@@ -147,6 +147,14 @@ function loadQuality(): CallQuality {
 // birlikte "3 kez düşme" döngüsünün kökenini adlandırır)
 let lastDisconnectReason: string | null = null;
 
+// join nesil sayacı: daha yeni bir join/leave, in-flight join'i geçersiz kılar.
+// Sidebar'ın explicit join'i ile VoiceRoom'un auto-join effect'i paralel
+// koşarsa iki bağlantı aynı LiveKit identity'si (user.id) için kavga eder —
+// LiveKit eskisini DUPLICATE_IDENTITY ile atar, retry loop'u kavgaı 3 deneme
+// boyunca sürdürür ("3 kez düşüp toparlanma"). Son tık kazanır: stale join'in
+// bağlantısı resolve etse bile sessizce temizlenir.
+let joinSeq = 0;
+
 const qualityTiers: Record<
   CallQuality,
   { camCapture: VideoCaptureOptions; camPublish: TrackPublishOptions; screenPublish: TrackPublishOptions }
@@ -287,6 +295,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   // full teardown: disconnect any live room and clear every call flag so the
   // next join / startDmCall / acceptIncoming never collides with stale state
   const teardownAll = (keepCallState = false): void => {
+    joinSeq++; // in-flight join'i geçersiz kıl
     const st = get();
     if (st.joinedChannelId && !st.isDmCall) {
       wsSend({ type: 'voice_state', channel_id: st.joinedChannelId, state: 'left' });
@@ -359,6 +368,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
     if (get().joinedChannelId === channelId && !get().isDmCall) return;
     // leave any current call first (fully clears room + flags)
     teardownAll();
+    const seq = joinSeq; // our generation — a newer teardown invalidates us
 
     set({ error: null });
     try {
@@ -391,6 +401,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
             }
           };
           const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
+          if (seq !== joinSeq) {
+            // a newer join/leave superseded this attempt — kill quietly
+            cleanup(room);
+            return;
+          }
           wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
           let micOpened = false;
           try {
@@ -399,10 +414,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           } catch {
             // mic permission denied or no mic
           }
+          if (seq !== joinSeq) {
+            cleanup(room);
+            return;
+          }
           set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: micOpened, camOn: false, isDmCall: false });
           return;
         } catch (err) {
           lastErr = err;
+          if (seq !== joinSeq) return; // superseded — don't retry, don't fight
           if (attempt < 3) {
             set({ error: `bağlantı kuruluyor — yeniden deneniyor (${attempt + 1}/3)…` });
             await new Promise((r) => setTimeout(r, 1200 * attempt));
@@ -411,12 +431,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       }
       throw lastErr;
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
+      if (seq === joinSeq) {
+        set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
+      }
       throw err;
     }
   },
 
   leave: async () => {
+    joinSeq++; // cancel an in-flight join — leave wins over a connecting join
     const { room, joinedChannelId, isDmCall, callState } = get();
     if (joinedChannelId && !isDmCall) {
       wsSend({ type: 'voice_state', channel_id: joinedChannelId, state: 'left' });
@@ -631,6 +654,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   },
 
   cancelCall: async () => {
+    joinSeq++; // cancel an in-flight join — cancel wins over a connecting join
     const { callState, room } = get();
     if (callState && callState.phase === 'ringing') {
       wsSend({ type: 'call:cancel', channel_id: callState.channelId });
