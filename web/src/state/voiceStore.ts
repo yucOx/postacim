@@ -155,6 +155,14 @@ let lastDisconnectReason: string | null = null;
 // bağlantısı resolve etse bile sessizce temizlenir.
 let joinSeq = 0;
 
+// in-flight join kilidi: sidebar'ın explicit join'i ile VoiceRoom'un
+// auto-join effect'i aynı anda tetiklenebilir. İki paralel connect aynı
+// LiveKit identity'si altında iki soket açar; sunucu kaybedene
+// DUPLICATE_IDENTITY leave'i yollar, kaybeden room ping-timeout'a düşüp
+// auto-reconnect ile geri gelir ("düştü sonra tekrar bağlandı"). İkinci
+// join, birincisi tamamlanmadan connect açmaz.
+let inflightJoin: Promise<void> | null = null;
+
 const qualityTiers: Record<
   CallQuality,
   { camCapture: VideoCaptureOptions; camPublish: TrackPublishOptions; screenPublish: TrackPublishOptions }
@@ -365,77 +373,100 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   },
 
   join: async (channelId) => {
-    if (get().joinedChannelId === channelId && !get().isDmCall) return;
-    // leave any current call first (fully clears room + flags)
-    teardownAll();
-    const seq = joinSeq; // our generation — a newer teardown invalidates us
+    // serialize concurrent joins: sidebar click + VoiceRoom's auto-join
+    // effect fire in the same instant and two parallel connects would fight
+    // over one LiveKit identity (the server kicks the loser with
+    // DUPLICATE_IDENTITY; the kicked room's auto-reconnect reads as a drop
+    // followed by a recovery). The second join waits here, then no-ops on
+    // the guard below.
+    while (inflightJoin) {
+      await inflightJoin.catch(() => {});
+    }
+    const run = async (): Promise<void> => {
+      if (get().joinedChannelId === channelId && !get().isDmCall) return;
+      // leave any current call first (fully clears room + flags)
+      teardownAll();
+      const seq = joinSeq; // our generation — a newer teardown invalidates us
 
-    set({ error: null });
-    try {
-      // 1. channel key (E2EE kökü — SFU hiç görmez); SFrame anahtarı bunun
-      //    DH zincirinden türetilir (Faz 5d)
-      const app = useAppStore.getState();
-      const key = await app.ensureChannelKey(channelId);
-      const voiceKey = await sframeKey(key, 'ch');
+      set({ error: null });
+      try {
+        // 1. channel key (E2EE kökü — SFU hiç görmez); SFrame anahtarı bunun
+        //    DH zincirinden türetilir (Faz 5d)
+        const app = useAppStore.getState();
+        const key = await app.ensureChannelKey(channelId);
+        const voiceKey = await sframeKey(key, 'ch');
 
-      // 2. access token from our server
-      const { url, token } = await api<VoiceTokenResponse>(`/channels/${channelId}/voice-token`, {
-        method: 'POST',
-      });
+        // 2. access token from our server
+        const { url, token } = await api<VoiceTokenResponse>(`/channels/${channelId}/voice-token`, {
+          method: 'POST',
+        });
 
-      // "could not establish pc connection": livekit gives the RTCPeerConnection
-      // 15s to reach CONNECTED, and ICE sometimes loses that race on an
-      // otherwise-fine network (mDNS candidate lookups, TURN relay probing,
-      // dead-interface candidate pairs). The second attempt is warm and fast —
-      // retry instead of dead-ending the join.
-      let lastErr: unknown = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const onDisconnected = (): void => {
-            const st = useVoiceStore.getState();
-            if (st.room === room) {
-              if (st.joinedChannelId && !st.isDmCall) {
-                wsSend({ type: 'voice_state', channel_id: st.joinedChannelId, state: 'left' });
-              }
-              useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
-            }
-          };
-          const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
-          if (seq !== joinSeq) {
-            // a newer join/leave superseded this attempt — kill quietly
-            cleanup(room);
-            return;
-          }
-          wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
-          let micOpened = false;
+        // "could not establish pc connection": livekit gives the RTCPeerConnection
+        // 15s to reach CONNECTED, and ICE sometimes loses that race on an
+        // otherwise-fine network (mDNS candidate lookups, TURN relay probing,
+        // dead-interface candidate pairs). The second attempt is warm and fast —
+        // retry instead of dead-ending the join.
+        let lastErr: unknown = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
-            micOpened = true;
-          } catch {
-            // mic permission denied or no mic
-          }
-          if (seq !== joinSeq) {
-            cleanup(room);
+            // connectedRoom, `room` DEĞİL: handler connectRoom resolve
+            // olmadan önce takılıyor; connect SIRASINDA gelen disconnect
+            // (sunucunun DUPLICATE_IDENTITY leave'i) `room`'a dokunursa
+            // TDZ'den ReferenceError fırlatıp handler'ı öldürüyordu
+            // (konsolda "Cannot access 'o' before initialization").
+            let connectedRoom: Room | null = null;
+            const onDisconnected = (): void => {
+              const st = useVoiceStore.getState();
+              if (connectedRoom && st.room === connectedRoom) {
+                if (st.joinedChannelId && !st.isDmCall) {
+                  wsSend({ type: 'voice_state', channel_id: st.joinedChannelId, state: 'left' });
+                }
+                useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
+              }
+            };
+            const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
+            connectedRoom = room;
+            if (seq !== joinSeq) {
+              // a newer join/leave superseded this attempt — kill quietly
+              cleanup(room);
+              return;
+            }
+            wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
+            let micOpened = false;
+            try {
+              await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
+              micOpened = true;
+            } catch {
+              // mic permission denied or no mic
+            }
+            if (seq !== joinSeq) {
+              cleanup(room);
+              return;
+            }
+            set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: micOpened, camOn: false, isDmCall: false });
             return;
-          }
-          set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: micOpened, camOn: false, isDmCall: false });
-          return;
-        } catch (err) {
-          lastErr = err;
-          if (seq !== joinSeq) return; // superseded — don't retry, don't fight
-          if (attempt < 3) {
-            set({ error: `bağlantı kuruluyor — yeniden deneniyor (${attempt + 1}/3)…` });
-            await new Promise((r) => setTimeout(r, 1200 * attempt));
+          } catch (err) {
+            lastErr = err;
+            if (seq !== joinSeq) return; // superseded — don't retry, don't fight
+            if (attempt < 3) {
+              set({ error: `bağlantı kuruluyor — yeniden deneniyor (${attempt + 1}/3)…` });
+              await new Promise((r) => setTimeout(r, 1200 * attempt));
+            }
           }
         }
+        throw lastErr;
+      } catch (err) {
+        if (seq === joinSeq) {
+          set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
+        }
+        throw err;
       }
-      throw lastErr;
-    } catch (err) {
-      if (seq === joinSeq) {
-        set({ error: err instanceof Error ? err.message : 'bağlanılamadı' });
-      }
-      throw err;
-    }
+    };
+    const p = run().finally(() => {
+      inflightJoin = null;
+    });
+    inflightJoin = p;
+    return p;
   },
 
   leave: async () => {
@@ -561,13 +592,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       // fresh start: tear down any previous room/community channel first
       teardownAll();
       const { url, token } = await api<VoiceTokenResponse>(`/dms/${dmId}/call-token`, { method: 'POST' });
+      // connectedRoom, `room` DEĞİL: handler connect resolve olmadan önce
+      // çağrılırsa `room` TDZ'dedir — ReferenceError handler'ı öldürür
+      // (join'deki TDZ fix'i ile aynı desen)
+      let connectedRoom: Room | null = null;
       const onDisconnected = (): void => {
         const st = useVoiceStore.getState();
-        if (st.room === room) {
+        if (connectedRoom && st.room === connectedRoom) {
           useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
         }
       };
       const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
+      connectedRoom = room;
       wsSend({ type: 'call:ring', channel_id: dmId });
       // open mic by default
       let micOpened = false;
@@ -625,13 +661,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       // so a failed connect can be retried from the incoming banner
       teardownAll(true);
       const { url, token } = await api<VoiceTokenResponse>(`/dms/${call.channelId}/call-token`, { method: 'POST' });
+      // connectedRoom, `room` DEĞİL: handler connect resolve olmadan önce
+      // çağrılırsa `room` TDZ'dedir — ReferenceError handler'ı öldürür
+      // (join'deki TDZ fix'i ile aynı desen)
+      let connectedRoom: Room | null = null;
       const onDisconnected = (): void => {
         const st = useVoiceStore.getState();
-        if (st.room === room) {
+        if (connectedRoom && st.room === connectedRoom) {
           useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
         }
       };
       const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
+      connectedRoom = room;
       let micOpened = false;
       try {
         await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
