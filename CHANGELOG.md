@@ -121,6 +121,7 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 - **Odak / Izgara sahne geçişi**: herhangi bir katılımcıya tıklayarak anında odaklama, alt şeritten kesintisiz geçiş ve `LayoutGrid` butonuyla ızgaraya dönüş
 - **Sol rayda mesajlaşılan DM'ler (ServerRail)**: önceden konuşulmuş kişiler en soldaki rayda avatarları, aktif çentikleri ve okunmamış rozetleriyle gösterilir; arama sırasında sayfa geçişinde arama otomatik PiP'e alınarak hayalet arama engellenir
 - **Mute rozeti & mikrofon başlangıcı**: mikrofon kapalıyken tile sağ altında kırmızı `MicOff` rozeti; arama başlatıldığında mikrofon varsayılan açık gelir
+- **Sunucu ses odalarında küçük ekran (PiP)**: ses odası görünümü köşeye küçültülerek sohbet gezintisi sürdürülür; Discord tarzı kenardan boyutlandırma (`069720b`)
 
 ### Düzeltilen (canlıdan gelen hotfixler)
 
@@ -128,6 +129,10 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 - **Faz 5b DM çapası** (`534837c`): DM v4'ünde gönderen/alıcı farklı DH türetimi yapıyordu (gönderen peer kimliğine, alıcı kendi kimliğine) — sıralı çiftten deterministik çapa her iki tarafı eşitledi. Çapa düzeltmesinden önceki v4 DM'leri okunamaz (bilinçli kesme, README'de)
 - **5b hotfix v2** (`26716f0`): okuma yolu çifti `[ben, sender]` hesaplıyordu — kendi mesajda `[ben, ben]` çıkıp gönderim çapasından ayrışıyordu; `dmAnchorIds` tek kaynağı okuma/gönderimi bağlıyor (sender_id yerine DM üyeliği)
 - **decryptText perf** (`d109168`): her v4 mesajı açılmadan önce legacy openAll taraması (v1 + 10k v2, v3'te ikinci kez ≈ 20k gereksiz op) koşuyordu; v4 yolu en öne alındı — sohbet ilk açılışındaki saniyelerce süren UI donması giderildi
+- **dhAnchor önbelleği + lazy public key** (`ab293b2`): her mesaj açılışında tekrarlanan DH çapa türetimi ve peer public key çözümü önbelleğe alındı — uzun geçmiş açılış donması giderildi
+- **Geçmiş çözümleme perf** (`691b735`): çözümleme-failure kalıcı önbellek + partili çözümleme — uzun sohbet geçmişinde UI donması giderildi
+- **useSafeIsSpeaking** (`cbadc38`): katılımcısız bağlamda konuşmacı tespiti hook'unun runtime hatası vermesi giderildi
+- **Ses odası bağlantı kavgası** (`25e1343`, `2d64edf`, `d284baf`): sesli odaya girince aramanın 3 kez düşüp toparlanması — sidebar'ın explicit join'i ile VoiceRoom auto-join effect'i paralel koşuyor, iki bağlantı aynı LiveKit identity'si için kavga ediyor, sunucu kaybedene `DUPLICATE_IDENTITY` leave'i yolluyor; kaybeden room ping-timeout'a düşüp auto-reconnect ile geri geliyordu. Join'ler serialize edildi (`inflightJoin` kilidi) + `joinSeq` nesil sayacıyla son tık kazanır; disconnect handler'ının connect sırasında TDZ'den patlaması (`Cannot access 'o' before initialization` — state temizliğini öldürüyordu) düzeltildi; `peerConnectionTimeout` 15s→25s (yavaş ICE yollarında pc connection hatası). Teşhis altyapısı: LiveKit Reconnecting/Disconnected(reason) konsol telemetrisi + WS kopma close kodu rozeti (`7718f22`, `ba32c6a`)
 
 ### Önceki sprintler (özet)
 
