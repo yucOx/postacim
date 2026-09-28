@@ -9,6 +9,8 @@ import { unwrapMyKey } from '../crypto/identity';
 import { dhVoiceKeyAnchor, dhVoiceKeyDm } from '../crypto/dhratchet';
 import { unb64 } from '../crypto/bytes';
 import { onServerEvent, wsSend } from '../ws/socket';
+import { startRing, stopRing } from '../lib/sound';
+import { useSettingsStore } from './settingsStore';
 // official subpath export; ?worker&inline bundles the SFrame worker into the app
 import E2EEWorker from 'livekit-client/e2ee-worker?worker&inline';
 
@@ -641,6 +643,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   },
 
   acceptIncoming: async () => {
+    stopRing();
     const call = get().callState;
     if (!call || call.phase !== 'incoming') return;
     try {
@@ -688,6 +691,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   },
 
   declineIncoming: async () => {
+    stopRing();
     const call = get().callState;
     if (!call || call.phase !== 'incoming') return;
     wsSend({ type: 'call:decline', channel_id: call.channelId });
@@ -696,6 +700,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
 
   cancelCall: async () => {
     joinSeq++; // cancel an in-flight join — cancel wins over a connecting join
+    stopRing();
     const { callState, room } = get();
     if (callState && callState.phase === 'ringing') {
       wsSend({ type: 'call:cancel', channel_id: callState.channelId });
@@ -727,6 +732,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           })();
         }
       } else if (e.type === 'call:incoming') {
+        stopRing(); // eski döngü varsa kes
         const call = get().callState;
         if (call && call.phase !== 'ended') {
           // busy (ringing/active/incoming) → auto-decline the new one.
@@ -734,6 +740,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           wsSend({ type: 'call:decline', channel_id: e.channel_id as string });
           return;
         }
+        // Discord benzeri: gelen arama çalar — kabul/red/iptal'e kadar döngü
+        if (useSettingsStore.getState().soundOn) startRing();
         set({
           callState: {
             phase: 'incoming',
@@ -742,11 +750,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           },
         });
       } else if (e.type === 'call:accepted') {
+        stopRing();
         const call = get().callState;
         if (call && call.channelId === e.channel_id && call.phase === 'ringing') {
           set({ callState: { ...call, phase: 'active' } });
         }
       } else if (e.type === 'call:declined') {
+        stopRing();
         const call = get().callState;
         if (call && call.channelId === e.channel_id) {
           cleanup(get().room);
@@ -754,11 +764,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           // no 3s lock — the "ara" button reads phase and is enabled in 'ended' too
         }
       } else if (e.type === 'call:cancelled') {
+        stopRing();
         const call = get().callState;
         if (call && call.channelId === e.channel_id && call.phase === 'incoming') {
           set({ callState: null });
         }
       } else if (e.type === 'call:ended') {
+        stopRing();
         // the other side hung up (or their socket dropped). tear the call down
         // immediately so the "ara" button comes back the moment we get the event.
         const call = get().callState;

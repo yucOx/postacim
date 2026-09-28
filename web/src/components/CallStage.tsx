@@ -282,7 +282,6 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   // "cam:<id>"), Discord-style: clicking a camera focuses the camera even if
   // that person also shares their screen
   const [spotlight, setSpotlight] = useState<string | null>(null);
-  const spotKind: 'screen' | 'cam' = spotlight?.startsWith('screen:') ? 'screen' : 'cam';
   const spotId = spotlight?.split(':')[1] ?? null;
 
   const toggleScreen = useVoiceStore((s) => s.toggleScreen);
@@ -626,7 +625,10 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       //  - focused bir CAM ise, o kişinin kamerası da ŞERİTTE GÖRÜNÜR
       //    (büyük alan + şerit aynı anda; LiveKit tek track'ten 2 video
       //    elementi besler, Adaptive Stream aynı katmanı paylaşır).
-      const focusedIsScreen = spotKind === 'screen';
+      // Kendi yayınım AUTO-odaklıyken (spotlight null, autoFocusVideo) de
+      // focusedIsScreen doğru olmalı — yoksa şerit büyük alandaki yayını
+      // tekrar eder ve iki 'paylaşımı durdur' butonu görünür.
+      const focusedIsScreen = focusedKey?.startsWith('screen:') ?? false;
       const pVideos = allVideos.filter(
         (v) => v.identity === p.identity && !(focusedIsScreen && v.key === focusedKey),
       );
@@ -711,7 +713,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                       <LayoutGrid size={13} />
                       <span>Izgara</span>
                     </button>
-                    {focusedVideo.trackRef.participant.isLocal && stopBtn(false)}
+                    {focusedVideo.isScreen && focusedVideo.trackRef.participant.isLocal && stopBtn(false)}
                     {focusedVideo.isScreen && !focusedVideo.trackRef.participant.isLocal && (
                       <button
                         type="button"

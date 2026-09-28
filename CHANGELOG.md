@@ -122,6 +122,9 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 - **Sol rayda mesajlaşılan DM'ler (ServerRail)**: önceden konuşulmuş kişiler en soldaki rayda avatarları, aktif çentikleri ve okunmamış rozetleriyle gösterilir; arama sırasında sayfa geçişinde arama otomatik PiP'e alınarak hayalet arama engellenir
 - **Mute rozeti & mikrofon başlangıcı**: mikrofon kapalıyken tile sağ altında kırmızı `MicOff` rozeti; arama başlatıldığında mikrofon varsayılan açık gelir
 - **Sunucu ses odalarında küçük ekran (PiP)**: ses odası görünümü köşeye küçültülerek sohbet gezintisi sürdürülür; Discord tarzı kenardan boyutlandırma (`069720b`)
+- **Arama ping göstergesi**: kontrol çubuğunda LiveKit signal RTT — <80 ms yeşil, <200 ms sarı, üzeri kırmızı (Discord benzeri)
+- **Gelen arama zili**: çağrı gelince çalar; kabul/red/iptal döngüyü keser (Ayarlar → bildirim sesi kapalıysa çalmaz)
+- **Onaylı üye ekleme**: "üye ekle" artık hedefe WS daveti yollar — üyelik yalnız hedefin kabulüyle basılır (eskiden onaysız ekleniyordu)
 
 ### Düzeltilen (canlıdan gelen hotfixler)
 
@@ -133,6 +136,7 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 - **Geçmiş çözümleme perf** (`691b735`): çözümleme-failure kalıcı önbellek + partili çözümleme — uzun sohbet geçmişinde UI donması giderildi
 - **useSafeIsSpeaking** (`cbadc38`): katılımcısız bağlamda konuşmacı tespiti hook'unun runtime hatası vermesi giderildi
 - **Ses odası bağlantı kavgası** (`25e1343`, `2d64edf`, `d284baf`): sesli odaya girince aramanın 3 kez düşüp toparlanması — sidebar'ın explicit join'i ile VoiceRoom auto-join effect'i paralel koşuyor, iki bağlantı aynı LiveKit identity'si için kavga ediyor, sunucu kaybedene `DUPLICATE_IDENTITY` leave'i yolluyor; kaybeden room ping-timeout'a düşüp auto-reconnect ile geri geliyordu. Join'ler serialize edildi (`inflightJoin` kilidi) + `joinSeq` nesil sayacıyla son tık kazanır; disconnect handler'ının connect sırasında TDZ'den patlaması (`Cannot access 'o' before initialization` — state temizliğini öldürüyordu) düzeltildi; `peerConnectionTimeout` 15s→25s (yavaş ICE yollarında pc connection hatası). Teşhis altyapısı: LiveKit Reconnecting/Disconnected(reason) konsol telemetrisi + WS kopma close kodu rozeti (`7718f22`, `ba32c6a`)
+- **Paylaşımı durdur butonu çift/yanlış yerde** : kendi yayını auto-odaklıyken şerit yayını tekrar edip iki "paylaşımı durdur" basıyordu; kendi kamerası odaklıyken de aynı buton görünüyordu — odak tespiti spotlight yerine gerçek odak anahtarından yapıldı
 
 ### Önceki sprintler (özet)
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Maximize, Mic, MicOff, Minimize, MonitorUp, PhoneOff, PictureInPicture2, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { Maximize, Mic, MicOff, Minimize, MonitorUp, PhoneOff, PictureInPicture2, Signal, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useLocalParticipant } from '@livekit/components-react';
 import { useVoiceStore, type CallQuality, type ShareOpts } from '../state/voiceStore';
 import Modal from './Modal';
@@ -48,6 +48,19 @@ export default function CallControls({
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const local = useLocalParticipant();
   const { t } = useT();
+
+  // Discord benzeri gecikme göstergesi: LiveKit signal RTT'si (pongResp'ten,
+  // sunucu ~10 sn'de bir günceller). <80 iyi, <200 orta, üzeri kötü.
+  const room = useVoiceStore((s) => s.room);
+  const [ping, setPing] = useState<number | null>(null);
+  useEffect(() => {
+    if (!room) return;
+    const id = setInterval(() => {
+      const rtt = room.engine?.client?.rtt ?? 0;
+      setPing(rtt > 0 ? Math.round(rtt) : null);
+    }, 2000);
+    return () => clearInterval(id);
+  }, [room]);
 
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
   useEffect(() => {
@@ -152,6 +165,18 @@ export default function CallControls({
       <span className="sealed-band mx-1 hidden sm:inline-flex">
         {local.isMicrophoneEnabled ? 'uçtan uca · sframe' : t('call.micOff')}
       </span>
+      {ping !== null && (
+        <span
+          className={`hidden items-center gap-1 font-mono text-[11px] sm:flex ${
+            ping < 80 ? 'text-emerald-400' : ping < 200 ? 'text-lamp-400' : 'text-stamp-400'
+          }`}
+          title="sunucu gecikmesi"
+          aria-label={`gecikme ${ping} milisaniye`}
+        >
+          <Signal size={13} aria-hidden />
+          {ping} ms
+        </span>
+      )}
       <button onClick={onEnd} className="btn-stamp ml-1 !rounded-full" title={endLabel}>
         <PhoneOff size={16} />
         {endLabel}

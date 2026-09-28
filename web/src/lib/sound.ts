@@ -57,3 +57,48 @@ export function playMention(): void {
     // audio blocked until first user gesture — fine, the title badge still shows
   }
 }
+
+// Incoming-call ring — two quick pulses per cycle, loops until stopRing().
+// Discord benzeri: arama gelene kadar çalar; arayan karşı tarafın
+// kabul/red/iptal'i döngüyü keser.
+let ringTimer: ReturnType<typeof setInterval> | null = null;
+
+function ringPulse(): void {
+  try {
+    ctx ??= new AudioContext();
+    if (ctx.state === 'suspended') void ctx.resume();
+    const t0 = ctx.currentTime;
+    const notes: [number, number][] = [
+      [783.99, 0], // G5
+      [783.99, 0.18], // G5
+    ];
+    for (const [freq, at] of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0 + at);
+      gain.gain.exponentialRampToValueAtTime(0.14, t0 + at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0 + at);
+      osc.stop(t0 + at + 0.25);
+    }
+  } catch {
+    // audio blocked until first user gesture
+  }
+}
+
+export function startRing(): void {
+  stopRing();
+  ringPulse();
+  ringTimer = setInterval(ringPulse, 1600);
+}
+
+export function stopRing(): void {
+  if (ringTimer !== null) {
+    clearInterval(ringTimer);
+    ringTimer = null;
+  }
+}
