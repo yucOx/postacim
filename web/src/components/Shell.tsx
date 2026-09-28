@@ -23,6 +23,7 @@ import { PigeonMark } from './Brand';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import DeviceLockModal from './DeviceLockModal';
+import InvitePrompt from './InvitePrompt';
 import { deviceOfferDeclined, deviceUnlockSupported, hasDeviceUnlock } from '../crypto/devicekey';
 import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
@@ -361,6 +362,7 @@ export default function Shell() {
       {profileModal && <ProfileModal onClose={() => setProfileModal(false)} />}
       {settingsModal && <SettingsModal onClose={() => setSettingsModal(false)} />}
       {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
+      <InvitePrompt />
       {showPiP && <PiPWidget />}
       {room && (
         <RoomContext.Provider value={room}>

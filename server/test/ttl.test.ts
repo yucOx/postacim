@@ -1,7 +1,7 @@
 // Kaybolan mesajlar (Faz 2): expires_at doğrulama, WS frame'de TTL alanı,
 // süresi geçen frame reddi ve saatlik janitor'un tombstone süpürmesi.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startServer, makeUser, type TestServer, type TestUser } from './helpers';
+import { startServer, makeUser, inviteJoin, type TestServer, type TestUser } from './helpers';
 import { MAX_MESSAGE_TTL_MS, isExpired, parseExpiresAt } from '../src/lib/ttl';
 
 let srv: TestServer;
@@ -33,10 +33,7 @@ beforeAll(async () => {
   comId = j.community.id;
   chId = j.channels[0]!.id;
   expect(
-    (await owner.call('POST', `/communities/${comId}/members`, {
-      user_id: member.userId,
-      wrapped_keys: [{ channel_id: chId, wrapped_key: 'A'.repeat(48) }],
-    })).status,
+    await inviteJoin(owner, member, comId, [{ channel_id: chId, wrapped_key: 'A'.repeat(48) }]),
   ).toBe(204);
 });
 afterAll(() => srv.stop());

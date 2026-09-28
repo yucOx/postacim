@@ -488,10 +488,20 @@ export default {
     noDms: 'commence par un ami',
     newChat: 'nouvelle discussion / ajouter un ami',
   },
+  // InvitePrompt — « ajouter un membre » affiche un modal de consentement au destinataire
+  invitePrompt: {
+    title: 'invitation au serveur',
+    body: "{name} t'a invité sur le serveur {community}",
+    hint: "accepter te fait rejoindre la communauté ; refuser ne change rien",
+    accept: 'accepter',
+    decline: 'annuler',
+    error: "impossible de finaliser l'invitation",
+  },
   // MemberList
   members: {
     roster: 'MANIFESTE — {n}',
     addMember: 'ajouter un membre',
+    inviteSent: 'invitation envoyée à {name} — il doit l’accepter',
     memberCard: 'carte de membre {name}',
     memberCardTitle: '{name} — carte de membre',
     fingerprint: 'empreinte',

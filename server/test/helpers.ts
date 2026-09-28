@@ -120,3 +120,27 @@ export async function makeUser(baseUrl: string, nickPrefix: string) {
 }
 
 export type TestUser = Awaited<ReturnType<typeof makeUser>>;
+
+// Consent membership: staff POST /members now creates a targeted invite; the
+// target peeks and completes it (what a real client does over the WS prompt).
+// Returns the final status — 204 joined, or the failing status for negative
+// assertions (409 re-add, 403 non-staff, …).
+export async function inviteJoin(
+  staff: TestUser,
+  target: TestUser,
+  communityId: string,
+  wrappedKeys: { channel_id: string; wrapped_key: string }[],
+): Promise<number> {
+  const inv = await staff.call('POST', `/communities/${communityId}/members`, {
+    user_id: target.userId,
+    wrapped_keys: wrappedKeys,
+  });
+  if (inv.status !== 201) return inv.status;
+  const { code } = (await inv.json()) as { code: string };
+  const peek = await target.call('GET', `/invites/${encodeURIComponent(code)}`);
+  if (peek.status !== 200) return peek.status;
+  const info = (await peek.json()) as {
+    wrapped_keys: { channel_id: string; key_version: number; wrapped_key: string }[];
+  };
+  return (await target.call('POST', `/invites/${code}/complete`, { wrapped_keys: info.wrapped_keys })).status;
+}

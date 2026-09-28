@@ -1,7 +1,7 @@
 // Account deletion: one transaction wipes identity, authored messages, DMs
 // and owned communities; gdm creator role transfers. Other users untouched.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startServer, makeUser, type TestServer, type TestUser } from './helpers';
+import { startServer, makeUser, inviteJoin, type TestServer, type TestUser } from './helpers';
 
 let srv: TestServer;
 let alice: TestUser, bob: TestUser;
@@ -50,10 +50,9 @@ describe('DELETE /users/me', () => {
       nonce: NONCE,
       ciphertext: CT,
     });
-    expect((await bob.call('POST', `/communities/${bc.id}/members`, {
-      user_id: alice.userId,
-      wrapped_keys: [{ channel_id: bc.channels[0]!.id, wrapped_key: 'A'.repeat(48) }],
-    })).status).toBe(204);
+    expect(await inviteJoin(bob, alice, bc.id, [
+      { channel_id: bc.channels[0]!.id, wrapped_key: 'A'.repeat(48) },
+    ])).toBe(204);
     // alice's message inside bob's community
     expect(
       (await alice.call('POST', `/channels/${bc.channels[0]!.id}/messages`, {

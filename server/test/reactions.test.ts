@@ -5,7 +5,7 @@
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
-import { startServer, makeUser, type TestServer, type TestUser } from './helpers';
+import { startServer, makeUser, inviteJoin, type TestServer, type TestUser } from './helpers';
 
 let srv: TestServer;
 let owner: TestUser;
@@ -98,10 +98,7 @@ beforeAll(async () => {
   const j = (await r.json()) as { community: { id: string }; channels: { id: string }[] };
   chId = j.channels[0]!.id;
   expect(
-    (await owner.call('POST', `/communities/${j.community.id}/members`, {
-      user_id: member.userId,
-      wrapped_keys: [{ channel_id: chId, wrapped_key: W('A') }],
-    })).status,
+    await inviteJoin(owner, member, j.community.id, [{ channel_id: chId, wrapped_key: W('A') }]),
   ).toBe(204);
   await friend(owner, member);
 });
@@ -324,10 +321,7 @@ describe('reaction cleanup on hard deletes', () => {
     });
     const j = (await r.json()) as { community: { id: string }; channels: { id: string }[] };
     expect(
-      (await solo.call('POST', `/communities/${j.community.id}/members`, {
-        user_id: member.userId,
-        wrapped_keys: [{ channel_id: j.channels[0]!.id, wrapped_key: W('A') }],
-      })).status,
+      await inviteJoin(solo, member, j.community.id, [{ channel_id: j.channels[0]!.id, wrapped_key: W('A') }]),
     ).toBe(204);
     const sent = await solo.call('POST', `/channels/${j.channels[0]!.id}/messages`, {
       key_version: 1, nonce: NONCE, ciphertext: CT,
@@ -366,10 +360,7 @@ describe('reaction cleanup on hard deletes', () => {
     });
     const j = (await r.json()) as { community: { id: string }; channels: { id: string }[] };
     expect(
-      (await gone.call('POST', `/communities/${j.community.id}/members`, {
-        user_id: member.userId,
-        wrapped_keys: [{ channel_id: j.channels[0]!.id, wrapped_key: W('A') }],
-      })).status,
+      await inviteJoin(gone, member, j.community.id, [{ channel_id: j.channels[0]!.id, wrapped_key: W('A') }]),
     ).toBe(204);
     const sent2 = await gone.call('POST', `/channels/${j.channels[0]!.id}/messages`, {
       key_version: 1, nonce: NONCE, ciphertext: CT,

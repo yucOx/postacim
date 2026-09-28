@@ -13,6 +13,7 @@ import {
 } from '../lib/access.js';
 import { evictFromRooms } from '../livekit.js';
 import { hub } from '../ws/hub.js';
+import { genCode } from './invites.js';
 
 interface CreateCommunityBody {
   name: string;
@@ -196,27 +197,34 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     ) {
       return reply.code(400).send({ error: 'sarılı anahtarlar tüm kanalları kapsamalı' });
     }
+    // Consent: the target must accept — no forced membership. The add creates
+    // a single-use invite targeted to the user and notifies them over WS; the
+    // target's own redeem (complete) does the actual membership INSERT.
+    const inviteId = crypto.randomUUID();
+    const code = genCode();
     const tx = db.transaction(() => {
       db.prepare(
-        'INSERT INTO members(community_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)',
-      ).run(id, target.id, 'member', Date.now());
+        `INSERT INTO invites(id, community_id, code, target_user_id, max_uses, uses, expires_at, created_by, created_at)
+         VALUES (?, ?, ?, ?, 1, 0, NULL, ?, ?)`,
+      ).run(inviteId, id, code, target.id, req.user.id, Date.now());
       for (const w of wrapped) {
         const ch = channels.find((c) => c.id === w.channel_id)!;
         db.prepare(
-          'INSERT INTO wrapped_channel_keys(channel_id, user_id, key_version, wrapped_key) VALUES (?, ?, ?, ?)',
-        ).run(w.channel_id, target.id, ch.key_version, w.wrapped_key);
+          'INSERT INTO invite_keys(invite_id, channel_id, key_version, wrapped_key) VALUES (?, ?, ?, ?)',
+        ).run(inviteId, w.channel_id, ch.key_version, w.wrapped_key);
       }
     });
     tx();
-    // target sockets join the room BEFORE broadcast so the invitee gets the event too
-    hub.joinCommunity(target.id, id);
-    hub.broadcast(id, {
-      type: 'community:member_added',
+    hub.sendToUser(target.id, {
+      type: 'community:invite',
       community_id: id,
-      user: { id: target.id, nick: target.nick },
-      public_key: target.public_key,
+      community_name: getCommunity(id)!.name,
+      code,
+      from_nick: req.user.nick,
     });
-    return reply.code(204).send();
+    // code goes back to staff too: harmless (inviteUsable only lets the
+    // target redeem) and lets tests / a future deep-link share it
+    return reply.code(201).send({ code });
   });
 
   app.delete('/communities/:id/members/:uid', async (req, reply) => {

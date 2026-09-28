@@ -492,10 +492,20 @@ export default {
     noDms: 'start from a friend',
     newChat: 'new chat / add friend',
   },
+  // InvitePrompt — staff "add member" shows a consent modal on the target
+  invitePrompt: {
+    title: 'server invite',
+    body: '{name} invited you to the {community} server',
+    hint: 'accepting joins the community; declining changes nothing',
+    accept: 'accept',
+    decline: 'dismiss',
+    error: 'could not complete the invite',
+  },
   // MemberList
   members: {
     roster: 'ROSTER — {n}',
     addMember: 'add member',
+    inviteSent: 'invite sent to {name} — they need to accept',
     memberCard: '{name} member card',
     memberCardTitle: '{name} — member card',
     fingerprint: 'fingerprint',

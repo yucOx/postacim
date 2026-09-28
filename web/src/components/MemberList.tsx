@@ -51,7 +51,9 @@ export default function MemberList() {
     setBusy(true);
     setError(null);
     try {
-      await addMember(community.id, nick.trim());
+      const invited = await addMember(community.id, nick.trim());
+      // consent: üye eklenmedi, hedefe onay daveti gitti
+      toast.success(t('members.inviteSent', { name: invited }));
       setAdding(false);
       setNick('');
     } catch (err) {

@@ -1,7 +1,7 @@
 // Message surface: history pagination cursor, per-user (not per-IP) rate
 // bucket on send, and rotate roster validation.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startServer, makeUser, type TestServer, type TestUser } from './helpers';
+import { startServer, makeUser, inviteJoin, type TestServer, type TestUser } from './helpers';
 
 let srv: TestServer;
 let owner: TestUser;
@@ -24,11 +24,9 @@ beforeAll(async () => {
   const j = (await r.json()) as { community: { id: string }; channels: { id: string }[] };
   comId = j.community.id;
   chId = j.channels[0]!.id;
-  const add = await owner.call('POST', `/communities/${comId}/members`, {
-    user_id: member.userId,
-    wrapped_keys: [{ channel_id: chId, wrapped_key: 'A'.repeat(48) }],
-  });
-  expect(add.status).toBe(204);
+  expect(
+    await inviteJoin(owner, member, comId, [{ channel_id: chId, wrapped_key: 'A'.repeat(48) }]),
+  ).toBe(204);
 });
 afterAll(() => srv.stop());
 
@@ -254,11 +252,9 @@ describe('message deletion (tombstone)', () => {
 
   it('admin deletes another user\'s message; plain member gets 403 on someone else\'s', async () => {
     const admin = await makeUser(srv.baseUrl, 'md');
-    const add = await owner.call('POST', `/communities/${comId}/members`, {
-      user_id: admin.userId,
-      wrapped_keys: [{ channel_id: chId, wrapped_key: 'A'.repeat(48) }],
-    });
-    expect(add.status).toBe(204);
+    expect(
+      await inviteJoin(owner, admin, comId, [{ channel_id: chId, wrapped_key: 'A'.repeat(48) }]),
+    ).toBe(204);
     expect((await owner.call('POST', `/communities/${comId}/admins`, { user_id: admin.userId })).status).toBe(204);
 
     const theirs = await post(member);

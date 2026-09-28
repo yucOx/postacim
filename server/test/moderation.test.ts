@@ -1,6 +1,6 @@
 // Moderation: roles, kick→freeze→rotate cycle, bans, resource caps.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startServer, makeUser, type TestServer, type TestUser } from './helpers';
+import { startServer, makeUser, inviteJoin, type TestServer, type TestUser } from './helpers';
 
 let srv: TestServer;
 let owner: TestUser, admin: TestUser, member: TestUser, mallory: TestUser;
@@ -30,14 +30,11 @@ async function createCommunity(u: TestUser, name: string): Promise<{ id: string;
 }
 
 async function addMember(staff: TestUser, cid: string, u: TestUser): Promise<number> {
-  const r = await staff.call('POST', `/communities/${cid}/members`, {
-    user_id: u.userId,
-    wrapped_keys: [
-      { channel_id: textChannel, wrapped_key: 'A'.repeat(48) },
-      { channel_id: voiceChannel, wrapped_key: 'B'.repeat(48) },
-    ],
-  });
-  return r.status;
+  // consent flow: POST /members creates a targeted invite; u peeks + completes
+  return inviteJoin(staff, u, cid, [
+    { channel_id: textChannel, wrapped_key: 'A'.repeat(48) },
+    { channel_id: voiceChannel, wrapped_key: 'B'.repeat(48) },
+  ]);
 }
 
 beforeAll(async () => {
@@ -169,11 +166,9 @@ describe('bans', () => {
 describe('self-leave + delete', () => {
   it('member leaves: keys purged, channels freeze, bootstrap drops it', async () => {
     const c = await createCommunity(owner, 'ayrilma-test');
-    const add = await owner.call('POST', `/communities/${c.id}/members`, {
-      user_id: member.userId,
-      wrapped_keys: c.channels.map((ch) => ({ channel_id: ch.id, wrapped_key: 'A'.repeat(48) })),
-    });
-    expect(add.status).toBe(204);
+    expect(
+      await inviteJoin(owner, member, c.id, c.channels.map((ch) => ({ channel_id: ch.id, wrapped_key: 'A'.repeat(48) }))),
+    ).toBe(204);
     const leave = await member.call('POST', `/communities/${c.id}/leave`);
     expect(leave.status).toBe(200);
     const affected = ((await leave.json()) as { affected_channel_ids: string[] }).affected_channel_ids;
@@ -199,11 +194,9 @@ describe('self-leave + delete', () => {
 
   it('owner deletes: cascade removes everything, non-owner blocked', async () => {
     const c = await createCommunity(owner, 'silme-test');
-    const add = await owner.call('POST', `/communities/${c.id}/members`, {
-      user_id: member.userId,
-      wrapped_keys: c.channels.map((ch) => ({ channel_id: ch.id, wrapped_key: 'A'.repeat(48) })),
-    });
-    expect(add.status).toBe(204);
+    expect(
+      await inviteJoin(owner, member, c.id, c.channels.map((ch) => ({ channel_id: ch.id, wrapped_key: 'A'.repeat(48) }))),
+    ).toBe(204);
     expect((await member.call('DELETE', `/communities/${c.id}`)).status).toBe(403);
     expect((await owner.call('DELETE', `/communities/${c.id}`)).status).toBe(204);
     // gone from both bootstraps

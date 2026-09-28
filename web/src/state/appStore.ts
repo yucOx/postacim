@@ -19,6 +19,8 @@ import {
 } from '../lib/keygossip';
 import { useSecurityStore } from './securityStore';
 import { useDeviceStore } from './deviceStore';
+import { useSettingsStore } from './settingsStore';
+import { playChime } from '../lib/sound';
 
 export interface Channel {
   id: string;
@@ -88,6 +90,9 @@ interface AppState {
   activeCommunityId: string | null;
   activeChannelId: string | null;
   channelKeys: KeyEpochs;
+  /** kabul bekleyen sunucu daveti (staff "üye ekle" → hedefte onay modalı) */
+  pendingInvite: { code: string; communityName: string; fromNick: string } | null;
+  setPendingInvite: (v: { code: string; communityName: string; fromNick: string } | null) => void;
   loadBootstrap: () => Promise<void>;
   activeCommunity: () => Community | null;
   activeChannel: () => Channel | null;
@@ -98,7 +103,7 @@ interface AppState {
   rekeyAffected: (communityId: string, channelIds: string[]) => Promise<void>;
   createCommunity: (name: string) => Promise<void>;
   createChannel: (communityId: string, name: string, type: 'text' | 'voice') => Promise<void>;
-  addMember: (communityId: string, nick: string) => Promise<void>;
+  addMember: (communityId: string, nick: string) => Promise<string>;
   removeMember: (communityId: string, userId: string) => Promise<void>;
   banMember: (communityId: string, userId: string) => Promise<void>;
   setRole: (communityId: string, userId: string, makeAdmin: boolean) => Promise<void>;
@@ -186,6 +191,8 @@ export const useAppStore = create<AppState>((set, get) => {
   activeCommunityId: null,
   activeChannelId: null,
   channelKeys: {},
+  pendingInvite: null,
+  setPendingInvite: (v) => set({ pendingInvite: v }),
 
   loadBootstrap: async () => {
     const data = await api<{
@@ -380,11 +387,14 @@ export const useAppStore = create<AppState>((set, get) => {
       const key = await get().ensureChannelKey(ch.id);
       wrapped.push({ channel_id: ch.id, wrapped_key: wrapKeyFor(key, target.public_key) });
     }
+    // server turns this into a targeted invite + WS prompt for the target —
+    // membership lands only when THEY accept (consent)
     await api(`/communities/${communityId}/members`, {
       method: 'POST',
       body: { user_id: target.id, wrapped_keys: wrapped },
     });
-    // member_added broadcast triggers bootstrap refresh for everyone
+    return target.nick;
+    // member_added broadcast fires when the target accepts (their complete)
   },
 
   // Owner/admin flow: remove on the server, then rekey every affected channel by
@@ -609,6 +619,12 @@ export const useAppStore = create<AppState>((set, get) => {
       const me = useAuthStore.getState().user?.id;
       if (e.type === 'community:member_added') {
         void get().loadBootstrap();
+      } else if (e.type === 'community:invite') {
+        // staff "üye ekle" → hedefte onay modalı (davet kabul edilmeden
+        // üyelik basılmaz). Chime: davetin geldiğini haber versin.
+        const inv = e as unknown as { code: string; community_name: string; from_nick: string };
+        get().setPendingInvite({ code: inv.code, communityName: inv.community_name, fromNick: inv.from_nick });
+        if (useSettingsStore.getState().soundOn) playChime();
       } else if (e.type === 'community:member_removed') {
         if (e.user_id === me) {
           dropCommunity(e.community_id as string);

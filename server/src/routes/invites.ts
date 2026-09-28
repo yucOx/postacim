@@ -17,7 +17,7 @@ interface CompleteBody {
 
 // base58-style, no confusables
 const CODE_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-function genCode(len = 10): string {
+export function genCode(len = 10): string {
   const bytes = crypto.randomBytes(len);
   let out = '';
   for (let i = 0; i < len; i++) out += CODE_ALPHABET[bytes[i]! % CODE_ALPHABET.length]!;

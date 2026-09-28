@@ -488,10 +488,20 @@ export default {
     noDms: 'beginne mit einem freund',
     newChat: 'neuer chat / freund hinzufügen',
   },
+  // InvitePrompt — "mitglied hinzufügen" zeigt dem ziel einen zustimmungs-dialog
+  invitePrompt: {
+    title: 'server-einladung',
+    body: '{name} hat dich zum server {community} eingeladen',
+    hint: 'beim annehmen trittst du der community bei; ablehnen ändert nichts',
+    accept: 'annehmen',
+    decline: 'abbrechen',
+    error: 'einladung konnte nicht abgeschlossen werden',
+  },
   // MemberList
   members: {
     roster: 'MANIFEST — {n}',
     addMember: 'mitglied hinzufügen',
+    inviteSent: 'einladung an {name} gesendet — sie muss akzeptiert werden',
     memberCard: '{name} mitgliedskarte',
     memberCardTitle: '{name} — mitgliedskarte',
     fingerprint: 'fingerabdruck',

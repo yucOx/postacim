@@ -523,10 +523,20 @@ export default {
     noDms: 'arkadaşından başla',
     newChat: 'yeni sohbet / arkadaş ekle',
   },
+  // InvitePrompt — staff "üye ekle" hedefteki kullanıcıda onay modalı
+  invitePrompt: {
+    title: 'sunucu daveti',
+    body: '{name} seni {community} sunucusuna davet etti',
+    hint: 'kabul edersen topluluğa katılırsın; red edersen hiçbir şey değişmez',
+    accept: 'kabul et',
+    decline: 'vazgeç',
+    error: 'davet tamamlanamadı',
+  },
   // MemberList
   members: {
     roster: 'MANİFO — {n}',
     addMember: 'üye ekle',
+    inviteSent: '{name} kişisine davet gönderildi — kabul etmesi gerekiyor',
     memberCard: '{name} üye kartı',
     memberCardTitle: '{name} — üye kartı',
     fingerprint: 'parmak izi',
