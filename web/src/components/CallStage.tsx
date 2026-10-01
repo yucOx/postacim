@@ -3,7 +3,7 @@ import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsMuted } f
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
-import { MicOff, LayoutGrid, Columns2, Volume2, VolumeX } from 'lucide-react';
+import { MicOff, Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
 import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
@@ -129,7 +129,7 @@ function NamePlate({
 }): React.ReactNode {
   const { t } = useT();
   return (
-    <span className="pointer-events-none absolute bottom-2 left-2 z-10 flex max-w-[calc(100%-3rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+    <span className="pointer-events-none absolute bottom-2 left-2 z-10 flex max-w-[calc(100%-3rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
       <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
         {nickFor(identity)}
         {isLocal && ` (${t('call.nameSelf')})`}
@@ -145,6 +145,39 @@ function NamePlate({
 // which overlap ours — hide them wherever we draw our own plate
 const TILE_HIDE =
   ' [&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden';
+
+/** object-contain video'nun gerçekte kapladığı dikdörtgen — SpeakingTile
+ *  [container-type:size] olduğu için cq birimleri tile boyutunu verir;
+ *  letterbox matematiği birebir hesaplanır (contain = min(100cqw, 100cqh·r)
+ *  × min(100cqh, 100cqw/r)). İsim/mikrofon plakası ve tıklama hedefi KAMERA
+ *  GÖRÜNTÜSÜNÜN üstünde durur (Discord), alttaki karanlık bantta değil.
+ *  onClick verilmezse kutu tıklamalara kapalıdır — tile'ın kendi tıklaması
+ *  video üstünde de çalışmaya devam eder. */
+function VideoFit({
+  aspect,
+  children,
+  onClick,
+}: {
+  aspect: number | null;
+  children?: React.ReactNode;
+  onClick?: () => void;
+}): React.ReactNode {
+  const r = aspect && aspect > 0 ? aspect : 16 / 9;
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+      <div
+        onClick={onClick}
+        className={`relative ${onClick ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'}`}
+        style={{
+          width: `min(100cqw, calc(100cqh * ${r}))`,
+          height: `min(100cqh, calc(100cqw / ${r}))`,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 // yayınun gerçek en-boy oranı — tile'ı görüntüye tam oturtmak için (Discord:
 // pencere görüntünün şeklini takip eder, kırpma/boş bant olmaz). Boyut
@@ -200,7 +233,7 @@ function SpeakingTile({
       onContextMenu={onContextMenu}
       title={title}
       style={style}
-      className={`group transition-all duration-150 ${ringClass} ${className}`}
+      className={`[container-type:size] transition-all duration-150 ${ringClass} ${className}`}
     >
       {children}
     </div>
@@ -214,12 +247,13 @@ interface TileProps {
   /** absolute overlay inside the tile (e.g. the sharer's stop button) */
   overlay?: React.ReactNode;
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** video görüntüsüne tıklama (Discord: kamera → grid, yayın → yan yana) */
+  onVideoClick?: () => void;
 }
 
-/** Odak modunun büyük döşemesi — Discord gibi TIKLANMAZ (kamera dışındaki
- *  karanlık alana yanlışlıkla tıklayıp odağı bozmak mümkün olmaz); düzen
- *  yalnız üstteki butonlar ve alttaki şeritle değişir. */
-function VideoTile({ trackRef, isScreen = false, isFocus = false, overlay, onContextMenu }: TileProps): React.ReactNode {
+/** Odak modunun büyük döşemesi — yalnız KAMERA GÖRÜNTÜSÜ tıklanabilir
+ *  (VideoFit kutusu); karanlık letterbox alanına tıklamak hiçbir şey yapmaz. */
+function VideoTile({ trackRef, isScreen = false, isFocus = false, overlay, onContextMenu, onVideoClick }: TileProps): React.ReactNode {
   return (
     <SpeakingTile
       participant={trackRef.participant}
@@ -230,14 +264,16 @@ function VideoTile({ trackRef, isScreen = false, isFocus = false, overlay, onCon
       <div className={`h-full w-full ${TILE_HIDE}`}>
         <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
       </div>
-      <NamePlate
-        participant={trackRef.participant}
-        identity={trackRef.participant.identity}
-        isLocal={trackRef.participant.isLocal}
-        isScreen={isScreen}
-        isFocus={isFocus}
-      />
-      <MuteBadge participant={trackRef.participant} isScreen={isScreen} />
+      <VideoFit aspect={trackAspect(trackRef)} onClick={onVideoClick}>
+        <NamePlate
+          participant={trackRef.participant}
+          identity={trackRef.participant.identity}
+          isLocal={trackRef.participant.isLocal}
+          isScreen={isScreen}
+          isFocus={isFocus}
+        />
+        <MuteBadge participant={trackRef.participant} isScreen={isScreen} />
+      </VideoFit>
       {overlay}
     </SpeakingTile>
   );
@@ -551,8 +587,10 @@ export default function CallStage({
           trackRef={cam}
           className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
         />
-        <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
-        <MuteBadge participant={p} isScreen={false} />
+        <VideoFit aspect={aspect}>
+          <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+          <MuteBadge participant={p} isScreen={false} />
+        </VideoFit>
         {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </SpeakingTile>
     ) : (
@@ -637,13 +675,15 @@ export default function CallStage({
             trackRef={v.trackRef}
             className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
           />
-          <NamePlate
-            participant={v.trackRef.participant}
-            identity={v.identity}
-            isLocal={v.trackRef.participant.isLocal}
-            isScreen={v.isScreen}
-          />
-          <MuteBadge participant={v.trackRef.participant} isScreen={v.isScreen} />
+          <VideoFit aspect={trackAspect(v.trackRef)}>
+            <NamePlate
+              participant={v.trackRef.participant}
+              identity={v.identity}
+              isLocal={v.trackRef.participant.isLocal}
+              isScreen={v.isScreen}
+            />
+            <MuteBadge participant={v.trackRef.participant} isScreen={v.isScreen} />
+          </VideoFit>
           {own && stopBtn(true)}
         </SpeakingTile>
       );
@@ -719,13 +759,15 @@ export default function CallStage({
                 trackRef={v.trackRef}
                 className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
               />
-              <NamePlate
-                participant={v.trackRef.participant}
-                identity={v.identity}
-                isLocal={v.trackRef.participant.isLocal}
-                isScreen={v.isScreen}
-              />
-              <MuteBadge participant={v.trackRef.participant} isScreen={v.isScreen} />
+              <VideoFit aspect={aspect}>
+                <NamePlate
+                  participant={v.trackRef.participant}
+                  identity={v.identity}
+                  isLocal={v.trackRef.participant.isLocal}
+                  isScreen={v.isScreen}
+                />
+                <MuteBadge participant={v.trackRef.participant} isScreen={v.isScreen} />
+              </VideoFit>
               {own && stopBtn(true)}
             </SpeakingTile>
           );
@@ -766,6 +808,10 @@ export default function CallStage({
                 trackRef={focusedVideo.trackRef}
                 isScreen={focusedVideo.isScreen}
                 isFocus={!!spotlight}
+                onVideoClick={() => {
+                  if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
+                  else releaseSpot();
+                }}
                 onContextMenu={openCtx(
                   focusedVideo.identity,
                   nickFor(focusedVideo.identity),
@@ -773,32 +819,6 @@ export default function CallStage({
                 )}
                 overlay={
                   <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        releaseSpot();
-                      }}
-                      className="flex items-center gap-1 rounded-md border border-night-700 bg-night-950/85 px-2 py-1 text-xs font-semibold text-paper-300 transition-colors hover:text-paper-100"
-                      title="Izgara görünümüne dön"
-                    >
-                      <LayoutGrid size={13} />
-                      <span>Izgara</span>
-                    </button>
-                    {focusedVideo.isScreen && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
-                        }}
-                        className="flex items-center gap-1 rounded-md border border-night-700 bg-night-950/85 px-2 py-1 text-xs font-semibold text-paper-300 transition-colors hover:text-paper-100"
-                        title={t('stream.sideBySide')}
-                      >
-                        <Columns2 size={13} />
-                        <span>{t('stream.sideBySide')}</span>
-                      </button>
-                    )}
                     {focusedVideo.isScreen && focusedVideo.trackRef.participant.isLocal && stopBtn(false)}
                     {focusedVideo.isScreen && !focusedVideo.trackRef.participant.isLocal && (
                       <button
@@ -904,17 +924,25 @@ export default function CallStage({
                 className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
               >
                 {cam ? (
-                  <ParticipantTile
-                    trackRef={cam}
-                    className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
-                  />
+                  <>
+                    <ParticipantTile
+                      trackRef={cam}
+                      className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+                    />
+                    <VideoFit aspect={trackAspect(cam)}>
+                      <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+                      <MuteBadge participant={p} isScreen={false} />
+                    </VideoFit>
+                  </>
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <Avatar userId={p.identity} label={nickFor(p.identity)} size={104} srcOverride={null} />
-                  </div>
+                  <>
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Avatar userId={p.identity} label={nickFor(p.identity)} size={104} srcOverride={null} />
+                    </div>
+                    <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+                    <MuteBadge participant={p} isScreen={false} />
+                  </>
                 )}
-                <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
-                <MuteBadge participant={p} isScreen={false} />
                 {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
               </SpeakingTile>
             );
