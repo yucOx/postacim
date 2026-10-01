@@ -3,7 +3,7 @@ import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsMuted } f
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
-import { MicOff, LayoutGrid, Volume2, VolumeX } from 'lucide-react';
+import { MicOff, LayoutGrid, Columns2, Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
 import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
@@ -129,7 +129,7 @@ function NamePlate({
 }): React.ReactNode {
   const { t } = useT();
   return (
-    <span className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-3rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
+    <span className="pointer-events-none absolute bottom-2 left-2 z-10 flex max-w-[calc(100%-3rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
       <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
         {nickFor(identity)}
         {isLocal && ` (${t('call.nameSelf')})`}
@@ -200,7 +200,7 @@ function SpeakingTile({
       onContextMenu={onContextMenu}
       title={title}
       style={style}
-      className={`transition-all duration-150 ${ringClass} ${className}`}
+      className={`group transition-all duration-150 ${ringClass} ${className}`}
     >
       {children}
     </div>
@@ -209,34 +209,27 @@ function SpeakingTile({
 
 interface TileProps {
   trackRef: TrackReference;
-  onClick?: () => void;
-  active?: boolean;
   isScreen?: boolean;
   isFocus?: boolean;
-  /** fill the flex container (dominant tile) instead of aspect-video (strip/grid) */
-  fill?: boolean;
   /** absolute overlay inside the tile (e.g. the sharer's stop button) */
   overlay?: React.ReactNode;
-  /** tooltip override — the dominant tile's click toggles layout, not "büyüt" */
-  title?: string;
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill, overlay, title: titleProp, onContextMenu }: TileProps): React.ReactNode {
-  const { t } = useT();
+/** Odak modunun büyük döşemesi — Discord gibi TIKLANMAZ (kamera dışındaki
+ *  karanlık alana yanlışlıkla tıklayıp odağı bozmak mümkün olmaz); düzen
+ *  yalnız üstteki butonlar ve alttaki şeritle değişir. */
+function VideoTile({ trackRef, isScreen = false, isFocus = false, overlay, onContextMenu }: TileProps): React.ReactNode {
   return (
     <SpeakingTile
       participant={trackRef.participant}
       isScreen={isScreen}
-      active={active}
-      onClick={onClick}
       onContextMenu={onContextMenu}
-      title={titleProp ?? (onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined)}
-      className={`relative cursor-pointer overflow-hidden rounded-md ${
-        fill ? 'min-h-0 min-w-0 flex-1' : 'h-full w-full'
-      } [&_video]:object-contain ${TILE_HIDE}`}
+      className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md [&_video]:object-contain"
     >
-      <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
+      <div className={`h-full w-full ${TILE_HIDE}`}>
+        <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
+      </div>
       <NamePlate
         participant={trackRef.participant}
         identity={trackRef.participant.identity}
@@ -773,12 +766,6 @@ export default function CallStage({
                 trackRef={focusedVideo.trackRef}
                 isScreen={focusedVideo.isScreen}
                 isFocus={!!spotlight}
-                fill
-                title={focusedVideo.isScreen ? t('stream.sideBySide') : t('stream.enlargeExit')}
-                onClick={() => {
-                  if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
-                  else releaseSpot();
-                }}
                 onContextMenu={openCtx(
                   focusedVideo.identity,
                   nickFor(focusedVideo.identity),
@@ -798,6 +785,20 @@ export default function CallStage({
                       <LayoutGrid size={13} />
                       <span>Izgara</span>
                     </button>
+                    {focusedVideo.isScreen && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
+                        }}
+                        className="flex items-center gap-1 rounded-md border border-night-700 bg-night-950/85 px-2 py-1 text-xs font-semibold text-paper-300 transition-colors hover:text-paper-100"
+                        title={t('stream.sideBySide')}
+                      >
+                        <Columns2 size={13} />
+                        <span>{t('stream.sideBySide')}</span>
+                      </button>
+                    )}
                     {focusedVideo.isScreen && focusedVideo.trackRef.participant.isLocal && stopBtn(false)}
                     {focusedVideo.isScreen && !focusedVideo.trackRef.participant.isLocal && (
                       <button
