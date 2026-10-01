@@ -493,6 +493,7 @@ export default {
     mentionedBy: '{nick} seni andı · {room}',
     incomingCall: 'Gelen arama — {nick}',
     friendRequest: 'Arkadaşlık isteği — {nick}',
+    friendAdded: '{nick} artık arkadaşın',
     communityInvite: '{name} topluluğuna davet — {nick}',
   },
   // ConfirmDialog

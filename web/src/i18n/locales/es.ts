@@ -459,6 +459,7 @@ export default {
     mentionedBy: '{nick} te mencionó · {room}',
     incomingCall: 'Llamada entrante — {nick}',
     friendRequest: 'Solicitud de amistad — {nick}',
+    friendAdded: '{nick} ahora es tu amigo',
     communityInvite: 'Invitación a {name} — {nick}',
   },
   confirm: {

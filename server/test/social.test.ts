@@ -14,6 +14,34 @@ async function friend(a: TestUser, b: TestUser): Promise<void> {
   expect((await b.call('POST', `/friends/requests/${a.userId}/accept`, {})).status).toBe(204);
 }
 
+// --- WS dinleyici (ttl.test.ts kalıbı) ---
+async function wsCollect(token: string): Promise<{
+  events: { type: string;[k: string]: unknown }[];
+  close: () => void;
+}> {
+  const { WebSocket } = await import('ws');
+  const ws = new WebSocket(srv.baseUrl.replace('/api', '').replace(/^http/, 'ws') + '/ws', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const events: { type: string;[k: string]: unknown }[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('ws ready timeout')), 5000);
+    ws.on('message', (d: { toString(): string }) => {
+      const e = JSON.parse(d.toString()) as { type: string };
+      if (e.type === 'ready') {
+        clearTimeout(t);
+        resolve();
+      }
+    });
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token })));
+    ws.on('error', reject);
+  });
+  ws.on('message', (d: { toString(): string }) => {
+    events.push(JSON.parse(d.toString()) as { type: string });
+  });
+  return { events, close: () => ws.close() };
+}
+
 beforeAll(async () => {
   srv = await startServer();
   alice = await makeUser(srv.baseUrl, 'sa');
@@ -27,6 +55,36 @@ beforeAll(async () => {
 afterAll(() => srv.stop());
 
 describe('friends', () => {
+  it('friend events carry the peer nick', async () => {
+    // istemci toast'ında isim gösteriyor — payload boşsa hep "?" çıkar
+    const dave = await makeUser(srv.baseUrl, 'sd');
+    const erin = await makeUser(srv.baseUrl, 'se');
+    const daveWs = await wsCollect(dave.token);
+    const erinWs = await wsCollect(erin.token);
+    try {
+      await dave.call('POST', '/friends/requests', { nick: erin.nick });
+      await new Promise((r) => setTimeout(r, 400));
+      const req = erinWs.events.find((e) => e.type === 'friend_request:new');
+      expect(req).toBeDefined();
+      expect((req!.user as { nick: string }).nick).toBe(dave.nick);
+
+      await erin.call('POST', `/friends/requests/${dave.userId}/accept`, {});
+      await new Promise((r) => setTimeout(r, 400));
+      // kabul eden (erin) karşı tarafı, edilen (dave) da kendi karşı tarafını görür
+      for (const [ws, want] of [
+        [daveWs, erin.nick],
+        [erinWs, dave.nick],
+      ] as const) {
+        const added = ws.events.find((e) => e.type === 'friend:new');
+        expect(added).toBeDefined();
+        expect((added!.user as { nick: string }).nick).toBe(want);
+      }
+    } finally {
+      daveWs.close();
+      erinWs.close();
+    }
+  });
+
   it('request list + duplicate + unfriend', async () => {
     const me = (await (await alice.call('GET', '/friends')).json()) as {
       friends: { nick: string }[];

@@ -635,16 +635,17 @@ export const useAppStore = create<AppState>((set, get) => {
         }
       } else if (e.type === 'community:deleted') {
         dropCommunity(e.community_id as string);
-      } else if (
-        e.type === 'friend_request:new' ||
-        e.type === 'friend:new'
-      ) {
-        // yeni arkadaşlık isteği kabulü — ses + üstte bildirim
+      } else if (e.type === 'friend_request:new') {
+        // yeni arkadaşlık isteği — payload: { user: { id, nick } }
         playSound('friend');
-        const from = (e as unknown as { from_nick?: string; nick?: string }).from_nick
-          ?? (e as unknown as { nick?: string }).nick
-          ?? '?';
+        const from = (e as unknown as { user?: { nick?: string } }).user?.nick ?? '?';
         toast.info(t('toast.friendRequest', { nick: from }));
+        void get().loadBootstrap();
+      } else if (e.type === 'friend:new') {
+        // kabul edildi — payload: { user: { id, nick } } (karşı taraf)
+        playSound('friend');
+        const nick = (e as unknown as { user?: { nick?: string } }).user?.nick ?? '?';
+        toast.success(t('toast.friendAdded', { nick }));
         void get().loadBootstrap();
       } else if (
         e.type === 'channel:created' ||

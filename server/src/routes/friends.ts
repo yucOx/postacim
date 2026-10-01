@@ -73,9 +73,13 @@ export async function friendRoutes(app: FastifyInstance): Promise<void> {
       .run(uid, req.user.id);
     if (info.changes === 0) return reply.code(404).send({ error: 'istek bulunamadı' });
     addFriend(uid, req.user.id);
-    const payload = { type: 'friend:new' };
-    hub.sendToUser(uid, payload);
-    hub.sendToUser(req.user.id, payload);
+    // her tarafa karşı tarafın nick'ini gönder — istemci toast'ında isim
+    // göstermek için kullanıyor (payload boşsa "?" görünür)
+    const other = db.prepare('SELECT id, nick FROM users WHERE id = ?').get(uid) as
+      | { id: string; nick: string }
+      | undefined;
+    hub.sendToUser(uid, { type: 'friend:new', user: { id: req.user.id, nick: req.user.nick } });
+    hub.sendToUser(req.user.id, { type: 'friend:new', user: { id: uid, nick: other?.nick ?? '?' } });
     return reply.code(204).send();
   });
 
