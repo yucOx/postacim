@@ -37,6 +37,8 @@ export default {
     minimize: 'réduire',
     minimizeTitle: 'réduire — retour à la discussion',
     minimizeAria: 'réduire l appel',
+    chatShow: 'Discussion',
+    chatHide: 'Masquer la discussion',
     end: 'fin',
     recall: 'rappeler',
     close: 'fermer',

@@ -77,6 +77,8 @@ export default function Shell() {
   const joinedVoiceChannel = useVoiceStore((s) => s.joinedChannelId);
   const pip = useVoiceStore((s) => s.pip);
   const isCallMinimized = isDmCall && !!room && (pip || view !== 'dm' || activeDm?.id !== callDmId);
+  // arama sırasında sohbet paneli — varsayılan kapalı (Discord: video önce)
+  const [showCallChat, setShowCallChat] = useState(false);
   const isCommunityVoiceMinimized =
     !isDmCall &&
     !!joinedVoiceChannel &&
@@ -314,14 +316,14 @@ export default function Shell() {
         </div>
 
         {view === 'dm' ? (
-          <main className={`flex min-w-0 flex-1 ${isDmCall && !isCallMinimized ? 'flex-row' : 'flex-col'}`}>
+          <main className={`flex min-w-0 flex-1 ${isDmCall && !isCallMinimized && showCallChat ? 'flex-row' : 'flex-col'}`}>
             {isDmCall && !isCallMinimized ? (
-              // Discord mantığı: arama kutusu ortalanmış sabit panel, sohbet
-              // sağda görünür kalır (dar ekranda gizlenir)
+              // Discord mantığı: sohbet varsayılan KAPALI — video önceliklidir.
+              // Kullanıcı CallView'daki düğmeyle açınca sağda belirir.
               <>
-                <CallView />
-                {activeDm && (
-                  <div className="hidden w-80 shrink-0 flex-col border-l border-night-700 lg:flex">
+                <CallView showChat={showCallChat} onToggleChat={() => setShowCallChat((v) => !v)} />
+                {showCallChat && activeDm && (
+                  <div className="hidden w-80 shrink-0 flex-col border-l border-night-700 md:flex">
                     <DmChat dmId={activeDm.id} />
                   </div>
                 )}

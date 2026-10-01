@@ -37,6 +37,8 @@ export default {
     minimize: 'minimieren',
     minimizeTitle: 'minimieren — zurück zum chat',
     minimizeAria: 'anruf minimieren',
+    chatShow: 'Chat',
+    chatHide: 'Chat ausblenden',
     end: 'beenden',
     recall: 'zurückrufen',
     close: 'schließen',

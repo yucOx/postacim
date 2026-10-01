@@ -37,6 +37,8 @@ export default {
     minimize: 'minimize',
     minimizeTitle: 'minimize — back to chat',
     minimizeAria: 'minimize call',
+    chatShow: 'Chat',
+    chatHide: 'Hide chat',
     end: 'end',
     recall: 'call back',
     close: 'close',

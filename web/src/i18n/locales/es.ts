@@ -37,6 +37,8 @@ export default {
     minimize: 'minimizar',
     minimizeTitle: 'minimizar — volver al chat',
     minimizeAria: 'minimizar llamada',
+    chatShow: 'Chat',
+    chatHide: 'Ocultar chat',
     end: 'finalizar',
     recall: 'volver a llamar',
     close: 'cerrar',

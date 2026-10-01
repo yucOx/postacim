@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { RoomContext } from '@livekit/components-react';
-import { Maximize2, Minimize2, Phone } from 'lucide-react';
+import { Maximize2, MessageSquare, Minimize2, Phone } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
@@ -9,9 +9,16 @@ import CallControls from './CallControls';
 import CallStage from './CallStage';
 import CallQualityPicker from './CallQualityPicker';
 
-/** 1:1 DM call surface — fullscreen overlay; minimize hands the room to the PiP corner
- *  so the chat underneath stays fully usable during the call. */
-export default function CallView(): React.ReactNode {
+/** 1:1 DM call surface — sabit kutu, kalan alanı kaplar (Discord). Sohbet
+ *  paneli varsayılan kapalı; düğmeyle açılır ve sağda görünür. Küçült
+ *  PiP köşesine devreder, sohbet tamamen kullanılabilir kalır. */
+export default function CallView({
+  showChat,
+  onToggleChat,
+}: {
+  showChat: boolean;
+  onToggleChat: () => void;
+}): React.ReactNode {
   const { t } = useT();
   const room = useVoiceStore((s) => s.room);
   const callState = useVoiceStore((s) => s.callState);
@@ -51,22 +58,34 @@ export default function CallView(): React.ReactNode {
         : t('call.statusOpen');
 
   return (
-    // Discord mantığı: tam ekran overlay değil, sabit boyutlu bir kutu.
-    // Sağdaki alanda ortalanır, sohbet paneli görünür kalır. max-w-4xl +
-    // max-h-full sayesinde büyük ekranda dağınık kalır; CallStage'in kendi
-    // paddingi sadece 1.5 birim — video kameranın sınırına dayanır.
+    // Discord mantığı: sabit max-w YOK — kutu kalan alanı kaplar, video
+    // oranını (aspectRatio) koruyarak küçülür. max-w-4xl + min-h koyduğumda
+    // sohbet açılınca alan daralıyor ama kutu sabit kalıp videoyu eziyordu.
+    // min-h de yok: kısa ekranda kontrol çubuğu görünür kalmalı, video
+    // alanı doğal olarak küçülür (CallStage zaten oranla sığdırıyor).
     <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-2">
       <div
         ref={containerRef}
-        className="flex max-h-full min-h-[22rem] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]"
+        className="flex max-h-full min-h-0 w-full flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]"
       >
       <div className="flex shrink-0 items-center gap-2.5 border-b border-night-700 bg-night-900/60 px-3 py-2">
         <span className="plate">{t('call.plate')}</span>
         <span className="font-display text-base font-semibold uppercase tracking-[0.08em] text-paper-50">{peerNick}</span>
         <span className="sealed-band">{status}</span>
         <button
+          type="button"
+          onClick={onToggleChat}
+          className={`btn-ghost ml-auto !px-2 !py-1 ${showChat ? 'border-brass-600 bg-night-800 text-paper-50' : ''}`}
+          title={showChat ? t('call.chatHide') : t('call.chatShow')}
+          aria-label={showChat ? t('call.chatHide') : t('call.chatShow')}
+          aria-pressed={showChat}
+        >
+          <MessageSquare size={14} />
+          <span className="hidden sm:inline text-xs">{showChat ? t('call.chatHide') : t('call.chatShow')}</span>
+        </button>
+        <button
           onClick={() => void toggleFullscreen()}
-          className="btn-ghost ml-auto !px-2 !py-1"
+          className="btn-ghost !px-2 !py-1"
           title={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
           aria-label={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'}
         >

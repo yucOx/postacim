@@ -41,6 +41,8 @@ export default {
     minimize: 'küçült',
     minimizeTitle: 'küçült — sohbete dön',
     minimizeAria: 'arama küçült',
+    chatShow: 'Sohbet',
+    chatHide: 'Sohbeti gizle',
     end: 'bitir',
     recall: 'yeniden ara',
     close: 'kapat',

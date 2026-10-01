@@ -55,7 +55,7 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
         <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{t('call.roomConnecting')}</div>
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center p-2">
-          <div className="flex max-h-full min-h-[22rem] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]">
+          <div className="flex max-h-full min-h-0 w-full flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]">
             <RoomContext.Provider value={room}>
               <CallStage emptyLabel={t('call.roomEmpty')} />
               <CallQualityPicker />
