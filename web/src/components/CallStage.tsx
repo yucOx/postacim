@@ -144,8 +144,9 @@ const AVATAR_ASPECT = 4 / 3;
  *  letterbox matematiği birebir hesaplanır (contain = min(100cqw, 100cqh·r)
  *  × min(100cqh, 100cqw/r)). İsim/mikrofon plakası ve tıklama hedefi KAMERA
  *  GÖRÜNTÜSÜNÜN üstünde durur (Discord), alttaki karanlık bantta değil.
- *  onClick verilmezse kutu tıklamalara kapalıdır — tile'ın kendi tıklaması
- *  video üstünde de çalışmaya devam eder. */
+ *  onClick verilirse tıklama YALNIZ bu kutuda çalışır — karanlık letterbox
+ *  bantları tıklamayı yutar (odak değişmez), imleç de yalnız görüntüde
+ *  pointer olur. */
 function VideoFit({
   aspect,
   children,
@@ -563,16 +564,15 @@ export default function CallStage({
         participant={p}
         active={focused}
         aspect={aspect}
-        onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-        className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
+        className={`relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md ${TILE_HIDE}`}
       >
         <ParticipantTile
           trackRef={cam}
           className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
         />
-        <VideoFit aspect={aspect}>
+        <VideoFit aspect={aspect} onClick={() => toggleSpotlight('cam', p.identity)}>
           <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
           <MuteBadge participant={p} isScreen={false} />
         </VideoFit>
@@ -584,12 +584,11 @@ export default function CallStage({
         participant={p}
         active={focused}
         aspect={AVATAR_ASPECT}
-        onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-        className="relative flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md"
+        className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md"
       >
-        <VideoFit aspect={AVATAR_ASPECT}>
+        <VideoFit aspect={AVATAR_ASPECT} onClick={() => toggleSpotlight('cam', p.identity)}>
           <div className="flex h-full w-full items-center justify-center rounded-md bg-night-850">
             <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
           </div>
@@ -662,16 +661,18 @@ export default function CallStage({
           isScreen={v.isScreen}
           active={spotlight === v.key}
           aspect={trackAspect(v.trackRef)}
-          onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
           onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
           title={v.isScreen ? t('stream.enlargeStream') : t('stream.enlarge')}
-          className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
+          className={`relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md ${TILE_HIDE}`}
         >
           <ParticipantTile
             trackRef={v.trackRef}
             className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
           />
-          <VideoFit aspect={trackAspect(v.trackRef)}>
+          <VideoFit
+            aspect={trackAspect(v.trackRef)}
+            onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
+          >
             <NamePlate
               participant={v.trackRef.participant}
               identity={v.identity}
@@ -703,12 +704,11 @@ export default function CallStage({
                 key={slotKey(p.identity)}
                 participant={p}
                 aspect={AVATAR_ASPECT}
-                onClick={() => focusFromSide(p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={t('stream.enlarge')}
-                className="relative flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md"
+                className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md"
               >
-                <VideoFit aspect={AVATAR_ASPECT}>
+                <VideoFit aspect={AVATAR_ASPECT} onClick={() => focusFromSide(p.identity)}>
                   <div className="flex h-full w-full items-center justify-center rounded-md bg-night-850">
                     <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
                   </div>
@@ -752,17 +752,16 @@ export default function CallStage({
               isScreen={v.isScreen}
               active={spotlight === v.key}
               aspect={aspect}
-              onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
               title={t('stream.enlarge')}
-              className={`relative h-full min-h-0 min-w-0 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
+              className={`relative h-full min-h-0 min-w-0 overflow-hidden rounded-md ${TILE_HIDE}`}
               style={{ aspectRatio: aspect ?? 16 / 9 }}
             >
               <ParticipantTile
                 trackRef={v.trackRef}
                 className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
               />
-              <VideoFit aspect={aspect}>
+              <VideoFit aspect={aspect} onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}>
                 <NamePlate
                   participant={v.trackRef.participant}
                   identity={v.identity}
@@ -881,12 +880,11 @@ export default function CallStage({
                   participant={focusPerson}
                   active
                   aspect={AVATAR_ASPECT}
-                  onClick={releaseSpot}
                   onContextMenu={openCtx(focusId!, nickFor(focusId!), shareByIdentity.has(focusId!))}
                   title={t('stream.enlargeExit')}
-                  className="relative flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md"
+                  className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md"
                 >
-                  <VideoFit aspect={AVATAR_ASPECT}>
+                  <VideoFit aspect={AVATAR_ASPECT} onClick={releaseSpot}>
                     <div className="flex h-full w-full items-center justify-center rounded-md bg-night-850">
                       <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
                     </div>
@@ -934,10 +932,9 @@ export default function CallStage({
                 participant={p}
                 active={focused}
                 aspect={aspect}
-                onClick={() => toggleSpotlight('cam', p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-                className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
+                className={`relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md ${TILE_HIDE}`}
               >
                 {cam ? (
                   <>
@@ -945,13 +942,13 @@ export default function CallStage({
                       trackRef={cam}
                       className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
                     />
-                    <VideoFit aspect={aspect}>
+                    <VideoFit aspect={aspect} onClick={() => toggleSpotlight('cam', p.identity)}>
                       <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
                       <MuteBadge participant={p} isScreen={false} />
                     </VideoFit>
                   </>
                 ) : (
-                  <VideoFit aspect={AVATAR_ASPECT}>
+                  <VideoFit aspect={AVATAR_ASPECT} onClick={() => toggleSpotlight('cam', p.identity)}>
                     <div className="flex h-full w-full items-center justify-center rounded-md bg-night-850">
                       <Avatar userId={p.identity} label={nickFor(p.identity)} size={104} srcOverride={null} />
                     </div>
