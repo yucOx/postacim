@@ -146,6 +146,10 @@ function NamePlate({
 const TILE_HIDE =
   ' [&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden';
 
+// kamerayı kapatan katılımcının döşemesi bu oranda "video kutusu" çizer —
+// avatar + plakalar video tile'larıyla aynı hizada durur (Discord)
+const AVATAR_ASPECT = 4 / 3;
+
 /** object-contain video'nun gerçekte kapladığı dikdörtgen — SpeakingTile
  *  [container-type:size] olduğu için cq birimleri tile boyutunu verir;
  *  letterbox matematiği birebir hesaplanır (contain = min(100cqw, 100cqh·r)
@@ -601,11 +605,15 @@ export default function CallStage({
         onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-        className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-night-850"
+        className="relative flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md"
       >
-        <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
-        <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
-        <MuteBadge participant={p} isScreen={false} />
+        <VideoFit aspect={AVATAR_ASPECT}>
+          <div className="flex h-full w-full items-center justify-center rounded-md bg-night-850">
+            <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
+          </div>
+          <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
+          <MuteBadge participant={p} isScreen={false} />
+        </VideoFit>
         {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
       </SpeakingTile>
     );
@@ -709,11 +717,15 @@ export default function CallStage({
                 onClick={() => focusFromSide(p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={t('stream.enlarge')}
-                className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-night-850"
+                className="relative flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md"
               >
-                <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
-                <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} />
-                <MuteBadge participant={p} isScreen={false} />
+                <VideoFit aspect={AVATAR_ASPECT}>
+                  <div className="flex h-full w-full items-center justify-center rounded-md bg-night-850">
+                    <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
+                  </div>
+                  <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} />
+                  <MuteBadge participant={p} isScreen={false} />
+                </VideoFit>
               </SpeakingTile>
             ))}
         </div>
@@ -753,7 +765,8 @@ export default function CallStage({
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
               title={t('stream.enlarge')}
-              className={`relative h-full min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
+              className={`relative h-full min-h-0 min-w-0 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
+              style={{ aspectRatio: aspect ?? 16 / 9 }}
             >
               <ParticipantTile
                 trackRef={v.trackRef}
@@ -780,9 +793,14 @@ export default function CallStage({
           onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
           onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
           title={p.identity === focusId ? undefined : t('stream.enlarge')}
-          className="relative flex h-full min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md bg-night-850"
+          className={`relative h-full min-h-0 min-w-0 overflow-hidden rounded-md ${
+            p.identity === focusId ? '' : 'cursor-pointer'
+          }`}
+          style={{ aspectRatio: AVATAR_ASPECT }}
         >
-          <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
+          <div className="flex h-full w-full items-center justify-center bg-night-850">
+            <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
+          </div>
           <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} />
           <MuteBadge participant={p} isScreen={false} />
         </SpeakingTile>
@@ -874,11 +892,15 @@ export default function CallStage({
                   onClick={releaseSpot}
                   onContextMenu={openCtx(focusId!, nickFor(focusId!), shareByIdentity.has(focusId!))}
                   title={t('stream.enlargeExit')}
-                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-night-850"
+                  className="relative flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md"
                 >
-                  <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
-                  <NamePlate participant={focusPerson} identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
-                  <MuteBadge participant={focusPerson} isScreen={false} />
+                  <VideoFit aspect={AVATAR_ASPECT}>
+                    <div className="flex h-full w-full items-center justify-center rounded-md bg-night-850">
+                      <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
+                    </div>
+                    <NamePlate participant={focusPerson} identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
+                    <MuteBadge participant={focusPerson} isScreen={false} />
+                  </VideoFit>
                 </SpeakingTile>
               )
             )}
@@ -935,13 +957,13 @@ export default function CallStage({
                     </VideoFit>
                   </>
                 ) : (
-                  <>
-                    <div className="flex h-full w-full items-center justify-center">
+                  <VideoFit aspect={AVATAR_ASPECT}>
+                    <div className="flex h-full w-full items-center justify-center rounded-md bg-night-850">
                       <Avatar userId={p.identity} label={nickFor(p.identity)} size={104} srcOverride={null} />
                     </div>
                     <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
                     <MuteBadge participant={p} isScreen={false} />
-                  </>
+                  </VideoFit>
                 )}
                 {shareByIdentity.has(p.identity) && liveBadgeBtn(p.identity)}
               </SpeakingTile>
