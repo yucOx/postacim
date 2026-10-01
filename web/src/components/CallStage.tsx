@@ -364,47 +364,46 @@ export default function CallStage({
   const toggleSpotlight = (kind: 'screen' | 'cam', identity: string): void => {
     const key = `${kind}:${identity}`;
     if (spotlight === key) {
+      suppressAutoFocus.current = true;
       setSpotlight(null);
       return;
     }
     // büyütme anındaki yerleşimi mühürle — küçültünce buraya dön (bayat
     // eski 'side' tercihi istemsizce yan yana düzen açmasın)
     returnLayout.current = shareLayout;
-    returnSpot.current = null;
     setSpotlight(key);
   };
 
   // odağa geçmeden önceki yayın yerleşimi — odaklı kamerayı küçültünce
   // geldiğin yerleşime dön (side'dan büyüttüysen side'a düş)
   const returnLayout = useRef<'focus' | 'side'>('focus');
-  // yayın izlerken bir kamerayı büyütürsen çıkışta yine O yayına dön (Discord:
-  // yayın → şeritten kamera → küçült → yayın). Kameradan kameraya geçiş
-  // zincirlenmez — küçültünce düz düzene düşer.
-  const returnSpot = useRef<string | null>(null);
+  // kullanıcı odaktan açıkça ÇIKTI: kendi yayını canlı olsa bile oto-odak
+  // (kendi yayınını büyütme) bir sonraki paylaşım başlayana kadar kapalı —
+  // yoksa odaktan çıkmak tek tıkla olmuyordu (çıkınca kendi yayını büyüyordu)
+  const suppressAutoFocus = useRef(false);
   const spotCam = (identity: string): void => {
     returnLayout.current = shareLayout;
-    returnSpot.current = spotlight?.startsWith('screen:') ? spotlight : null;
     setSpotlight(`cam:${identity}`);
   };
+  // tek tıkta tam çıkış — izlenen yayına geri ZIPLAMA yok; çıkış = çıkış.
+  // Yayın canlı kalırsa canlı rozetinden tekrar izlenir
   const releaseSpot = (): void => {
-    const back = returnSpot.current;
-    returnSpot.current = null;
-    setSpotlight(back);
-    setShareLayout(back ? 'focus' : returnLayout.current);
+    suppressAutoFocus.current = true;
+    setSpotlight(null);
+    setShareLayout(returnLayout.current);
   };
 
   // bir yayını izlemeye başla (canlı döşemesi / şerit / side bölmesi) — çıkışta
   // hep düz kamera düzenine dönmek için yerleşimi odak'a sabitleriz
   const watchScreen = (identity: string): void => {
     returnLayout.current = 'focus';
-    returnSpot.current = null;
     setSpotlight(`screen:${identity}`);
     setShareLayout('focus');
   };
   // izlemeyi bırak: spotlight'ı bırak + kamera düzenine dön — returnLayout'a
   // güvenme, eski 'side' tercihi yayını tekrar büyük gösterebilir
   const unwatch = (): void => {
-    returnSpot.current = null;
+    suppressAutoFocus.current = true;
     setSpotlight(null);
     setShareLayout('focus');
   };
@@ -486,7 +485,6 @@ export default function CallStage({
   const prevCount = useRef(participants.length);
   useEffect(() => {
     if (participants.length > prevCount.current) {
-      returnSpot.current = null;
       setSpotlight(null);
     }
     prevCount.current = participants.length;
@@ -499,12 +497,14 @@ export default function CallStage({
   // KENDİ yayınım başlayınca büyük alanı yayın alsın — bayat spotlight (mesela
   // kamerası kapalı birine tıklayıp büyütülmüş odak) yayını şeritte küçülterek
   // gizlemesin. Başkasının yayını otomatik alınmaz: "canlı" döşemesi olarak
-  // görünür, izleyici tıklayınca izler (Discord Watch Stream mantığı)
+  // görünür, izleyici tıklayınca izler (Discord Watch Stream mantığı).
+  // Paylaşım (yeniden) başlarken oto-odak baskısı da sıfırlanır — kullanıcının
+  // önceki "odaktan çık" kararı yeni yayını büyütmemeli
   const ownScreenCount = screens.filter((t) => t.participant.isLocal).length;
   const prevOwnScreens = useRef(0);
   useEffect(() => {
     if (ownScreenCount > prevOwnScreens.current) {
-      returnSpot.current = null;
+      suppressAutoFocus.current = false;
       setSpotlight(null);
       setShareLayout('focus');
     }
@@ -520,7 +520,6 @@ export default function CallStage({
   // avatar placeholder'ına kilitler, kameraya dönemiyordun
   useEffect(() => {
     if (spotlight?.startsWith('screen:') && !screens.some((t) => `screen:${t.participant.identity}` === spotlight)) {
-      returnSpot.current = null;
       setSpotlight(null);
       setShareLayout('focus');
     }
@@ -640,8 +639,13 @@ export default function CallStage({
   );
 
   // varsayılan odak: yalnız kendi yayınım — başkasının yayını izleyiciye
-  // dayatılmaz, canlı döşemesi olarak izlemesi için bekler (Discord akışı)
-  const autoFocusVideo = spotlight ? null : (allVideos.find((v) => v.isScreen && v.trackRef.participant.isLocal) ?? null);
+  // dayatılmaz, canlı döşemesi olarak izlemesi için bekler (Discord akışı).
+  // Kullanıcı odaktan açıkça çıktıysa (suppressAutoFocus) kendi yayını bile
+  // yeniden büyütülmez — yoksa çıkış tek tıkla olmaz
+  const autoFocusVideo =
+    spotlight || suppressAutoFocus.current
+      ? null
+      : (allVideos.find((v) => v.isScreen && v.trackRef.participant.isLocal) ?? null);
   const focusedKey = spotlight ?? (autoFocusVideo?.key ?? null);
   const focusedVideo = focusedKey ? (allVideos.find((v) => v.key === focusedKey) ?? null) : null;
   const focusId = focusedKey?.split(':')[1] ?? null;
