@@ -193,6 +193,10 @@ interface SpeakingTileProps {
   participant?: Participant;
   isScreen?: boolean;
   active?: boolean;
+  /** video/avatarun gerçek en-boy oranı — ring TAM OLARAK görüntünün
+   *  çevresine çizilir (letterbox karanlık bantlarına değil, Discord gibi).
+   *  Verilmezse ring tile'ın tümüne çizilir (geriye dönük uyumluluk). */
+  aspect?: number | null;
   className?: string;
   children?: React.ReactNode;
   onClick?: () => void;
@@ -205,6 +209,7 @@ function SpeakingTile({
   participant,
   isScreen = false,
   active = false,
+  aspect,
   className = '',
   children,
   onClick,
@@ -214,21 +219,36 @@ function SpeakingTile({
 }: SpeakingTileProps): React.ReactNode {
   const isSpeaking = useSafeIsSpeaking(participant);
   // kart çerçevesi yok (Discord: video doğrudan koyu zeminde durur); konuşma
-  // ve odak geri bildirimi yalnız ince bir ring olarak çizilir
-  const ringClass = !isScreen && isSpeaking
-    ? 'ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+  // ve odak geri bildirimi yalnız ince bir ring olarak çizilir — VideoFit
+  // matematiğiyle görüntünün dikdörtgenine oturur
+  const ring = !isScreen && isSpeaking
+    ? 'rounded-md ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
     : active
-      ? 'ring-1 ring-lamp-500/50'
+      ? 'rounded-md ring-1 ring-lamp-500/50'
       : '';
+  const r = aspect && aspect > 0 ? aspect : 16 / 9;
   return (
     <div
       onClick={onClick}
       onContextMenu={onContextMenu}
       title={title}
       style={style}
-      className={`[container-type:size] transition-all duration-150 ${ringClass} ${className}`}
+      className={`[container-type:size] transition-all duration-150 ${aspect === undefined ? ring : ''} ${className}`}
     >
       {children}
+      {ring &&
+        (aspect === undefined ? null : (
+          // ring yalnız görüntünün çevresinde — tıklamaları geçirir
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <div
+              className={ring}
+              style={{
+                width: `min(100cqw, calc(100cqh * ${r}))`,
+                height: `min(100cqh, calc(100cqw / ${r}))`,
+              }}
+            />
+          </div>
+        ))}
     </div>
   );
 }
@@ -247,17 +267,19 @@ interface TileProps {
 /** Odak modunun büyük döşemesi — yalnız KAMERA GÖRÜNTÜSÜ tıklanabilir
  *  (VideoFit kutusu); karanlık letterbox alanına tıklamak hiçbir şey yapmaz. */
 function VideoTile({ trackRef, isScreen = false, isFocus = false, overlay, onContextMenu, onVideoClick }: TileProps): React.ReactNode {
+  const aspect = trackAspect(trackRef);
   return (
     <SpeakingTile
       participant={trackRef.participant}
       isScreen={isScreen}
+      aspect={aspect}
       onContextMenu={onContextMenu}
       className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md [&_video]:object-contain"
     >
       <div className={`h-full w-full ${TILE_HIDE}`}>
         <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
       </div>
-      <VideoFit aspect={trackAspect(trackRef)} onClick={onVideoClick}>
+      <VideoFit aspect={aspect} onClick={onVideoClick}>
         <NamePlate
           participant={trackRef.participant}
           identity={trackRef.participant.identity}
@@ -268,37 +290,6 @@ function VideoTile({ trackRef, isScreen = false, isFocus = false, overlay, onCon
         <MuteBadge participant={trackRef.participant} isScreen={isScreen} />
       </VideoFit>
       {overlay}
-    </SpeakingTile>
-  );
-}
-
-function PlaceholderTile({
-  participant,
-  identity,
-  isLocal,
-  onClick,
-  active,
-}: {
-  participant?: Participant;
-  identity: string;
-  isLocal: boolean;
-  onClick?: () => void;
-  active?: boolean;
-}): React.ReactNode {
-  const { t } = useT();
-  return (
-    <SpeakingTile
-      participant={participant}
-      active={active}
-      onClick={onClick}
-      title={onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined}
-      className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-md ${
-        onClick ? 'cursor-pointer' : ''
-      }`}
-    >
-      <Avatar userId={identity} label={nickFor(identity)} size={56} srcOverride={null} />
-      <NamePlate participant={participant} identity={identity} isLocal={isLocal} isScreen={false} isFocus={active} />
-      <MuteBadge participant={participant} isScreen={false} />
     </SpeakingTile>
   );
 }
@@ -571,6 +562,7 @@ export default function CallStage({
         key={slotKey(p.identity)}
         participant={p}
         active={focused}
+        aspect={aspect}
         onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
@@ -591,6 +583,7 @@ export default function CallStage({
         key={slotKey(p.identity)}
         participant={p}
         active={focused}
+        aspect={AVATAR_ASPECT}
         onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
@@ -663,6 +656,7 @@ export default function CallStage({
           participant={v.trackRef.participant}
           isScreen={v.isScreen}
           active={spotlight === v.key}
+          aspect={trackAspect(v.trackRef)}
           onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
           onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
           title={v.isScreen ? t('stream.enlargeStream') : t('stream.enlarge')}
@@ -703,6 +697,7 @@ export default function CallStage({
               <SpeakingTile
                 key={slotKey(p.identity)}
                 participant={p}
+                aspect={AVATAR_ASPECT}
                 onClick={() => focusFromSide(p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={t('stream.enlarge')}
@@ -751,6 +746,7 @@ export default function CallStage({
               participant={v.trackRef.participant}
               isScreen={v.isScreen}
               active={spotlight === v.key}
+              aspect={aspect}
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
               title={t('stream.enlarge')}
@@ -779,6 +775,7 @@ export default function CallStage({
         <SpeakingTile
           key={slotKey(p.identity) + '-slot'}
           participant={p}
+          aspect={AVATAR_ASPECT}
           onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
           onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
           title={p.identity === focusId ? undefined : t('stream.enlarge')}
@@ -878,6 +875,7 @@ export default function CallStage({
                   key={focusedKey + '-ph'}
                   participant={focusPerson}
                   active
+                  aspect={AVATAR_ASPECT}
                   onClick={releaseSpot}
                   onContextMenu={openCtx(focusId!, nickFor(focusId!), shareByIdentity.has(focusId!))}
                   title={t('stream.enlargeExit')}
@@ -920,6 +918,7 @@ export default function CallStage({
           {participants.map((p) => {
             const cam = camByIdentity.get(p.identity);
             const focused = spotlight === `cam:${p.identity}`;
+            const aspect = cam ? trackAspect(cam) : AVATAR_ASPECT;
             // Kutu alanı DOLDURUR (flex-1 + h-full, ortak yükseklik, 1:1
             // paylaşım). Video object-contain: kendi oranında, kırpılmaz.
             // Kameranın oranı kutuya göre farklıysa koyu bant kalır —
@@ -929,6 +928,7 @@ export default function CallStage({
                 key={slotKey(p.identity)}
                 participant={p}
                 active={focused}
+                aspect={aspect}
                 onClick={() => toggleSpotlight('cam', p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
@@ -940,7 +940,7 @@ export default function CallStage({
                       trackRef={cam}
                       className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
                     />
-                    <VideoFit aspect={trackAspect(cam)}>
+                    <VideoFit aspect={aspect}>
                       <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
                       <MuteBadge participant={p} isScreen={false} />
                     </VideoFit>
