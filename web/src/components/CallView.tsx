@@ -53,9 +53,9 @@ export default function CallView(): React.ReactNode {
   return (
     // Discord mantığı: tam ekran overlay değil, sabit boyutlu bir kutu.
     // Sağdaki alanda ortalanır, sohbet paneli görünür kalır. max-w-4xl +
-    // max-h-full sayesinde büyük ekranda dağınık kalır; CallStage zaten
-    // aspectRatio ile kutuya sığacak şekilde küçülür.
-    <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-4">
+    // max-h-full sayesinde büyük ekranda dağınık kalır; CallStage'in kendi
+    // paddingi sadece 1.5 birim — video kameranın sınırına dayanır.
+    <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-2">
       <div
         ref={containerRef}
         className="flex max-h-full min-h-[22rem] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]"

@@ -660,7 +660,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           muted={shareMuted}
           activeIds={screens.filter((t) => !t.participant.isLocal).map((t) => t.participant.identity)}
         />
-        <div className="flex min-h-0 flex-1 gap-2 p-3">
+        <div className="flex min-h-0 flex-1 gap-2 p-1.5">
           {allVideos.map(paneFor)}
           {participants
             .filter((p) => !videoIds.has(p.identity))
@@ -760,7 +760,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           // izlenen yayının sahibi bağlanır.
           activeIds={screens.filter((t) => !t.participant.isLocal).map((t) => t.participant.identity)}
         />
-        <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 p-1.5">
           <div className="flex min-h-0 min-w-0 flex-1">
             {focusedVideo ? (
               <VideoTile
@@ -875,7 +875,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       <>
         {ctxMenu}
         <RemoteAudio />
-        <div className="flex min-h-0 flex-1 items-center justify-center gap-3 p-4">
+        <div className="flex min-h-0 flex-1 items-center justify-center gap-3 p-1.5">
           {participants.map((p) => {
             const cam = camByIdentity.get(p.identity);
             const focused = spotlight === `cam:${p.identity}`;
@@ -919,7 +919,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
       {ctxMenu}
       <RemoteAudio />
       <div
-        className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"
+        className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-1.5"
         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
       >
         {participants.map((p) => stripTile(p))}

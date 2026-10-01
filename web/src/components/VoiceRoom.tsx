@@ -33,6 +33,9 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
   }, [channelId, joined, leftChannelId, join, needsRekey]);
 
   return (
+    // Oda başlığı + sabit kutu. DM aramasıyla aynı mantık: kutu ortalanır,
+    // CallStage'in kendi paddingi 1.5 birim — video kameranın sınırına
+    // dayanır, altında/üstünde boşluk kalmaz.
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-night-700 bg-night-900/40 px-4 py-2.5">
         <Volume2 size={17} className="text-brass-500" aria-hidden />
@@ -51,11 +54,15 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
       {!room ? (
         <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{t('call.roomConnecting')}</div>
       ) : (
-        <RoomContext.Provider value={room}>
-          <CallStage emptyLabel={t('call.roomEmpty')} />
-          <CallQualityPicker />
-          <CallControls variant="room" onEnd={() => void leave()} endLabel={t('call.leave')} />
-        </RoomContext.Provider>
+        <div className="flex min-h-0 flex-1 items-center justify-center p-2">
+          <div className="flex max-h-full min-h-[22rem] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]">
+            <RoomContext.Provider value={room}>
+              <CallStage emptyLabel={t('call.roomEmpty')} />
+              <CallQualityPicker />
+              <CallControls variant="room" onEnd={() => void leave()} endLabel={t('call.leave')} />
+            </RoomContext.Provider>
+          </div>
+        </div>
       )}
     </div>
   );
