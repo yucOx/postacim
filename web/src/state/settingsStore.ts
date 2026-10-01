@@ -10,7 +10,7 @@ const ASKED_KEY = 'pgv_desktop_asked';
 
 // Her olayın kendi sesi ve anahtarı. soundOn ana anahtar olur — kapalıysa
 // hiçbiri çalmaz; açıkken soundKeys hangi kategorinin çalacağını belirler.
-export type SoundKey = 'message' | 'mention' | 'call' | 'invite' | 'friend';
+export type SoundKey = 'message' | 'mention' | 'call' | 'invite' | 'friend' | 'join' | 'leave' | 'mute' | 'unmute';
 
 const SOUND_KEYS: Record<SoundKey, string> = {
   message: 'pgv_snd_msg',
@@ -18,6 +18,10 @@ const SOUND_KEYS: Record<SoundKey, string> = {
   call: 'pgv_snd_call',
   invite: 'pgv_snd_invite',
   friend: 'pgv_snd_friend',
+  join: 'pgv_snd_join',
+  leave: 'pgv_snd_leave',
+  mute: 'pgv_snd_mute',
+  unmute: 'pgv_snd_unmute',
 };
 
 function loadBool(key: string, dflt: boolean): boolean {
@@ -64,6 +68,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     call: loadBool(SOUND_KEYS.call, true),
     invite: loadBool(SOUND_KEYS.invite, true),
     friend: loadBool(SOUND_KEYS.friend, true),
+    join: loadBool(SOUND_KEYS.join, true),
+    leave: loadBool(SOUND_KEYS.leave, true),
+    mute: loadBool(SOUND_KEYS.mute, true),
+    unmute: loadBool(SOUND_KEYS.unmute, true),
   },
   desktopOn: loadBool(DESKTOP_KEY, false),
   mutedCommunities: loadMuted(),

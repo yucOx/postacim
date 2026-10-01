@@ -3,12 +3,15 @@
 // düşülür, o da yoksa sessiz kalır (rozet/toast yine görünür).
 import { useSettingsStore, type SoundKey } from '../state/settingsStore';
 
-// 'call' burada YOK: zil dosyası değil, WebAudio ile sentezleniyor
+// 'call', 'leave', 'mute', 'unmute' burada YOK: tekrarlayan/kısa tık
+// sesleri dosyada değil WebAudio'da sentezleniyor (Higgsfield bu desenleri
+// güvenilir üretmedi — leave 2 denemede boş, mute yarı sessiz/uzun çıktı)
 const FILES: Partial<Record<SoundKey, string>> = {
   message: '/sounds/msg.mp3',
   mention: '/sounds/mention.mp3',
   invite: '/sounds/invite.mp3',
   friend: '/sounds/friend.mp3',
+  join: '/sounds/join.mp3',
 };
 
 let ctx: AudioContext | null = null;
@@ -18,14 +21,9 @@ const cache = new Map<string, HTMLAudioElement>();
  *  kasten orta bir değerde; kullanıcı tarayıcı ses seviyesinden ayarlar */
 const volume = 0.7;
 
-/** Olay başına kazanç. mention.mp3 ölçüldü: mean -32 dB'ye karşı msg.mp3
- *  -15 dB — yani isim geçen bildirim normal mesajdan daha KISIK çalıyordu,
- *  tam tersi olmalı. Dosyanın tepesi zaten kırpılmış (max -2.7 dB), bu yüzden
- *  dosyayı yeniden kurgulamak yerine çalma seviyesini yükseltiyoruz. */
-// volume 1.0 ile sınırlı — 0.7 × 1.8 = 1.26'yı tarayıcı sessizce 1'e
-// kırpar, bu yüzden clamp şart (yoksa kazanç kaybı sessiz kalır)
-const GAIN: Partial<Record<SoundKey, number>> = { mention: 1.8 };
-const levelFor = (key: SoundKey): number => Math.min(1, volume * (GAIN[key] ?? 1));
+/** Olay başına kazanç yok: tüm dosyalar üretim sonrası -18 LUFS'a
+ *  normalize edildiği için çalma seviyesi tek yerden (volume) yeter. */
+
 
 function getAudio(key: SoundKey): HTMLAudioElement | null {
   if (typeof Audio === 'undefined') return null;
@@ -35,7 +33,7 @@ function getAudio(key: SoundKey): HTMLAudioElement | null {
   if (!el) {
     el = new Audio(url);
     el.preload = 'auto';
-    el.volume = levelFor(key);
+    el.volume = volume;
     cache.set(url, el);
   }
   return el;
@@ -72,6 +70,10 @@ const FALLBACK: Partial<Record<SoundKey, { freqs: number[]; step: number; dur: n
   mention: { freqs: [880, 1108.73], step: 0.09, dur: 0.45, peak: 0.18 },
   invite: { freqs: [587.33, 783.99, 1046.5], step: 0.11, dur: 0.3, peak: 0.14 },
   friend: { freqs: [523.25, 659.25, 783.99], step: 0.1, dur: 0.28, peak: 0.14 },
+  join: { freqs: [523.25, 783.99], step: 0.07, dur: 0.22, peak: 0.12 },
+  leave: { freqs: [783.99, 523.25], step: 0.07, dur: 0.25, peak: 0.12 },
+  mute: { freqs: [349.23], step: 0.05, dur: 0.12, peak: 0.12 },
+  unmute: { freqs: [523.25], step: 0.05, dur: 0.12, peak: 0.12 },
 };
 
 /** tek seferlik ses çalar. `force` = ayarlarda önizleme düğmesi:
@@ -93,7 +95,7 @@ export function playSound(key: SoundKey, force = false): void {
     return;
   }
   el.currentTime = 0;
-  el.volume = levelFor(key);
+  el.volume = volume;
   el.play().catch(() => {
     // autoplay engellendi ya da dosya 404 — yedeğe düş
     fallbackTone(f.freqs, f.step, f.dur, f.peak);

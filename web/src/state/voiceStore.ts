@@ -9,7 +9,7 @@ import { unwrapMyKey } from '../crypto/identity';
 import { dhVoiceKeyAnchor, dhVoiceKeyDm } from '../crypto/dhratchet';
 import { unb64 } from '../crypto/bytes';
 import { onServerEvent, wsSend } from '../ws/socket';
-import { startRing, stopRing } from '../lib/sound';
+import { startRing, stopRing, playSound } from '../lib/sound';
 import { toast } from '../components/Toast';
 import { translate as t } from '../lib/translate';
 import { useMediaStore, systemDefaultId, type DeviceKind } from './mediaStore';
@@ -510,6 +510,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
               return;
             }
             wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
+            // Discord tarzı oda sesleri: biri katılınca/çıkınca kısa bloop.
+            // Kendi katılım sesin aşağıda; kendi çıkışını zaten duymazsın.
+            // Yalnız topluluk odaları — DM aramada Discord'da da katılım
+            // sesi çalmaz.
+            room.on(RoomEvent.ParticipantConnected, () => playSound('join'));
+            room.on(RoomEvent.ParticipantDisconnected, () => playSound('leave'));
             let micOpened = false;
             try {
               await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true, withMicDevice());
@@ -522,6 +528,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
               return;
             }
             set({ room, keyProvider, joinedChannelId: channelId, leftChannelId: null, micOn: micOpened, camOn: false, isDmCall: false });
+            playSound('join');
             return;
           } catch (err) {
             lastErr = err;
@@ -579,6 +586,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     const next = !get().micOn;
     await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(next, next ? withMicDevice() : undefined);
     set({ micOn: next });
+    // yerel geri bildirim (Discord): kapatınca alçak, açınca tiz tık
+    playSound(next ? 'unmute' : 'mute');
   },
 
   toggleCam: async () => {

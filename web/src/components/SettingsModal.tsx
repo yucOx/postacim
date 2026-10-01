@@ -926,12 +926,16 @@ function RevokeConfirm({
 
 // ---------- Ses anahtarları ----------
 
-const SOUND_ROWS: { key: SoundKey; label: 'settings.sndMessage' | 'settings.sndMention' | 'settings.sndCall' | 'settings.sndInvite' | 'settings.sndFriend' }[] = [
+const SOUND_ROWS: { key: SoundKey; label: 'settings.sndMessage' | 'settings.sndMention' | 'settings.sndCall' | 'settings.sndInvite' | 'settings.sndFriend' | 'settings.sndJoin' | 'settings.sndLeave' | 'settings.sndMute' | 'settings.sndUnmute' }[] = [
   { key: 'message', label: 'settings.sndMessage' },
   { key: 'mention', label: 'settings.sndMention' },
   { key: 'call', label: 'settings.sndCall' },
   { key: 'invite', label: 'settings.sndInvite' },
   { key: 'friend', label: 'settings.sndFriend' },
+  { key: 'join', label: 'settings.sndJoin' },
+  { key: 'leave', label: 'settings.sndLeave' },
+  { key: 'mute', label: 'settings.sndMute' },
+  { key: 'unmute', label: 'settings.sndUnmute' },
 ];
 
 /** Her olay için ayrı ses anahtarı + önizleme düğmesi. */
