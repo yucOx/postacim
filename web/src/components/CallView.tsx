@@ -4,7 +4,7 @@ import { Maximize2, MessageSquare, Minimize2, Phone } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
-import { boxAspectFor } from '../lib/callLayout';
+import { CALL_DOCK_H } from '../lib/callLayout';
 import { PigeonMark } from './Brand';
 import CallControls from './CallControls';
 import CallStage from './CallStage';
@@ -30,26 +30,6 @@ export default function CallView({
   const dms = useAppStore((s) => s.dms);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
-  // görüntülenen video oranı — kutu buna göre boyutlanır (CallStage bildirir)
-  const [videoAspect, setVideoAspect] = useState(16 / 9);
-  // kabuk ölçüsü: kutu oranını hesaplamak için video alanının piksel
-  // genişlik/yüksekliğini bilmemiz gerekiyor (kontrol çubuğu payı
-  // oranı etkiliyor). ResizeObserver ile tutuyoruz.
-  const outerRef = useRef<HTMLDivElement>(null);
-  const [outer, setOuter] = useState({ w: 0, h: 0 });
-
-  // kutu oranı = (kabuk genişliği × video oranı) / video alanı yüksekliği
-  useEffect(() => {
-    const el = outerRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      setOuter({ w: r.width, h: r.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [room]);
-
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener('fullscreenchange', onFsChange);
@@ -81,7 +61,10 @@ export default function CallView({
   // olduğu için orana çevirmek ekran yüksekliğine bağlı: oranı
   // doğrudan sabit çarpmak (1.06 gibi) kaba bir tahmindi, gerçek
   // yüksekliği ölçüp payı orana katıyoruz.
-  const boxAspect = boxAspectFor(outer.w, outer.h, videoAspect);
+
+  // altta mutlak duran kontrol panelinin yüksekliği — video alanı onun
+  // altına girmesin diye CallStage'e bildirilir
+  const DOCK_H = CALL_DOCK_H + (callState.phase === 'ended' ? 12 : 0);
 
   return (
     // Discord mantığı: sabit ÇERÇEVE var (kutu ortalanmış, ekranı kaplamaz),
@@ -90,11 +73,10 @@ export default function CallView({
     // tüm ekranı kaplayıp ortada küçülmüyordu.
     // Çözüm: aspect-video + max-h-full + max-w-full → kutu 16:9 oranını
     // korur, kalan alana sığar, sohbet açılınca oranı bozmadan küçülür.
-    <div ref={outerRef} className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-2">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div
         ref={containerRef}
-        style={{ aspectRatio: String(boxAspect) }}
-        className="flex max-h-full max-w-full min-h-0 flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-night-950"
       >
       <div className="flex shrink-0 items-center gap-2.5 border-b border-night-700 bg-night-900/60 px-3 py-2">
         <span className="plate">{t('call.plate')}</span>
@@ -137,37 +119,39 @@ export default function CallView({
         </div>
       ) : (
         <RoomContext.Provider value={room}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <CallStage onAspect={setVideoAspect} />
-            {callState.phase === 'ended' ? (
-              <div className="flex flex-wrap items-center justify-center gap-2 border-t border-night-700 bg-night-900/80 px-4 py-3">
-                <span className="text-xs text-paper-500">
-                  {callState.note ?? t('call.statusEnded')}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void recallCall()}
-                  className="btn-lamp !text-xs"
-                  title={t('call.recall')}
-                >
-                  <Phone size={14} />
-                  {t('call.recall')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void cancelCall()}
-                  className="btn-ghost !text-xs"
-                >
-                  {t('call.close')}
-                </button>
-              </div>
-            ) : (
-              <>
-                <CallQualityPicker />
-                <CallControls variant="call" onEnd={() => void cancelCall()} endLabel={t('call.end')} onMinimize={() => setPip(true)} />
-              </>
-            )}
+          {/* video tüm alanı kaplar; kontrol paneli mutlak olarak en alta
+              dock edilir, videonun üstüne binmez (Discord) */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <CallStage dockH={DOCK_H} />
           </div>
+          {callState.phase === 'ended' ? (
+            <div className="absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-center justify-center gap-2 border-t border-night-700 bg-night-900/90 px-4 py-3 backdrop-blur-sm">
+              <span className="text-xs text-paper-500">
+                {callState.note ?? t('call.statusEnded')}
+              </span>
+              <button
+                type="button"
+                onClick={() => void recallCall()}
+                className="btn-lamp !text-xs"
+                title={t('call.recall')}
+              >
+                <Phone size={14} />
+                {t('call.recall')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelCall()}
+                className="btn-ghost !text-xs"
+              >
+                {t('call.close')}
+              </button>
+            </div>
+          ) : (
+            <div className="absolute inset-x-0 bottom-0 z-20">
+              <CallQualityPicker />
+              <CallControls variant="call" onEnd={() => void cancelCall()} endLabel={t('call.end')} onMinimize={() => setPip(true)} />
+            </div>
+          )}
         </RoomContext.Provider>
       )}
       </div>

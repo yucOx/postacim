@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { RoomContext } from '@livekit/components-react';
 import { AlertTriangle, Volume2 } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
-import { boxAspectFor } from '../lib/callLayout';
+import { CALL_DOCK_H } from '../lib/callLayout';
 import CallControls from './CallControls';
 import CallStage from './CallStage';
 import CallQualityPicker from './CallQualityPicker';
@@ -17,21 +17,6 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
   const error = useVoiceStore((s) => s.error);
   const join = useVoiceStore((s) => s.join);
   // görüntülenen video oranı — kutu buna göre boyutlanır
-  const [videoAspect, setVideoAspect] = useState(16 / 9);
-  const outerRef = useRef<HTMLDivElement>(null);
-  const [outer, setOuter] = useState({ w: 0, h: 0 });
-
-  // kutu oranı = (kabuk genişliği × video oranı) / video alanı yüksekliği
-  useEffect(() => {
-    const el = outerRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      setOuter({ w: r.width, h: r.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [room]);
   const leave = useVoiceStore((s) => s.leave);
   const needsRekey = useAppStore(
     (s) =>
@@ -71,17 +56,18 @@ export default function VoiceRoom({ channelId, channelName }: { channelId: strin
       {!room ? (
         <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{t('call.roomConnecting')}</div>
       ) : (
-        <div ref={outerRef} className="flex min-h-0 flex-1 items-center justify-center p-2">
-          <div
-            style={{ aspectRatio: String(boxAspectFor(outer.w, outer.h, videoAspect)) }}
-            className="flex max-h-full max-w-full min-h-0 flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]"
-          >
-            <RoomContext.Provider value={room}>
-              <CallStage emptyLabel={t('call.roomEmpty')} onAspect={setVideoAspect} />
+        // video tüm alanı kaplar, kontrol paneli mutlak olarak en alta
+        // dock edilir (DM aramasıyla aynı)
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <RoomContext.Provider value={room}>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <CallStage emptyLabel={t('call.roomEmpty')} dockH={CALL_DOCK_H} />
+            </div>
+            <div className="absolute inset-x-0 bottom-0 z-20">
               <CallQualityPicker />
               <CallControls variant="room" onEnd={() => void leave()} endLabel={t('call.leave')} />
-            </RoomContext.Provider>
-          </div>
+            </div>
+          </RoomContext.Provider>
         </div>
       )}
     </div>

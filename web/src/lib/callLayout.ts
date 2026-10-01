@@ -19,3 +19,7 @@ export function boxAspectFor(
   if (shellW <= 0 || videoH <= 0) return videoAspect;
   return Math.max(1, (shellW * videoAspect) / videoH);
 }
+
+/** Altta mutlak duran kontrol panelinin yüksekliği (px). CallStage bu
+ *  kadar alt boşluk bırakır, yoksa video panelin arkasında kalır. */
+export const CALL_DOCK_H = 100; // kalite seçici (~32) + kontrol çubuğu (~68)
