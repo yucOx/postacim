@@ -78,6 +78,9 @@ interface VoiceState {
   acceptIncoming: () => Promise<void>;
   declineIncoming: () => Promise<void>;
   cancelCall: () => Promise<void>;
+  /** ended fazından geri arama: oda hâlâ canlı (yalnız karşı taraf ayrıldı),
+   *  bu yüzden yeni LiveKit bağlantısı kurmadan aynı odada zil çalar. */
+  recallCall: () => Promise<void>;
   wire: () => void;
 }
 
@@ -627,7 +630,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   // (same LiveKit E2EE machinery; SFrame key derived from the DM DH chain — 5d).
   // When video is requested the camera opens before the ring so the callee sees the caller.
   startDmCall: async (dmId, video) => {
-    if (get().isDmCall && get().callState?.channelId === dmId) return;
+    const cur = get();
+    // Aynı DM'de hâlâ canlı bir arama varsa yeni bağlantı kurma:
+    //  - 'ended' → karşı taraf ayrılmış, geri arama (aynı odada zil çal)
+    //  - diğer fazlar → zaten aranıyor/aranıyor, yeni çağrı anlamsız
+    if (cur.isDmCall && cur.callState?.channelId === dmId) {
+      if (cur.callState.phase === 'ended') await get().recallCall();
+      return;
+    }
     set({ error: null });
     try {
       const app = useAppStore.getState();
@@ -705,6 +715,21 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
     stopRing();
     const call = get().callState;
     if (!call || call.phase !== 'incoming') return;
+    // Geri arama yolu: karşı taraf 'ended' fazından recallCall ile yeniden
+    // zil çaldı ve odamız hâlâ canlı. Yeni connect kurmak yerine aynı
+    // odada mikrofonu açıp 'active' ol — reconnect gereksiz kesinti demek.
+    const existing = get().room;
+    if (existing) {
+      wsSend({ type: 'call:accept', channel_id: call.channelId });
+      set({ callState: { phase: 'active', channelId: call.channelId } });
+      try {
+        await existing.localParticipant.setMicrophoneEnabled(true, withMicDevice());
+        set({ micOn: true });
+      } catch {
+        // mic yok/izin yok — görüntülü arama olarak sürebilir
+      }
+      return;
+    }
     try {
       wsSend({ type: 'call:accept', channel_id: call.channelId });
       const app = useAppStore.getState();
@@ -757,11 +782,34 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
     set({ callState: null });
   },
 
+  // ended fazından geri arama. Oda canlı kaldığı için (bkz. call:ended
+  // handler) yeni connect gerekmez: sadece zili çal, fazı 'ringing' yap.
+  // Karşı taraf kabul ederse zaten aynı odada olduğumuz için acceptIncoming
+  // yalnız fazı 'active'a çevirip mikrofonu açar.
+  recallCall: async () => {
+    const { callState, room } = get();
+    if (!callState || callState.phase !== 'ended' || !room) return;
+    set({ callState: { ...callState, phase: 'ringing', note: undefined } });
+    try {
+      await room.localParticipant.setMicrophoneEnabled(
+        true,
+        withMicDevice(),
+      );
+      set({ micOn: true });
+    } catch {
+      // mic yok/izin yok — yine de zil çalsın, kabul eden taraf görecek
+    }
+    wsSend({ type: 'call:ring', channel_id: callState.channelId });
+  },
+
   cancelCall: async () => {
     joinSeq++; // cancel an in-flight join — cancel wins over a connecting join
     stopRing();
     const { callState, room } = get();
-    if (callState && callState.phase === 'ringing') {
+    // Sunucuya her fazda bildir: ringing'de karşı taraf 'cancelled' alır,
+    // active'de 'call:ended' alıp kendi odasını kapatır. Bu bildirim
+    // gitmezse karşı taraf 'active' sanıp sessizce asılı kalıyordu.
+    if (callState && callState.phase !== 'incoming') {
       wsSend({ type: 'call:cancel', channel_id: callState.channelId });
     }
     cleanup(room);
@@ -833,23 +881,30 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         }
       } else if (e.type === 'call:ended') {
         stopRing();
-        // the other side hung up (or their socket dropped). tear the call down
-        // immediately so the "ara" button comes back the moment we get the event.
+        // the other side hung up (or their socket dropped). Karşı taraf çıktı
+        // ama biz hâlâ odadayız: LiveKit bağlantısı sağlam (tek taraf
+        // ayrıldı), bu yüzden odayı KAPATMIYORUZ — 'ended' fazı geri arama
+        // için canlı odayı korur. Yalnız ses/kamera susturulur.
         const call = get().callState;
         const reason = (e as { reason?: string }).reason ?? 'bitti';
         if (call && call.channelId === e.channel_id) {
-          cleanup(get().room);
+          const room = get().room;
           set({
-            room: null,
-            keyProvider: null,
-            joinedChannelId: null,
             micOn: false,
             camOn: false,
             screenOn: false,
-            isDmCall: false,
-            pip: false,
             callState: { phase: 'ended', channelId: call.channelId, note: reason },
           });
+          if (room) {
+            void (async () => {
+              try {
+                await room.localParticipant.setMicrophoneEnabled(false);
+                await room.localParticipant.setCameraEnabled(false);
+              } catch {
+                // track zaten yok — sessizce geç
+              }
+            })();
+          }
         }
       }
     });

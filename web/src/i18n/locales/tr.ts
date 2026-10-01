@@ -42,6 +42,8 @@ export default {
     minimizeTitle: 'küçült — sohbete dön',
     minimizeAria: 'arama küçült',
     end: 'bitir',
+    recall: 'yeniden ara',
+    close: 'kapat',
     statusRinging: 'çalıyor…',
     statusEnded: 'bitti',
     statusOpen: 'görüşme sürüyor',

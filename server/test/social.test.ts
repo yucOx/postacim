@@ -366,3 +366,67 @@ describe('typing relay over WS', () => {
     strangerWs.close();
   });
 });
+
+describe('DM call signaling over WS', () => {
+  // Çağrı protokolü: ring → incoming → accept → accepted. Karşı taraf
+  // 'active' fazında ayrılınca (call:cancel) diğerine call:ended gitmeli —
+  // gitmezse alan taraf 'active' sanıp sessizce asılı kalıyordu.
+  async function openSocket(u: TestUser): Promise<import('ws').WebSocket> {
+    const { WebSocket } = await import('ws');
+    const ws = new WebSocket(srv.baseUrl.replace('/api', '').replace(/^http/, 'ws') + '/ws', {
+      headers: { Authorization: `Bearer ${u.token}` },
+    });
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('ws ready timeout')), 5000);
+      ws.on('message', (d: { toString(): string }) => {
+        if ((JSON.parse(d.toString()) as { type: string }).type === 'ready') {
+          clearTimeout(t);
+          resolve();
+        }
+      });
+      ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: u.token })));
+      ws.on('error', reject);
+    });
+    return ws;
+  }
+
+  it('caller leaving mid-call signals ended to the peer', async () => {
+    const p1 = await makeUser(srv.baseUrl, 'sc1');
+    const p2 = await makeUser(srv.baseUrl, 'sc2');
+    expect((await p1.call('POST', '/friends/requests', { nick: p2.nick })).status).toBe(204);
+    expect((await p2.call('POST', `/friends/requests/${p1.userId}/accept`, {})).status).toBe(204);
+    const open = await p1.call('POST', '/dms', {
+      user_id: p2.userId,
+      wrapped_keys: [
+        { user_id: p1.userId, wrapped_key: W('A') },
+        { user_id: p2.userId, wrapped_key: W('B') },
+      ],
+    });
+    expect(open.status).toBe(201);
+    const dmId = ((await open.json()) as { channel: { id: string } }).channel.id;
+
+    const p1Ws = await openSocket(p1);
+    const p2Ws = await openSocket(p2);
+    const p2Events: string[] = [];
+    p2Ws.on('message', (d: { toString(): string }) => {
+      p2Events.push((JSON.parse(d.toString()) as { type: string }).type);
+    });
+    try {
+      // ring → incoming → accept → accepted (call is now 'active' for both)
+      p1Ws.send(JSON.stringify({ type: 'call:ring', channel_id: dmId }));
+      await new Promise((r) => setTimeout(r, 300));
+      expect(p2Events).toContain('call:incoming');
+
+      p2Ws.send(JSON.stringify({ type: 'call:accept', channel_id: dmId }));
+      await new Promise((r) => setTimeout(r, 300));
+
+      // p1 now hangs up mid-call — p2 must be told
+      p1Ws.send(JSON.stringify({ type: 'call:cancel', channel_id: dmId }));
+      await new Promise((r) => setTimeout(r, 400));
+      expect(p2Events).toContain('call:ended');
+    } finally {
+      p1Ws.close();
+      p2Ws.close();
+    }
+  });
+});

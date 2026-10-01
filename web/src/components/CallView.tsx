@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { RoomContext } from '@livekit/components-react';
-import { Maximize2, MessageSquare, Minimize2 } from 'lucide-react';
+import { Maximize2, MessageSquare, Minimize2, Phone } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
@@ -19,6 +19,7 @@ export default function CallView(): React.ReactNode {
   const error = useVoiceStore((s) => s.error);
   const setPip = useVoiceStore((s) => s.setPip);
   const cancelCall = useVoiceStore((s) => s.cancelCall);
+  const recallCall = useVoiceStore((s) => s.recallCall);
   const dms = useAppStore((s) => s.dms);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
@@ -98,8 +99,34 @@ export default function CallView(): React.ReactNode {
           <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <CallStage />
-              <CallQualityPicker />
-              <CallControls variant="call" onEnd={() => void cancelCall()} endLabel={t('call.end')} onMinimize={() => setPip(true)} />
+              {callState.phase === 'ended' ? (
+                <div className="flex flex-wrap items-center justify-center gap-2 border-t border-night-700 bg-night-900/80 px-4 py-3">
+                  <span className="text-xs text-paper-500">
+                    {callState.note ?? t('call.statusEnded')}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void recallCall()}
+                    className="btn-lamp !text-xs"
+                    title={t('call.recall')}
+                  >
+                    <Phone size={14} />
+                    {t('call.recall')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void cancelCall()}
+                    className="btn-ghost !text-xs"
+                  >
+                    {t('call.close')}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <CallQualityPicker />
+                  <CallControls variant="call" onEnd={() => void cancelCall()} endLabel={t('call.end')} onMinimize={() => setPip(true)} />
+                </>
+              )}
             </div>
             {showChat && (
               <div className="flex w-80 md:w-96 shrink-0 flex-col border-l border-night-700 bg-night-900 overflow-hidden">

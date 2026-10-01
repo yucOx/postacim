@@ -38,6 +38,8 @@ export default {
     minimizeTitle: 'minimizar — volver al chat',
     minimizeAria: 'minimizar llamada',
     end: 'finalizar',
+    recall: 'volver a llamar',
+    close: 'cerrar',
     statusRinging: 'sonando…',
     statusEnded: 'finalizada',
     statusOpen: 'llamada en curso',

@@ -38,6 +38,8 @@ export default {
     minimizeTitle: 'réduire — retour à la discussion',
     minimizeAria: 'réduire l appel',
     end: 'fin',
+    recall: 'rappeler',
+    close: 'fermer',
     statusRinging: 'sonnerie…',
     statusEnded: 'terminé',
     statusOpen: 'appel en cours',
