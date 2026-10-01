@@ -58,15 +58,16 @@ export default function CallView({
         : t('call.statusOpen');
 
   return (
-    // Discord mantığı: sabit max-w YOK — kutu kalan alanı kaplar, video
-    // oranını (aspectRatio) koruyarak küçülür. max-w-4xl + min-h koyduğumda
-    // sohbet açılınca alan daralıyor ama kutu sabit kalıp videoyu eziyordu.
-    // min-h de yok: kısa ekranda kontrol çubuğu görünür kalmalı, video
-    // alanı doğal olarak küçülür (CallStage zaten oranla sığdırıyor).
+    // Discord mantığı: sabit ÇERÇEVE var (kutu ortalanmış, ekranı kaplamaz),
+    // ama sabit max-w PİKSEL DEĞİL — oran bazlı. max-w-4xl koyduğumda
+    // sohbet açılınca alan daralıp video eziliyordu; w-full koyduğumda kutu
+    // tüm ekranı kaplayıp ortada küçülmüyordu.
+    // Çözüm: aspect-video + max-h-full + max-w-full → kutu 16:9 oranını
+    // korur, kalan alana sığar, sohbet açılınca oranı bozmadan küçülür.
     <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-2">
       <div
         ref={containerRef}
-        className="flex max-h-full min-h-0 w-full flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]"
+        className="flex aspect-video max-h-full max-w-full min-h-0 flex-col overflow-hidden rounded-lg border border-night-700 bg-night-950 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)]"
       >
       <div className="flex shrink-0 items-center gap-2.5 border-b border-night-700 bg-night-900/60 px-3 py-2">
         <span className="plate">{t('call.plate')}</span>
