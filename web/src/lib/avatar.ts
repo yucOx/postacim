@@ -100,3 +100,45 @@ export async function fetchAvatar(userId: string): Promise<string | null> {
 export function invalidateAvatar(userId: string): void {
   avatarCache.delete(userId);
 }
+
+// Community profile photo — same fetch model as user avatars, but the cache
+// key carries the server's avatar_updated_at so a re-upload (new ?v=) is
+// fetched instead of served stale from the session cache.
+const communityAvatarCache = new Map<string, string>(); // `${id}@${v}` -> dataUrl | '' (miss)
+export async function fetchCommunityAvatar(communityId: string, version: number): Promise<string | null> {
+  const key = `${communityId}@${version}`;
+  if (communityAvatarCache.has(key)) {
+    const cached = communityAvatarCache.get(key)!;
+    return cached === '' ? null : cached;
+  }
+  try {
+    const res = await fetch(`/api/communities/${communityId}/avatar?v=${version}`, {
+      credentials: 'same-origin',
+    });
+    if (res.status === 204) {
+      communityAvatarCache.set(key, '');
+      return null;
+    }
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = (): void => resolve(r.result as string);
+      r.onerror = (): void => reject(new Error('okuma hatası'));
+      r.readAsDataURL(blob);
+    });
+    communityAvatarCache.set(key, dataUrl);
+    return dataUrl;
+  } catch {
+    return null;
+  }
+}
+
+/** drop the community's cached entries (any version) — next fetch goes to the
+ *  server. Called after a successful upload/clear so the local UI flips
+ *  immediately even before bootstrap refreshes avatar_updated_at. */
+export function invalidateCommunityAvatar(communityId: string): void {
+  for (const k of communityAvatarCache.keys()) {
+    if (k.startsWith(`${communityId}@`)) communityAvatarCache.delete(k);
+  }
+}

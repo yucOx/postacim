@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAppStore } from '../state/appStore';
 import { wrapKeyFor } from '../crypto/identity';
+import { processAvatarFile } from '../lib/avatar';
 import { onServerEvent } from '../ws/socket';
+import CommunityAvatar from './CommunityAvatar';
 import Modal from './Modal';
 import { useT } from '../i18n/I18nProvider';
 
@@ -28,6 +30,175 @@ interface InviteRow {
 
 const storedLinks = (): Record<string, string> =>
   JSON.parse(localStorage.getItem('pgv_invite_links') ?? '{}') as Record<string, string>;
+
+// Genel bakış: ad + profil fotoğrafı. Ad ve fotoğraf düz sunucu metadata'sı
+// (kanal adları gibi) — E2EE'ye dokunmaz. Düzenleme yalnız staff'ta açık;
+// herkes görüntüler.
+function OverviewTab({ communityId }: { communityId: string }) {
+  const { t } = useT();
+  const community = useAppStore((s) => s.communities.find((c) => c.id === communityId));
+  const renameCommunity = useAppStore((s) => s.renameCommunity);
+  const setCommunityAvatar = useAppStore((s) => s.setCommunityAvatar);
+  const isStaff = community?.role === 'owner' || community?.role === 'admin';
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [name, setName] = useState(community?.name ?? '');
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  // bootstrap yenilenince (başka cihazda ad değişmiş olabilir) input'u eşle —
+  // kullanıcının yazmadığı sürece
+  useEffect(() => {
+    setName((prev) => (prev === '' || prev === community?.name ? (community?.name ?? '') : prev));
+  }, [community?.name]);
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const processed = await processAvatarFile(file);
+      setPreview(processed.dataUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'işlenemedi');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onPaste = async (e: React.ClipboardEvent<HTMLDivElement>): Promise<void> => {
+    const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith('image/'));
+    if (!item) return;
+    const file = item.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const processed = await processAvatarFile(file);
+      setPreview(processed.dataUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'işlenemedi');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveAvatar = async (): Promise<void> => {
+    if (!preview) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await setCommunityAvatar(communityId, preview);
+      setPreview(null);
+      setMsg(t('community.avatarSaved'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'kaydedilemedi');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearAvatar = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await setCommunityAvatar(communityId, null);
+      setMsg(t('community.avatarRemoved'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'silinemedi');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rename = async (): Promise<void> => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === community?.name) return;
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await renameCommunity(communityId, trimmed);
+      setMsg(t('community.renamed'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'kaydedilemedi');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!community) return null;
+  return (
+    <div className="flex flex-col gap-3" onPaste={isStaff ? onPaste : undefined}>
+      <div className="flex items-center gap-3">
+        {preview ? (
+          <img src={preview} alt="" width={56} height={56} className="shrink-0 rounded-md object-cover" />
+        ) : (
+          <CommunityAvatar communityId={communityId} name={community.name} version={community.avatar_updated_at} size={56} />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-base font-semibold uppercase tracking-[0.08em] text-paper-50">
+            {community.name}
+          </p>
+          <p className="text-[11px] text-paper-500">{t('community.overviewHint')}</p>
+        </div>
+      </div>
+      {isStaff && (
+        <>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => void onFile(e)}
+            className="hidden"
+          />
+          <div className="flex items-center gap-2">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={64}
+              className="input flex-1"
+              aria-label={t('community.nameLabel')}
+            />
+            <button
+              onClick={() => void rename()}
+              disabled={busy || !name.trim() || name.trim() === community.name}
+              className="btn-lamp"
+            >
+              {t('community.rename')}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => fileRef.current?.click()} disabled={busy} className="btn-ghost">
+              {t('community.avatarPick')}
+            </button>
+            {preview && (
+              <button onClick={() => void saveAvatar()} disabled={busy} className="btn-lamp">
+                {t('community.avatarSave')}
+              </button>
+            )}
+            {!!community.avatar_updated_at && !preview && (
+              <button
+                onClick={() => void clearAvatar()}
+                disabled={busy}
+                className="btn-ghost hover:!border-stamp-500/70 hover:!text-stamp-400"
+              >
+                {t('community.avatarRemove')}
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-paper-500">{t('community.pasteHint')}</p>
+        </>
+      )}
+      {msg && <p className="text-sm text-emerald-400">{msg}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
+    </div>
+  );
+}
 
 function InvitesTab({ communityId }: { communityId: string }) {
   const { t } = useT();
@@ -286,7 +457,7 @@ export default function CommunitySettings({ communityId, onClose }: { communityI
   const myRole = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId)?.role);
   const pendingCount = useAppStore((s) => s.communities.find((c) => c.id === s.activeCommunityId)?.pending_join_requests ?? 0);
   const isOwner = myRole === 'owner';
-  const [tab, setTab] = useState<'requests' | 'invites' | 'bans' | 'password'>('requests');
+  const [tab, setTab] = useState<'overview' | 'requests' | 'invites' | 'bans' | 'password'>('overview');
   const [bans, setBans] = useState<BanRow[] | null>(null);
 
   useEffect(() => {
@@ -304,7 +475,7 @@ export default function CommunitySettings({ communityId, onClose }: { communityI
     <Modal title={t('community.title')} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <div className="flex gap-2 text-xs">
-          {(['requests', 'invites', 'bans', ...(isOwner ? (['password'] as const) : [])] as const).map((tabKey) => (
+          {(['overview', 'requests', 'invites', 'bans', ...(isOwner ? (['password'] as const) : [])] as const).map((tabKey) => (
             <button key={tabKey} onClick={() => setTab(tabKey)} className={`flex-1 rounded px-2 py-1 text-xs transition-colors ${tab === tabKey ? 'bg-paper-50 font-semibold text-night-950' : 'bg-night-800 text-paper-500 hover:text-paper-100'}`}>
               {tabKey === 'requests'
                 ? pendingCount
@@ -314,10 +485,13 @@ export default function CommunitySettings({ communityId, onClose }: { communityI
                   ? t('community.tabInvites')
                   : tabKey === 'bans'
                     ? t('community.tabBans')
-                    : t('community.tabPassword')}
+                    : tabKey === 'password'
+                      ? t('community.tabPassword')
+                      : t('community.tabOverview')}
             </button>
           ))}
         </div>
+        {tab === 'overview' && <OverviewTab communityId={communityId} />}
         {tab === 'requests' && <RequestsTab communityId={communityId} />}
         {tab === 'invites' && <InvitesTab communityId={communityId} />}
         {tab === 'password' && isOwner && <PasswordTab communityId={communityId} />}

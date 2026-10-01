@@ -36,13 +36,25 @@ export function friendsPayload(userId: string): {
 
 export async function friendRoutes(app: FastifyInstance): Promise<void> {
   app.post('/friends/requests', async (req, reply) => {
-    const { nick } = (req.body ?? {}) as { nick?: string };
-    if (typeof nick !== 'string' || !NICK_REGEX.test(nick)) {
-      return reply.code(400).send({ error: 'geçersiz nick' });
+    const { nick, user_id } = (req.body ?? {}) as { nick?: string; user_id?: string };
+    // iki giriş yolu: nick (arkadaş ekle modalı) veya user_id (üye listesi —
+    // Discord'daki gibi listeden doğrudan istek atma). İkisi de aynı akışa düşer.
+    let target: { id: string; nick: string } | undefined;
+    if (user_id !== undefined) {
+      if (typeof user_id !== 'string' || !/^[0-9a-f-]{8,64}$/.test(user_id)) {
+        return reply.code(400).send({ error: 'geçersiz kullanıcı' });
+      }
+      target = db.prepare('SELECT id, nick FROM users WHERE id = ?').get(user_id) as
+        | { id: string; nick: string }
+        | undefined;
+    } else {
+      if (typeof nick !== 'string' || !NICK_REGEX.test(nick)) {
+        return reply.code(400).send({ error: 'geçersiz nick' });
+      }
+      target = db.prepare('SELECT id, nick FROM users WHERE nick = ?').get(nick) as
+        | { id: string; nick: string }
+        | undefined;
     }
-    const target = db
-      .prepare('SELECT id, nick FROM users WHERE nick = ?')
-      .get(nick) as { id: string; nick: string } | undefined;
     if (!target) return reply.code(404).send({ error: 'kullanıcı bulunamadı' });
     if (target.id === req.user.id) return reply.code(400).send({ error: 'kendine arkadaş olamazsın' });
     if (areFriends(req.user.id, target.id)) {

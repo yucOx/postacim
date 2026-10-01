@@ -10,6 +10,7 @@ interface BootstrapCommunity {
   id: string;
   name: string;
   role: import('../lib/access.js').Role;
+  avatar_updated_at: number | null;
   members: { id: string; nick: string; role: import('../lib/access.js').Role }[];
   channels: {
     id: string;
@@ -28,11 +29,11 @@ export async function bootstrapRoutes(app: FastifyInstance): Promise<void> {
   app.get('/bootstrap', async (req) => {
     const communities = db
       .prepare(
-        `SELECT c.id, c.name, m.role FROM communities c
+        `SELECT c.id, c.name, c.avatar_updated_at, m.role FROM communities c
          JOIN members m ON m.community_id = c.id
          WHERE m.user_id = ? ORDER BY c.created_at`,
       )
-      .all(req.user.id) as { id: string; name: string; role: Role }[];
+      .all(req.user.id) as { id: string; name: string; avatar_updated_at: number | null; role: Role }[];
 
     const myKeys = db
       .prepare(

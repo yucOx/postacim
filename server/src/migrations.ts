@@ -375,4 +375,11 @@ INSERT INTO users_devices(id, user_id, name, x25519_public_key, ed25519_public_k
   SELECT 'legacy_' || id, id, nick, public_key, sign_public_key, 1, created_at
   FROM users;
 `,
+  // v18 — topluluk profil fotoğrafı: kullanıcı avatarıyla aynı model (küçük
+  // JPEG/PNG/WebP blob + güncelleme damgası; ?v= cache-bust). Ad gibi bu da
+  // sunucuda düz metin metadata — kanal anahtarlarına (E2EE) dokunmaz.
+  `
+ALTER TABLE communities ADD COLUMN avatar_data BLOB;
+ALTER TABLE communities ADD COLUMN avatar_updated_at INTEGER;
+`,
 ];

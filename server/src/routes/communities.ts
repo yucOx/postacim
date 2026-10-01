@@ -14,6 +14,7 @@ import {
 import { evictFromRooms } from '../livekit.js';
 import { hub } from '../ws/hub.js';
 import { genCode } from './invites.js';
+import { detectImageMime } from './auth.js';
 
 interface CreateCommunityBody {
   name: string;
@@ -98,6 +99,82 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
       channels,
     });
   });
+
+  // Rename. Ad düz metin sunucu metadata'sıdır (kanal adları gibi) — E2EE
+  // iddiasına dokunmaz; kanal anahtarları değişmez. Yetki: staff.
+  app.patch(
+    '/communities/:id',
+    { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = req.body as { name?: string };
+      if (!getCommunity(id)) return reply.code(404).send({ error: 'topluluk bulunamadı' });
+      if (!isStaff(memberRole(id, req.user.id))) {
+        return reply.code(403).send({ error: 'sadece sahip veya admin değiştirebilir' });
+      }
+      if (!validName(body?.name)) return reply.code(400).send({ error: 'geçersiz topluluk adı' });
+      const name = body.name.trim();
+      db.prepare('UPDATE communities SET name = ? WHERE id = ?').run(name, id);
+      hub.broadcast(id, { type: 'community:renamed', community_id: id, name });
+      return reply.code(204).send();
+    },
+  );
+
+  // Profile photo — same model as user avatars: raw data URL, hard size cap,
+  // server-side magic-byte revalidation. `?v=<updatedAt>` is the cache key on
+  // the GET side. Members-only read: community existence must not leak to
+  // anonymous callers (user avatars are public because the URL is only
+  // knowable by contacts; community ids are opaque UUIDs, so the member check
+  // is the stronger, consistent gate).
+  app.get('/communities/:id/avatar', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!memberRole(id, req.user.id)) return reply.code(404).send({ error: 'topluluk bulunamadı' });
+    const row = db
+      .prepare('SELECT avatar_data, avatar_updated_at FROM communities WHERE id = ?')
+      .get(id) as { avatar_data: Buffer | null; avatar_updated_at: number | null } | undefined;
+    if (!row || !row.avatar_data || !row.avatar_updated_at) {
+      return reply.code(204).send();
+    }
+    reply.header('content-type', detectImageMime(row.avatar_data));
+    reply.header('cache-control', 'public, max-age=3600');
+    return reply.send(row.avatar_data);
+  });
+
+  app.patch(
+    '/communities/:id/avatar',
+    { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const body = req.body as { data_url?: string; clear?: boolean };
+      if (!getCommunity(id)) return reply.code(404).send({ error: 'topluluk bulunamadı' });
+      if (!isStaff(memberRole(id, req.user.id))) {
+        return reply.code(403).send({ error: 'sadece sahip veya admin değiştirebilir' });
+      }
+      if (body.clear) {
+        db.prepare('UPDATE communities SET avatar_data = NULL, avatar_updated_at = NULL WHERE id = ?').run(id);
+        hub.broadcast(id, { type: 'community:avatar', community_id: id, avatar_updated_at: null });
+        return reply.code(204).send();
+      }
+      if (!body.data_url) return reply.code(400).send({ error: 'data_url gerekli' });
+      const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(body.data_url);
+      if (!m) return reply.code(400).send({ error: 'geçersiz resim' });
+      const buf = Buffer.from(m[2]!, 'base64');
+      if (buf.length === 0 || buf.length > 16_000) {
+        return reply.code(413).send({ error: 'fotoğraf çok büyük (max 16KB)' });
+      }
+      if (!detectImageMime(buf).startsWith('image/')) {
+        return reply.code(400).send({ error: 'geçersiz resim baytları' });
+      }
+      const updatedAt = Date.now();
+      db.prepare('UPDATE communities SET avatar_data = ?, avatar_updated_at = ? WHERE id = ?').run(
+        buf,
+        updatedAt,
+        id,
+      );
+      hub.broadcast(id, { type: 'community:avatar', community_id: id, avatar_updated_at: updatedAt });
+      return reply.code(204).send();
+    },
+  );
 
   // wrapped_keys must cover every current member — the owner client wraps the
   // new channel key for everyone so no one is left keyless.

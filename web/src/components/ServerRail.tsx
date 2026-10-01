@@ -8,6 +8,7 @@ import { unreadCount, useUnreadStore } from '../state/unreadStore';
 import Modal from './Modal';
 import { PigeonMark } from './Brand';
 import Avatar from './Avatar';
+import CommunityAvatar from './CommunityAvatar';
 import { parseInviteLink } from '../crypto/invite';
 import { useT } from '../i18n/I18nProvider';
 
@@ -292,9 +293,14 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
                 aria-hidden
               />
             )}
-            <span className="mt-1.5 font-display text-sm font-bold uppercase tracking-wide">
-              {c.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-            </span>
+            <CommunityAvatar
+              communityId={c.id}
+              name={c.name}
+              version={c.avatar_updated_at}
+              size={36}
+              rounded={active ? 'rounded-md' : 'rounded-full'}
+              className={active ? 'ring-2 ring-night-950/40' : ''}
+            />
           </button>
         );
       })}

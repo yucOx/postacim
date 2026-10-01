@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
+import { invalidateCommunityAvatar } from '../lib/avatar';
 import type { BootstrapCommunity } from '../api/types';
 import { useAuthStore } from './authStore';
 import { b64, randomBytes } from '../crypto/bytes';
@@ -41,6 +42,7 @@ export interface Community {
   id: string;
   name: string;
   role: Role;
+  avatar_updated_at?: number | null;
   members: Member[];
   channels: Channel[];
   pending_join_requests?: number;
@@ -103,6 +105,8 @@ interface AppState {
   ensureChannelKey: (channelId: string) => Promise<Uint8Array>;
   rekeyAffected: (communityId: string, channelIds: string[]) => Promise<void>;
   createCommunity: (name: string) => Promise<void>;
+  renameCommunity: (communityId: string, name: string) => Promise<void>;
+  setCommunityAvatar: (communityId: string, dataUrl: string | null) => Promise<void>;
   createChannel: (communityId: string, name: string, type: 'text' | 'voice') => Promise<void>;
   addMember: (communityId: string, nick: string) => Promise<string>;
   removeMember: (communityId: string, userId: string) => Promise<void>;
@@ -120,6 +124,7 @@ interface AppState {
   openDmChat: (dmId: string) => void;
   backToCommunity: () => void;
   sendFriendRequest: (nick: string) => Promise<void>;
+  sendFriendRequestById: (userId: string) => Promise<void>;
   acceptFriend: (userId: string) => Promise<void>;
   declineFriend: (userId: string) => Promise<void>;
   unfriend: (userId: string) => Promise<void>;
@@ -358,6 +363,22 @@ export const useAppStore = create<AppState>((set, get) => {
     set({ activeCommunityId: res.community.id });
   },
 
+  // Ad/fotoğraf düz sunucu metadata'sı — kanal anahtarlarına dokunmaz;
+  // sunucu üyelere community:renamed / community:avatar yayınlar (bizim
+  // tarafımızda loadBootstrap yeniler).
+  renameCommunity: async (communityId, name) => {
+    await api(`/communities/${communityId}`, { method: 'PATCH', body: { name } });
+    await get().loadBootstrap();
+  },
+  setCommunityAvatar: async (communityId, dataUrl) => {
+    await api(`/communities/${communityId}/avatar`, {
+      method: 'PATCH',
+      body: dataUrl ? { data_url: dataUrl } : { clear: true },
+    });
+    invalidateCommunityAvatar(communityId);
+    await get().loadBootstrap();
+  },
+
   createChannel: async (communityId, name, type) => {
     const { publicKeys } = get();
     const com = get().communities.find((c) => c.id === communityId);
@@ -520,6 +541,10 @@ export const useAppStore = create<AppState>((set, get) => {
     await api('/friends/requests', { method: 'POST', body: { nick } });
     await get().loadBootstrap();
   },
+  sendFriendRequestById: async (userId) => {
+    await api('/friends/requests', { method: 'POST', body: { user_id: userId } });
+    await get().loadBootstrap();
+  },
   acceptFriend: async (userId) => {
     await api(`/friends/requests/${userId}/accept`, { method: 'POST' });
     await get().loadBootstrap();
@@ -650,6 +675,8 @@ export const useAppStore = create<AppState>((set, get) => {
       } else if (
         e.type === 'channel:created' ||
         e.type === 'channel:rotated' ||
+        e.type === 'community:renamed' ||
+        e.type === 'community:avatar' ||
         e.type === 'community:roles_updated' ||
         e.type === 'join_request:new' ||
         e.type === 'community:join_password' ||

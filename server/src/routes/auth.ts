@@ -126,7 +126,7 @@ async function verifyTurnstile(
 }
 
 // Magic-byte sniff — the client picks the format, but the server is the gate.
-function detectImageMime(buf: Buffer): string {
+export function detectImageMime(buf: Buffer): string {
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
   if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
   if (

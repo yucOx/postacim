@@ -10,6 +10,8 @@ export interface AuthedUser {
 export interface BootstrapCommunity {
   id: string;
   name: string;
+  /** unix ms of the last community avatar upload; null when none */
+  avatar_updated_at?: number | null;
   role: 'owner' | 'admin' | 'member';
   members: { id: string; nick: string; role: 'owner' | 'admin' | 'member' }[];
   channels: {
