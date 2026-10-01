@@ -970,7 +970,7 @@ function SoundKeyList(): React.ReactNode {
           </button>
           <button
             type="button"
-            onClick={() => playSound(key)}
+            onClick={() => playSound(key, true)}
             className="btn-ghost shrink-0 !px-2 !py-1 !text-[10px]"
             title={t('settings.sndTest')}
             aria-label={t('settings.sndTest')}

@@ -14,13 +14,9 @@ const FILES: Record<SoundKey, string> = {
 let ctx: AudioContext | null = null;
 const cache = new Map<string, HTMLAudioElement>();
 
-/** master ses seviyesi — kullanıcı ayardan değiştirebilir */
-let volume = 0.7;
-
-export function setSoundVolume(v: number): void {
-  volume = Math.max(0, Math.min(1, v));
-  for (const el of cache.values()) el.volume = volume;
-}
+/** master ses seviyesi — bildirimler göze de kulağa da uygun olsun diye
+ *  kasten orta bir değerde; kullanıcı tarayıcı ses seviyesinden ayarlar */
+const volume = 0.7;
 
 function getAudio(key: SoundKey): HTMLAudioElement | null {
   if (typeof Audio === 'undefined') return null;
@@ -69,10 +65,12 @@ const FALLBACK: Record<SoundKey, { freqs: number[]; step: number; dur: number; p
   friend: { freqs: [523.25, 659.25, 783.99], step: 0.1, dur: 0.28, peak: 0.14 },
 };
 
-/** tek seferlik ses çalar; ana anahtar + kategori anahtarı kapalıysa sustuk */
-export function playSound(key: SoundKey): void {
+/** tek seferlik ses çalar. `force` = ayarlarda önizleme düğmesi:
+ *  kapalı bir kategoriyi de duyurur, yoksa "neden önizleme çalmıyor"
+ *  sorusu kalır. Gerçek bildirimlerde force yoktur. */
+export function playSound(key: SoundKey, force = false): void {
   const s = useSettingsStore.getState();
-  if (!s.soundOn || !s.soundKeys[key]) return;
+  if (!force && (!s.soundOn || !s.soundKeys[key])) return;
   const el = getAudio(key);
   if (!el) {
     const f = FALLBACK[key];
@@ -87,9 +85,6 @@ export function playSound(key: SoundKey): void {
     fallbackTone(f.freqs, f.step, f.dur, f.peak);
   });
 }
-
-export const playChime = (): void => playSound('message');
-export const playMention = (): void => playSound('mention');
 
 // --- Gelen arama zili: ring.mp3 döngüde, stopRing() ile kesilir ---
 
