@@ -689,7 +689,9 @@ export default function CallStage({
   // odak modu (Discord Go Live): odak/yayın büyük + ALT yatay şeritte TÜM
   // katılımcılar yan yana (akışı olanın tile'ı, olmayanın avatarı) — kimse
   // kaybolmaz
-  if (focusedKey && (focusedVideo || focusPerson)) {
+  // 1-2 kişide focus modu YOK: iki video eşit grid olarak yan yana kalsın
+  // (biri devasa diğeri minik kalmasın). count<=2 dalı aşağıda.
+  if (focusedKey && (focusedVideo || focusPerson) && participants.length > 2) {
     const slotFor = (p: Participant): React.ReactNode => {
       // Şeritte hangi videolar gösterilir:
       //  - focused bir SCREEN ise, o kişinin kendi screen'i atlanır (büyük
@@ -877,18 +879,18 @@ export default function CallStage({
       <>
         {ctxMenu}
         <RemoteAudio />
-        {/* Dış çerçeve tüm alanı kaplar (koyu). Videolar kendi oranında
-            ortada yan yana durur; artan yer siyah bant olur — video
-            asla esnetilmez/kırpılmaz (object-contain). */}
-        <div className="flex min-h-0 flex-1 items-center justify-center gap-3 p-1.5" style={{ paddingBottom: dockH + 6 }}>
+        {/* Dış çerçeve tüm alanı kaplar (koyu). 1-2 video YAN YANA eşit
+            kutular halinde alanı DOLDURUR (flex-1, ortak yükseklik);
+            video object-contain ile kendi oranında kalır, kırpılmaz.
+            Ortada minik kalmalar diye items-stretch + w-full. */}
+        <div className="flex min-h-0 w-full flex-1 items-stretch justify-center gap-3 p-1.5" style={{ paddingBottom: dockH + 6 }}>
           {participants.map((p) => {
             const cam = camByIdentity.get(p.identity);
             const focused = spotlight === `cam:${p.identity}`;
-            // Kutu videonun KENDİ oranında — flex-1 esnetip kırpıyordu,
-            // sabit px ise alana sığmıyordu. Oran + max-h-full: video
-            // doğal en-boyunda kalır, dış çerçeve alanı kaplar, artan yer
-            // siyah bant olarak kalır (kırpma/zoom yok).
-            const aspect = cam ? (trackAspect(cam) ?? 16 / 9) : 16 / 9;
+            // Kutu alanı DOLDURUR (flex-1 + h-full, ortak yükseklik, 1:1
+            // paylaşım). Video object-contain: kendi oranında, kırpılmaz.
+            // Kameranın oranı kutuya göre farklıysa koyu bant kalır —
+            // iki video arasında biri büyük biri küçük olmaz.
             return (
               <SpeakingTile
                 key={slotKey(p.identity)}
@@ -897,8 +899,7 @@ export default function CallStage({
                 onClick={() => toggleSpotlight('cam', p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-                style={{ aspectRatio: `${aspect}`, maxHeight: '100%' }}
-                className={`relative min-h-0 min-w-0 max-w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+                className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
               >
                 {cam ? (
                   <ParticipantTile
@@ -907,7 +908,7 @@ export default function CallStage({
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
-                    <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
+                    <Avatar userId={p.identity} label={nickFor(p.identity)} size={104} srcOverride={null} />
                   </div>
                 )}
                 <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
