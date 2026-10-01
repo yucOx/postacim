@@ -104,16 +104,6 @@ function MuteBadge({ participant, isScreen }: { participant?: Participant; isScr
   return <MuteBadgeInner participant={participant} />;
 }
 
-function NamePlateMuteIcon({ participant }: { participant: Participant }): React.ReactNode {
-  const isMuted = useIsMuted({ participant, source: Track.Source.Microphone });
-  if (!isMuted) return null;
-  return (
-    <span className="flex items-center text-stamp-400" title="Mikrofon kapalı">
-      <MicOff size={11} />
-    </span>
-  );
-}
-
 function NamePlate({
   participant,
   identity,
@@ -136,7 +126,6 @@ function NamePlate({
       </span>
       {isScreen && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameScreen')}</span>}
       {isFocus && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameFocus')}</span>}
-      {!isScreen && participant && <NamePlateMuteIcon participant={participant} />}
     </span>
   );
 }
