@@ -42,6 +42,22 @@ function ShareAudio({ volume, muted, activeIds }: { volume: number; muted: boole
   const tracks = useTracks([Track.Source.ScreenShareAudio], { onlySubscribed: true });
   const masterVol = useVoiceStore((s) => s.volume);
   const deafened = useVoiceStore((s) => s.deafened);
+
+  // teşhis: yayın sesinin gelip gelmediğini konsola doğrudur (gelen mesaj
+  // yoksa sorun gönderimde, kayıt varsa alıcı tarafta)
+  useEffect(() => {
+    console.debug(
+      '[share-audio] track sayısı:',
+      tracks.length,
+      '| izlenen:',
+      activeIds,
+      '| muted:',
+      muted,
+      '| ses:',
+      deafened || muted ? 0 : masterVol * volume,
+    );
+  }, [tracks, activeIds, muted, deafened, masterVol, volume]);
+
   return (
     <>
       {tracks

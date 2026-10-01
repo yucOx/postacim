@@ -621,6 +621,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       );
       hintTrack(Track.Source.ScreenShare);
       set({ screenOn: true, screenQuality: null });
+      // teşhis: yayın sesinin gerçekten publish edildiğini doğrula. Tarayıcı
+      // "sekme sesi" onayı vermediyse track hiç oluşmuyor (getDisplayMedia
+      // audio:true isteğini sessizce reddedebiliyor).
+      console.debug(
+        '[share-audio] gönderim: audio istenmiş =', opts.audio,
+        '| ScreenShareAudio track var mı =',
+        !!room.localParticipant
+          .getTrackPublication(Track.Source.ScreenShareAudio)?.track,
+      );
     } catch (err) {
       set({ error: err instanceof Error ? `yayın başlatılamadı: ${err.message}` : 'yayın başlatılamadı' });
     }
