@@ -136,8 +136,10 @@ const TILE_HIDE =
   ' [&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden';
 
 // kamerayı kapatan katılımcının döşemesi bu oranda "video kutusu" çizer —
-// avatar + plakalar video tile'larıyla aynı hizada durur (Discord)
-const AVATAR_ASPECT = 4 / 3;
+// webcam'ler ezici çoğunlukla 16:9 (trackAspect'in bilinmeyen-oran
+// fallback'i de 16/9): kapalı-kamera kutusu açık-kamera görüntüsüyle
+// aynı boyutta durur
+const AVATAR_ASPECT = 16 / 9;
 
 /** object-contain video'nun gerçekte kapladığı dikdörtgen — SpeakingTile
  *  [container-type:size] olduğu için cq birimleri tile boyutunu verir;
