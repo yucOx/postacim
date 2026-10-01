@@ -146,11 +146,6 @@ function NamePlate({
 const TILE_HIDE =
   ' [&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden';
 
-// ekran paylaşımı asla kırpılmaz (contain — okunabilirlik); kameralar
-// alanı doldurur (cover — Discord davranışı)
-const fit = (isScreen: boolean): string =>
-  isScreen ? '[&_video]:object-contain' : '[&_video]:object-cover';
-
 // yayınun gerçek en-boy oranı — tile'ı görüntüye tam oturtmak için (Discord:
 // pencere görüntünün şeklini takip eder, kırpma/boş bant olmaz). Boyut
 // henüz bilinmiyorsa null → 16:9 varsayılanı kullanılır.
@@ -237,7 +232,7 @@ function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocu
       title={titleProp ?? (onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined)}
       className={`relative cursor-pointer overflow-hidden rounded-md border bg-night-850 ${
         fill ? 'min-h-0 min-w-0 flex-1' : 'h-full w-full'
-      } ${fill ? '[&_video]:object-contain' : fit(isScreen)}${TILE_HIDE}`}
+      } [&_video]:object-contain ${TILE_HIDE}`}
     >
       <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
       <NamePlate
@@ -559,7 +554,7 @@ export default function CallStage({
       >
         <ParticipantTile
           trackRef={cam}
-          className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+          className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
         />
         <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
         <MuteBadge participant={p} isScreen={false} />
@@ -726,7 +721,7 @@ export default function CallStage({
             >
               <ParticipantTile
                 trackRef={v.trackRef}
-                className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+                className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
               />
               <NamePlate
                 participant={v.trackRef.participant}
@@ -882,13 +877,18 @@ export default function CallStage({
       <>
         {ctxMenu}
         <RemoteAudio />
-        {/* items-stretch: kutular yüksekliğin tamamını alır, ortada
-            sıkışık kalmaz. gap-2 + flex-1 ile yan yana videolar alanı
-            aralarında siyah bant bırakmadan paylaşır. */}
-        <div className="flex min-h-0 flex-1 items-stretch justify-center gap-2 p-1.5" style={{ paddingBottom: dockH + 6 }}>
+        {/* Dış çerçeve tüm alanı kaplar (koyu). Videolar kendi oranında
+            ortada yan yana durur; artan yer siyah bant olur — video
+            asla esnetilmez/kırpılmaz (object-contain). */}
+        <div className="flex min-h-0 flex-1 items-center justify-center gap-3 p-1.5" style={{ paddingBottom: dockH + 6 }}>
           {participants.map((p) => {
             const cam = camByIdentity.get(p.identity);
             const focused = spotlight === `cam:${p.identity}`;
+            // Kutu videonun KENDİ oranında — flex-1 esnetip kırpıyordu,
+            // sabit px ise alana sığmıyordu. Oran + max-h-full: video
+            // doğal en-boyunda kalır, dış çerçeve alanı kaplar, artan yer
+            // siyah bant olarak kalır (kırpma/zoom yok).
+            const aspect = cam ? (trackAspect(cam) ?? 16 / 9) : 16 / 9;
             return (
               <SpeakingTile
                 key={slotKey(p.identity)}
@@ -897,12 +897,13 @@ export default function CallStage({
                 onClick={() => toggleSpotlight('cam', p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-                className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+                style={{ aspectRatio: `${aspect}`, maxHeight: '100%' }}
+                className={`relative min-h-0 min-w-0 max-w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
               >
                 {cam ? (
                   <ParticipantTile
                     trackRef={cam}
-                    className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+                    className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
