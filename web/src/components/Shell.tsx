@@ -314,9 +314,18 @@ export default function Shell() {
         </div>
 
         {view === 'dm' ? (
-          <main className="flex min-w-0 flex-1 flex-col">
+          <main className={`flex min-w-0 flex-1 ${isDmCall && !isCallMinimized ? 'flex-row' : 'flex-col'}`}>
             {isDmCall && !isCallMinimized ? (
-              <CallView />
+              // Discord mantığı: arama kutusu ortalanmış sabit panel, sohbet
+              // sağda görünür kalır (dar ekranda gizlenir)
+              <>
+                <CallView />
+                {activeDm && (
+                  <div className="hidden w-80 shrink-0 flex-col border-l border-night-700 lg:flex">
+                    <DmChat dmId={activeDm.id} />
+                  </div>
+                )}
+              </>
             ) : activeDm ? (
               <DmChat dmId={activeDm.id} />
             ) : (
