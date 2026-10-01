@@ -4,6 +4,44 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) — kategoriler
 Eklenen / Değişen / Düzeltilen / Güvenlik. Her `v*` tag'i CI'da web bundle SHA
 manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
+## [Unreleased]
+
+### Eklenen
+
+- **Olay bazlı bildirim sesleri (Discord paritesi)**: 15 olayın her birinin
+  kendi sesi ve ayrı kapatma anahtarı (Ayarlar → Bildirimler → Sesler, Dinle
+  düğmesiyle önizlemeli) — mesaj, mention, gelen arama zili, davet, arkadaşlık
+  isteği, oda giriş/çıkış, mikrofon aç/kapa, yayın başlat/durdur, kamera
+  aç/kapa, tüm sesi kıs/aç. Melik bildirimler MP3 (kırpılıp -18 LUFS
+  normalize), kısa tık/tekrarlı desenler WebAudio sentezi — zil de WebAudio:
+  klasik iki-vuruş deseni 1.6 sn'de bir (`645431d`, `b6e89cb`, `9e26644`,
+  `5d0d61d`)
+- **Cihaz seçimi**: mikrofon/kamera/hoparlör — arama kontrol çubuğundaki menü
+  + Ayarlar → Ses ve Video; seçim kalıcı (localStorage), arama sırasında
+  değişince anında uygulanır (`2f8fdf9`)
+- **Arama düzeni (Discord)**: videolar tüm alanı kaplar, kontrol paneli altta
+  dock; her kişi sayısında çalışan odak modu (tek tıkla tam çıkış), plakalar
+  video üstünde, sohbet kalıcı yan panel, arama sabit oranlı kutuda
+  (`de3119d` ve ardılları)
+- **Topluluk profili**: ad değiştirme + profil fotoğrafı (PATCH
+  /communities/:id, avatar yalnız üyelere) — düz metadata, E2EE dokunmaz;
+  üye listesinden sağ tıkla arkadaş isteği (`0bb48c4`)
+- **Onaylı üye ekleme**: "üye ekle" hedefe WS davet penceresi açar — üyelik
+  yalnız hedefin kabulüyle basılır (`803b367`)
+
+### Düzeltilen
+
+- Arama ortasında ayrılınca karşı taraf habersiz kalıyordu — her fazda
+  `call:cancel` bildirimi (`198cf8e`)
+- Odak kameradayken yayın sesi hiç bağlanmıyordu (`0e643df`)
+- Zil MP3'si çalışmıyordu — WebAudio sentezine taşındı (`b6e89cb`)
+- Odak döşemesi tıklanamaz hâl almıştı: letterbox boş bantlar tıklamayı
+  yutuyordu — odak yalnız görüntüden değişir (`81ebbd1`)
+- Kapalı-kamera kutusu 4:3'tü, açık kamera tile'ından farklı boyutta
+  görünüyordu — 16:9'a hizalandı (`f22a71e`)
+- Konuşma/odak ring'i tile çerçevesi yerine tam video görüntüsüne oturdu;
+  çift susturuldu ikonu kaldırıldı (`353602e`, `8473a80`)
+
 ## [v1.0.0] — 2026-09-18
 
 > İlk stabil sürüm. 8 fazlık güvenlik yol haritası (SECURITY-ROADMAP.md)

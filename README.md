@@ -1,5 +1,8 @@
 # postacim 🕊️
 
+[![CI](https://github.com/yucOx/postacim/actions/workflows/ci.yml/badge.svg)](https://github.com/yucOx/postacim/actions/workflows/ci.yml)
+[![tests](https://img.shields.io/badge/tests-322%20passed-brightgreen)](#otomatik-testler)
+
 Gizlilik odaklı, uçtan uca şifreli (E2EE) Discord-benzeri sohbet uygulaması.
 Sunucu yalnızca şifreli veri taşır — mesajların, sesin, görüntünün ve anahtarların
 düz hâlini **hiçbir zaman** görmez.
@@ -15,11 +18,15 @@ düz hâlini **hiçbir zaman** görmez.
 - **Üye çıkarma = rekey (zorunlu)** — çıkarılan/banlanan üyeden sonra kanallar **kilitlenir**: yazışma, ses odası, davet üretimi/kullanımı ve yeni üye ekleme, sahip veya admin "anahtarı yenileyene" kadar kapalıdır (eski anahtar risk altında olduğundan). Atılan üye elindeki davetle geri dönüp okuyamaz; sesli odadaysa canlı bağlantısı düşürülür.
 - **Şifre değiştirme** — kimlik blob yeniden sarılır, kanal anahtarları etkilenmez; değişince **tüm oturumlar düşer** (çalınan token da dahil)
 - **Çoklu cihaz** (Faz 7) — her cihaz bağımsız X25519+Ed25519 keypair (kimlik blob'u v3, `device_id`); Ayarlar → Cihazlar sekmesinden cihaz listesi, WS tabanlı linking (primary onayı), cihaz iptali = zorunlu rekey. Per-cihaz DH step: aynı kullanıcının farklı cihazları farklı adım sayacı tutar (F5 per-sender modelinin doğal uzantısı) — bir cihazdaki state sızıntısı diğerini etkilemez
-- **Ekran paylaşımı** — aynı E2EE hattı üzerinden
+- **Ekran paylaşımı** — aynı E2EE hattı üzerinden; **Go Live diyaloğu**: çözünürlük × fps × kaynak tipi (ekran/pencere/sekme) × sekme/sistem sesi seçimi, Discord'un bitrat hedeflerine eşlenen tablo
+- **Arama deneyimi** (Discord düzeni) — odak/ızgara sahne geçişi, konuşmacı parlaması, arama içi yan sohbet (split-view), köşeye küçültme (PiP — sürükle + her şeyin üstünde pin), **sağ tık menüsü**: kişi başına ses seviyesi/susturma ve yayın sesi kontrolü, kontrol çubuğunda ping göstergesi
+- **Cihaz seçimi** — mikrofon/kamera/hoparlör; arama içi menüden veya Ayarlar → Ses ve Video'dan, seçim kalıcı, arama sırasında değişince anında uygulanır
+- **Bildirim sesleri** (Discord paritesi) — 15 olay: mesaj, mention, gelen arama, davet, arkadaşlık isteği, oda giriş/çıkış, mikrofon aç/kapa, yayın aç/kapa, kamera aç/kapa, tüm sesi kıs/aç. Her biri Ayarlar → Bildirimler'den **tek tek kapatılabilir** ve Dinle düğmesiyle önizlenir; melik olanlar MP3, kısa tık desenleri WebAudio ile sentezlenir
 
 ### Moderasyon ve katılım
 
-- **Roller**: sahip → admin → üye. Admin: üye ekleme/atma+rekey, ban, kanal, davet, başvuru onayı. Admin atama ve katılım şifresi yalnız sahipte.
+- **Roller**: sahip → admin → üye. Admin: üye ekleme/atma+rekey, ban, kanal, davet, başvuru onayı. Admin atama ve katılım şifresi yalnız sahipte. Üye ekleme **onaylıdır**: hedef kullanıcıya davet penceresi açılır, kabul etmeden üyelik basılmaz.
+- **Topluluk profili**: sahip/admin ⚙️'den topluluk adını değiştirir, fotoğraf ekler — kanal adları gibi düz metadata'dır, anahtarlara dokunmaz; yalnız üyeler görür.
 - **Kalıcı ban**: banlı üye yeniden eklenemez, davet kullanamaz, başvuramaz; ban listesi ⚙️ altından yönetilir.
 - **Davet linkleri** (`↗` → üret): **açık** davet — geçici X25519 anahtarın özel yarısı linkin `#` fragmentında taşınır, sahip offline olsa bile katılım çalışır; **hedefli** davet — anahtarlar doğrudan hedefin kimliğine sarılır, kod sızsa bile başkası kullanamaz. Kullanım sayısı/süre sınırı, iptal.
 - **Başvurular**: topluluk adını bilen başvurur (`↗`); sahip/admin onaylayınca anahtarlar onun kimliğine sarılır; red sonrası tekrar başvurulabilir.
@@ -305,7 +312,7 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Otomatik testler
 
 ```bash
-npm test    # 315 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 322 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
 ```
 
 - `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
@@ -482,6 +489,7 @@ npm test    # 315 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
 - [x] Test turu — otomatik test + CI (bugün: 33 dosya, 315 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
+- [x] UI/UX turu — Discord-parite arama düzeni: odak/ızgara + PiP, cihaz seçimi, olay bazlı ses sistemi (15 olay), onaylı üye ekleme, topluluk profili (bugün: 34 dosya, 322 test)
 
 **Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):
 kripto/gizlilikte Signal paritesine 8 fazlı program.
@@ -498,7 +506,8 @@ kripto/gizlilikte Signal paritesine 8 fazlı program.
 ## Katkıda bulunma
 
 Geliştirme kurulumu, test akışı, i18n parite kuralı ve PR beklentileri:
-[CONTRIBUTING.md](CONTRIBUTING.md). Güvenlik açığı bildirimi (özel kanal):
+[CONTRIBUTING.md](CONTRIBUTING.md). Topluluk davranış kuralları:
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Güvenlik açığı bildirimi (özel kanal):
 [SECURITY.md](SECURITY.md) — lütfen güvenlik sorunlarını public issue
 olarak açmayın.
 
