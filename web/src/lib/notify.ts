@@ -2,9 +2,11 @@
 // notification while the tab is hidden. The message body never leaves the app
 // — the OS toast only names the sender and the room (E2EE privacy: plaintext
 // in a system-level notification tray is a different threat surface).
-import { playChime, playMention } from './sound';
+import { playSound } from './sound';
 import { useSettingsStore } from '../state/settingsStore';
 import { useAppStore } from '../state/appStore';
+import { toast } from '../components/Toast';
+import { translate as t } from './translate';
 
 /** jump to the room a notification was clicked on */
 function openChannel(channelId: string): void {
@@ -32,7 +34,14 @@ export interface IncomingMessage {
 export function notifyIncomingMessage(m: IncomingMessage): void {
   const s = useSettingsStore.getState();
   const muted = !!m.communityId && s.mutedCommunities.includes(m.communityId);
-  if (s.soundOn && !muted) m.mention ? playMention() : playChime();
+  if (!muted) playSound(m.mention ? 'mention' : 'message');
+
+  // in-app toast — sayfada görünürken de bildirim (Discord davranışı)
+  toast.info(
+    m.mention
+      ? t('toast.mentionedBy', { nick: m.nick, room: m.title })
+      : t('toast.messageFrom', { nick: m.nick, room: m.title }),
+  );
 
   if (
     s.desktopOn &&

@@ -7,11 +7,14 @@ import {
   KeyRound,
   MonitorUp,
   Monitor,
+  Play,
   RefreshCcw,
   ShieldCheck,
   Trash2,
   User,
   Video,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import Modal from './Modal';
@@ -19,7 +22,8 @@ import ConfirmDialog from './ConfirmDialog';
 import ProfileModal from './ProfileModal';
 import CallQualityPicker from './CallQualityPicker';
 import { DeviceSettingsBlock } from './DeviceMenu';
-import { useSettingsStore } from '../state/settingsStore';
+import { playSound } from '../lib/sound';
+import { useSettingsStore, type SoundKey } from '../state/settingsStore';
 import { useI18nStore } from '../i18n/store';
 import { LOCALES, LOCALE_LABEL, LOCALE_FLAG, type Locale } from '../i18n/types';
 import { useT } from '../i18n/I18nProvider';
@@ -920,6 +924,65 @@ function RevokeConfirm({
 
 // ---------- Bildirimler sekmesi ----------
 
+// ---------- Ses anahtarları ----------
+
+const SOUND_ROWS: { key: SoundKey; label: 'settings.sndMessage' | 'settings.sndMention' | 'settings.sndCall' | 'settings.sndInvite' | 'settings.sndFriend' }[] = [
+  { key: 'message', label: 'settings.sndMessage' },
+  { key: 'mention', label: 'settings.sndMention' },
+  { key: 'call', label: 'settings.sndCall' },
+  { key: 'invite', label: 'settings.sndInvite' },
+  { key: 'friend', label: 'settings.sndFriend' },
+];
+
+/** Her olay için ayrı ses anahtarı + önizleme düğmesi. */
+function SoundKeyList(): React.ReactNode {
+  const { t } = useT();
+  const soundKeys = useSettingsStore((s) => s.soundKeys);
+  const toggleSoundKey = useSettingsStore((s) => s.toggleSoundKey);
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-night-700 bg-night-900/60 p-2.5">
+      <div>
+        <div className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">
+          {t('settings.sounds')}
+        </div>
+        <p className="text-[11px] text-paper-500">{t('settings.soundsHint')}</p>
+      </div>
+      {SOUND_ROWS.map(({ key, label }) => (
+        <div key={key} className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => toggleSoundKey(key)}
+            className="flex flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-night-800"
+          >
+            {soundKeys[key] ? (
+              <Volume2 size={15} className="shrink-0 text-lamp-500" />
+            ) : (
+              <VolumeX size={15} className="shrink-0 text-paper-500" />
+            )}
+            <span className="flex-1 text-paper-100">{t(label)}</span>
+            <span
+              className={`rounded px-1.5 py-0.5 font-display text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                soundKeys[key] ? 'bg-lamp-100 text-lamp-300' : 'bg-night-700 text-paper-500'
+              }`}
+            >
+              {soundKeys[key] ? t('settings.on') : t('settings.off')}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => playSound(key)}
+            className="btn-ghost shrink-0 !px-2 !py-1 !text-[10px]"
+            title={t('settings.sndTest')}
+            aria-label={t('settings.sndTest')}
+          >
+            <Play size={11} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---------- Ses ve Video sekmesi ----------
 
 /** Cihaz seçimi + yayın kalitesi. Çağrı sırasındaki kontrol çubuğundaki
@@ -997,6 +1060,7 @@ function NotificationsTab(): React.ReactNode {
           {soundOn ? t('settings.on') : t('settings.off')}
         </span>
       </button>
+      {soundOn && <SoundKeyList />}
       <button
         onClick={() => void toggleDesktop()}
         className="flex items-center gap-2.5 rounded px-2 py-2 text-left transition-colors hover:bg-night-800"

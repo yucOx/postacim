@@ -1,99 +1,120 @@
-// Notification chime — WebAudio, no asset files. Two soft sine notes
-// (E5 → A5, a gentle "ding-dong") with a bell-like fast attack and decay.
+// Bildirim sesleri — MP3 dosyaları (Higgsfield ile üretildi, sessizlik
+// kırpılıp -18 LUFS'a normalize edildi). Dosya yoksa WebAudio yedeğine
+// düşülür, o da yoksa sessiz kalır (rozet/toast yine görünür).
+import { useSettingsStore, type SoundKey } from '../state/settingsStore';
+
+const FILES: Record<SoundKey, string> = {
+  message: '/sounds/msg.mp3',
+  mention: '/sounds/mention.mp3',
+  call: '/sounds/ring.mp3',
+  invite: '/sounds/invite.mp3',
+  friend: '/sounds/friend.mp3',
+};
+
 let ctx: AudioContext | null = null;
+const cache = new Map<string, HTMLAudioElement>();
 
-export function playChime(): void {
+/** master ses seviyesi — kullanıcı ayardan değiştirebilir */
+let volume = 0.7;
+
+export function setSoundVolume(v: number): void {
+  volume = Math.max(0, Math.min(1, v));
+  for (const el of cache.values()) el.volume = volume;
+}
+
+function getAudio(key: SoundKey): HTMLAudioElement | null {
+  if (typeof Audio === 'undefined') return null;
+  const url = FILES[key];
+  let el = cache.get(url);
+  if (!el) {
+    el = new Audio(url);
+    el.preload = 'auto';
+    el.volume = volume;
+    cache.set(url, el);
+  }
+  return el;
+}
+
+// --- WebAudio yedeği (dosya yüklenemezse) ---
+
+function fallbackTone(freqs: number[], step: number, dur: number, peak: number): void {
   try {
     ctx ??= new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();
     const t0 = ctx.currentTime;
-    const notes: [number, number][] = [
-      [659.25, 0], // E5
-      [880, 0.1], // A5
-    ];
-    for (const [freq, at] of notes) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+    freqs.forEach((freq, i) => {
+      const osc = ctx!.createOscillator();
+      const gain = ctx!.createGain();
+      const at = t0 + i * step;
       osc.type = 'sine';
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t0 + at);
-      gain.gain.exponentialRampToValueAtTime(0.12, t0 + at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.35);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(peak * volume, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
       osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t0 + at);
-      osc.stop(t0 + at + 0.4);
-    }
+      gain.connect(ctx!.destination);
+      osc.start(at);
+      osc.stop(at + dur + 0.05);
+    });
   } catch {
-    // audio blocked until first user gesture — fine, the title badge still shows
+    // audio blocked until first user gesture — the toast/badge still shows
   }
 }
 
-// Mention chime — brighter/louder two-note rise (A5 → C#6) so a ping that
-// names you cuts through the regular incoming-message ding.
-export function playMention(): void {
-  try {
-    ctx ??= new AudioContext();
-    if (ctx.state === 'suspended') void ctx.resume();
-    const t0 = ctx.currentTime;
-    const notes: [number, number][] = [
-      [880, 0], // A5
-      [1108.73, 0.09], // C#6
-    ];
-    for (const [freq, at] of notes) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t0 + at);
-      gain.gain.exponentialRampToValueAtTime(0.18, t0 + at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.45);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t0 + at);
-      osc.stop(t0 + at + 0.5);
-    }
-  } catch {
-    // audio blocked until first user gesture — fine, the title badge still shows
+const FALLBACK: Record<SoundKey, { freqs: number[]; step: number; dur: number; peak: number }> = {
+  message: { freqs: [659.25, 880], step: 0.1, dur: 0.35, peak: 0.12 },
+  mention: { freqs: [880, 1108.73], step: 0.09, dur: 0.45, peak: 0.18 },
+  call: { freqs: [783.99, 783.99], step: 0.18, dur: 0.22, peak: 0.14 },
+  invite: { freqs: [587.33, 783.99, 1046.5], step: 0.11, dur: 0.3, peak: 0.14 },
+  friend: { freqs: [523.25, 659.25, 783.99], step: 0.1, dur: 0.28, peak: 0.14 },
+};
+
+/** tek seferlik ses çalar; ana anahtar + kategori anahtarı kapalıysa sustuk */
+export function playSound(key: SoundKey): void {
+  const s = useSettingsStore.getState();
+  if (!s.soundOn || !s.soundKeys[key]) return;
+  const el = getAudio(key);
+  if (!el) {
+    const f = FALLBACK[key];
+    fallbackTone(f.freqs, f.step, f.dur, f.peak);
+    return;
   }
+  el.currentTime = 0;
+  el.volume = volume;
+  el.play().catch(() => {
+    // autoplay engellendi ya da dosya 404 — yedeğe düş
+    const f = FALLBACK[key];
+    fallbackTone(f.freqs, f.step, f.dur, f.peak);
+  });
 }
 
-// Incoming-call ring — two quick pulses per cycle, loops until stopRing().
-// Discord benzeri: arama gelene kadar çalar; arayan karşı tarafın
-// kabul/red/iptal'i döngüyü keser.
+export const playChime = (): void => playSound('message');
+export const playMention = (): void => playSound('mention');
+
+// --- Gelen arama zili: ring.mp3 döngüde, stopRing() ile kesilir ---
+
 let ringTimer: ReturnType<typeof setInterval> | null = null;
 
-function ringPulse(): void {
-  try {
-    ctx ??= new AudioContext();
-    if (ctx.state === 'suspended') void ctx.resume();
-    const t0 = ctx.currentTime;
-    const notes: [number, number][] = [
-      [783.99, 0], // G5
-      [783.99, 0.18], // G5
-    ];
-    for (const [freq, at] of notes) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t0 + at);
-      gain.gain.exponentialRampToValueAtTime(0.14, t0 + at + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.22);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t0 + at);
-      osc.stop(t0 + at + 0.25);
-    }
-  } catch {
-    // audio blocked until first user gesture
+function ringOnce(): void {
+  const s = useSettingsStore.getState();
+  if (!s.soundOn || !s.soundKeys.call) return;
+  const el = getAudio('call');
+  if (!el) {
+    fallbackTone(FALLBACK.call.freqs, FALLBACK.call.step, FALLBACK.call.dur, FALLBACK.call.peak);
+    return;
   }
+  el.currentTime = 0;
+  el.volume = volume;
+  el.play().catch(() => {
+    fallbackTone(FALLBACK.call.freqs, FALLBACK.call.step, FALLBACK.call.dur, FALLBACK.call.peak);
+  });
 }
 
 export function startRing(): void {
   stopRing();
-  ringPulse();
-  ringTimer = setInterval(ringPulse, 1600);
+  if (!useSettingsStore.getState().soundOn || !useSettingsStore.getState().soundKeys.call) return;
+  ringOnce();
+  ringTimer = setInterval(ringOnce, 3200);
 }
 
 export function stopRing(): void {
@@ -101,4 +122,6 @@ export function stopRing(): void {
     clearInterval(ringTimer);
     ringTimer = null;
   }
+  // çalan örnek varsa durdur — yeni çağrı başlamadan eskisi susmaz
+  cache.get(FILES.call)?.pause();
 }

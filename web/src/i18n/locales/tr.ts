@@ -232,6 +232,14 @@ export default {
     language: 'dil',
     languageHint: 'arayüz dili — değişiklik anında uygulanır',
     sound: 'bildirim sesi',
+        sounds: 'Sesler',
+        soundsHint: 'her olayın kendi sesi — istediğini kapatabilirsin',
+        sndMessage: 'Mesaj',
+        sndMention: 'Seni andı',
+        sndCall: 'Gelen arama',
+        sndInvite: 'Topluluk daveti',
+        sndFriend: 'Arkadaşlık isteği',
+        sndTest: 'Dinle',
     on: 'açık',
     off: 'kapalı',
     desktop: 'masaüstü bildirimi',
@@ -481,6 +489,11 @@ export default {
   // Toast
   toast: {
     close: 'kapat',
+    messageFrom: '{nick} · {room}',
+    mentionedBy: '{nick} seni andı · {room}',
+    incomingCall: 'Gelen arama — {nick}',
+    friendRequest: 'Arkadaşlık isteği — {nick}',
+    communityInvite: '{name} topluluğuna davet — {nick}',
   },
   // ConfirmDialog
   confirm: {

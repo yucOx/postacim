@@ -10,7 +10,8 @@ import { dhVoiceKeyAnchor, dhVoiceKeyDm } from '../crypto/dhratchet';
 import { unb64 } from '../crypto/bytes';
 import { onServerEvent, wsSend } from '../ws/socket';
 import { startRing, stopRing } from '../lib/sound';
-import { useSettingsStore } from './settingsStore';
+import { toast } from '../components/Toast';
+import { translate as t } from '../lib/translate';
 import { useMediaStore, systemDefaultId, type DeviceKind } from './mediaStore';
 // official subpath export; ?worker&inline bundles the SFrame worker into the app
 import E2EEWorker from 'livekit-client/e2ee-worker?worker&inline';
@@ -799,12 +800,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           return;
         }
         // Discord benzeri: gelen arama çalar — kabul/red/iptal'e kadar döngü
-        if (useSettingsStore.getState().soundOn) startRing();
+        const fromNick = (e.from as { nick?: string } | undefined)?.nick ?? '?';
+        // startRing ana anahtar + call kategorisini kendi içinde kontrol eder
+        startRing();
+        toast.info(t('toast.incomingCall', { nick: fromNick }));
         set({
           callState: {
             phase: 'incoming',
             channelId: e.channel_id as string,
-            fromNick: (e.from as { nick?: string } | undefined)?.nick ?? '?',
+            fromNick,
           },
         });
       } else if (e.type === 'call:accepted') {

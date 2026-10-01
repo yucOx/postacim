@@ -19,8 +19,9 @@ import {
 } from '../lib/keygossip';
 import { useSecurityStore } from './securityStore';
 import { useDeviceStore } from './deviceStore';
-import { useSettingsStore } from './settingsStore';
-import { playChime } from '../lib/sound';
+import { playSound } from '../lib/sound';
+import { toast } from '../components/Toast';
+import { translate as t } from '../lib/translate';
 
 export interface Channel {
   id: string;
@@ -624,7 +625,8 @@ export const useAppStore = create<AppState>((set, get) => {
         // üyelik basılmaz). Chime: davetin geldiğini haber versin.
         const inv = e as unknown as { code: string; community_name: string; from_nick: string };
         get().setPendingInvite({ code: inv.code, communityName: inv.community_name, fromNick: inv.from_nick });
-        if (useSettingsStore.getState().soundOn) playChime();
+        playSound('invite');
+        toast.info(t('toast.communityInvite', { name: inv.community_name, nick: inv.from_nick }));
       } else if (e.type === 'community:member_removed') {
         if (e.user_id === me) {
           dropCommunity(e.community_id as string);
@@ -634,13 +636,22 @@ export const useAppStore = create<AppState>((set, get) => {
       } else if (e.type === 'community:deleted') {
         dropCommunity(e.community_id as string);
       } else if (
+        e.type === 'friend_request:new' ||
+        e.type === 'friend:new'
+      ) {
+        // yeni arkadaşlık isteği kabulü — ses + üstte bildirim
+        playSound('friend');
+        const from = (e as unknown as { from_nick?: string; nick?: string }).from_nick
+          ?? (e as unknown as { nick?: string }).nick
+          ?? '?';
+        toast.info(t('toast.friendRequest', { nick: from }));
+        void get().loadBootstrap();
+      } else if (
         e.type === 'channel:created' ||
         e.type === 'channel:rotated' ||
         e.type === 'community:roles_updated' ||
         e.type === 'join_request:new' ||
         e.type === 'community:join_password' ||
-        e.type === 'friend_request:new' ||
-        e.type === 'friend:new' ||
         e.type === 'friend:removed' ||
         e.type === 'dm:new' ||
         e.type === 'gdm:new' ||
