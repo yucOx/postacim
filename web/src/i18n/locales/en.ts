@@ -30,6 +30,7 @@ export default {
     screenPromptTitle: 'Start stream',
     screenPromptHint: 'you will be asked what to share on the browser picker in the next step',
     qualityStale: 'applies to next stream',
+        qualityHint: 'publish resolution and fps — a change applies to the next share',
     cam720Note: 'test: camera capped at 720p — 1080p coming later',
     qualityTitle: 'quality: {name}',
     plate: 'CALL',
@@ -76,6 +77,20 @@ export default {
     unmute: 'unmute stream',
     mute: 'mute stream',
     volLabel: 'stream volume',
+  },
+  // microphone / camera / speaker selection
+  devices: {
+    title: 'Voice & Video',
+    hint: 'the microphone, camera and speaker you use — the choice is saved between calls',
+    pick: 'choose devices',
+    mic: 'Microphone',
+    cam: 'Camera',
+    speaker: 'Speaker',
+    systemDefault: 'default',
+    empty: 'no devices found',
+    denied: 'no access — enable it in your browser permissions',
+    liveHint: 'picking while on a call applies immediately',
+    moreInSettings: 'more settings',
   },
   pip: {
     maximize: 'enlarge',
@@ -135,6 +150,7 @@ export default {
       account: 'Account',
       security: 'Security',
       notifications: 'Notifications',
+            media: 'Voice & Video',
       devices: 'Devices',
     },
     account: {

@@ -11,11 +11,14 @@ import {
   ShieldCheck,
   Trash2,
   User,
+  Video,
   X,
 } from 'lucide-react';
 import Modal from './Modal';
 import ConfirmDialog from './ConfirmDialog';
 import ProfileModal from './ProfileModal';
+import CallQualityPicker from './CallQualityPicker';
+import { DeviceSettingsBlock } from './DeviceMenu';
 import { useSettingsStore } from '../state/settingsStore';
 import { useI18nStore } from '../i18n/store';
 import { LOCALES, LOCALE_LABEL, LOCALE_FLAG, type Locale } from '../i18n/types';
@@ -33,7 +36,7 @@ import { generateIdentity, generateSignIdentity, sealIdentityBlob } from '../cry
 import { b64, unb64 } from '../crypto/bytes';
 import { shortFingerprint } from '../crypto/fingerprint';
 
-type Tab = 'account' | 'security' | 'devices' | 'notifications';
+type Tab = 'account' | 'security' | 'devices' | 'notifications' | 'media';
 
 /** Kapsamlı ayarlar: Hesap (profil özet + anahtar defteri durumu), Güvenlik
  *  (passkey, kurtarma ifadesi, şifre değiştir), Bildirimler (ses, masaüstü,
@@ -58,11 +61,15 @@ export default function SettingsModal({ onClose }: { onClose: () => void }): Rea
           <TabBtn id="notifications" current={tab} onPick={setTab} icon={<Bell size={13} />}>
             {t('settings.tabs.notifications')}
           </TabBtn>
+          <TabBtn id="media" current={tab} onPick={setTab} icon={<Video size={13} />}>
+            {t('settings.tabs.media')}
+          </TabBtn>
         </div>
         {tab === 'account' && <AccountTab />}
         {tab === 'security' && <SecurityTab />}
         {tab === 'devices' && <DevicesTab />}
         {tab === 'notifications' && <NotificationsTab />}
+        {tab === 'media' && <MediaTab />}
       </div>
     </Modal>
   );
@@ -912,6 +919,27 @@ function RevokeConfirm({
 }
 
 // ---------- Bildirimler sekmesi ----------
+
+// ---------- Ses ve Video sekmesi ----------
+
+/** Cihaz seçimi + yayın kalitesi. Çağrı sırasındaki kontrol çubuğundaki
+ *  menüyle aynı veriyi gösterir; buradan seçim kalıcıdır. */
+function MediaTab(): React.ReactNode {
+  const { t } = useT();
+  return (
+    <div className="flex flex-col gap-3">
+      <DeviceSettingsBlock />
+      <hr className="border-night-700" />
+      <div className="flex flex-col gap-1">
+        <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">
+          {t('call.quality')}
+        </span>
+        <span className="text-xs text-paper-500">{t('call.qualityHint')}</span>
+        <CallQualityPicker align="start" />
+      </div>
+    </div>
+  );
+}
 
 function NotificationsTab(): React.ReactNode {
   const { t } = useT();

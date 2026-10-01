@@ -17,6 +17,7 @@ export default {
     balanced: 'ausgewogen',
     high: 'hoch',
     qualityStale: 'gilt für den nächsten stream',
+        qualityHint: 'Stream-Auflösung und fps — Änderung gilt für die nächste Freigabe',
     cam720Note: 'test: kamera bei 720p gedeckelt — 1080p später',
     qualityTitle: 'qualität: {name}',
     resolution: 'auflösung',
@@ -77,6 +78,20 @@ export default {
     mute: 'stream-ton stummschalten',
     volLabel: 'stream-lautstärke',
   },
+  // Mikrofon / Kamera / Lautsprecher
+  devices: {
+    title: 'Sprache & Video',
+    hint: 'Mikrofon, Kamera und Lautsprecher — die Wahl bleibt zwischen Anrufen gespeichert',
+    pick: 'Geräte wählen',
+    mic: 'Mikrofon',
+    cam: 'Kamera',
+    speaker: 'Lautsprecher',
+    systemDefault: 'Standard',
+    empty: 'keine Geräte gefunden',
+    denied: 'kein Zugriff — in den Browser-Berechtigungen freigeben',
+    liveHint: 'Auswahl während eines Anrufs wirkt sofort',
+    moreInSettings: 'weitere Einstellungen',
+  },
   pip: {
     maximize: 'vergrößern',
     maximizeAria: 'anruf vergrößern',
@@ -132,7 +147,7 @@ export default {
   },
   settings: {
     title: 'Einstellungen',
-    tabs: { account: 'Konto', security: 'Sicherheit', notifications: 'Benachrichtigungen', devices: 'Geräte' },
+    tabs: { account: 'Konto', security: 'Sicherheit', notifications: 'Benachrichtigungen', devices: 'Geräte', media: 'Sprache & Video' },
     account: {
       profileBtn: 'Profil bearbeiten',
       profileHint: 'Avatar, Schlüssel-Fingerabdruck, Konto löschen',

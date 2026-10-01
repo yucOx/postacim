@@ -10,15 +10,16 @@ const LEVEL_KEYS: Record<CallQuality, 'call.speed' | 'call.balanced' | 'call.hig
 };
 
 /** kalite seçici — hızlı/dengeli/yüksek. Publish preset olarak kameraya ve ekran
- *  paylaşımına uygulanır; sürerken seçilirse sonraki paylaşımda geçerli. */
-export default function CallQualityPicker(): React.ReactNode {
+ *  paylaşımına uygulanır; sürerken seçilirse sonraki paylaşımda geçerli.
+ *  `align` ayarlar sekmesinde sola yaslar, çağrı çubuğunda ortada kalır. */
+export default function CallQualityPicker({ align = 'center' }: { align?: 'center' | 'start' } = {}): React.ReactNode {
   const { t } = useT();
   const quality = useVoiceStore((s) => s.quality);
   const setQuality = useVoiceStore((s) => s.setQuality);
   const staleShare = useVoiceStore((s) => s.screenOn && s.screenQuality !== null && s.screenQuality !== s.quality);
 
   return (
-    <div className="flex items-center justify-center gap-1.5 pb-1">
+    <div className={`flex items-center gap-1.5 ${align === 'center' ? 'justify-center pb-1' : 'flex-wrap'}`}>
       <span className="plate !text-[10px]">{t('call.quality')}</span>
       {LEVEL_IDS.map((id) => {
         const label = t(LEVEL_KEYS[id]);

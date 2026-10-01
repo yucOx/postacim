@@ -17,6 +17,7 @@ export default {
     balanced: 'equilibrada',
     high: 'alta',
     qualityStale: 'se aplica a la próxima transmisión',
+        qualityHint: 'resolución y fps de la transmisión — el cambio se aplica a la próxima',
     cam720Note: 'prueba: cámara limitada a 720p — 1080p más adelante',
     qualityTitle: 'calidad: {name}',
     resolution: 'resolución',
@@ -77,6 +78,20 @@ export default {
     mute: 'silenciar audio de la transmisión',
     volLabel: 'volumen de la transmisión',
   },
+  // micrófono / cámara / altavoz
+  devices: {
+    title: 'Voz y vídeo',
+    hint: 'el micrófono, la cámara y el altavoz que usas — la elección se guarda entre llamadas',
+    pick: 'elegir dispositivos',
+    mic: 'Micrófono',
+    cam: 'Cámara',
+    speaker: 'Altavoz',
+    systemDefault: 'predeterminado',
+    empty: 'no se encontraron dispositivos',
+    denied: 'sin acceso — actívalo en los permisos del navegador',
+    liveHint: 'elegir durante una llamada se aplica al instante',
+    moreInSettings: 'más ajustes',
+  },
   pip: {
     maximize: 'ampliar',
     maximizeAria: 'ampliar llamada',
@@ -132,7 +147,7 @@ export default {
   },
   settings: {
     title: 'Ajustes',
-    tabs: { account: 'Cuenta', security: 'Seguridad', notifications: 'Notificaciones', devices: 'Dispositivos' },
+    tabs: { account: 'Cuenta', security: 'Seguridad', notifications: 'Notificaciones', devices: 'Dispositivos', media: 'Voz y vídeo' },
     account: {
       profileBtn: 'Editar perfil',
       profileHint: 'avatar, huella de clave, eliminar cuenta',

@@ -21,6 +21,7 @@ export default {
     balanced: 'dengeli',
     high: 'yüksek',
     qualityStale: 'sonraki yayın için geçerli',
+        qualityHint: 'yayın çözünürlüğü ve fps — değişiklik sonraki paylaşıma yansır',
     cam720Note: 'test: kamera 720p sınırında — 1080p ileride açılır',
     qualityTitle: 'kalite: {name}',
     resolution: 'çözünürlük',
@@ -84,6 +85,20 @@ export default {
     volLabel: 'yayın sesi seviyesi',
   },
   // PiP pencere
+  // mikrofon / kamera / hoparlör seçimi
+  devices: {
+    title: 'Ses ve Video',
+    hint: 'kullandığın mikrofon, kamera ve hoparlör — seçim aramalar arasında saklanır',
+    pick: 'cihazları seç',
+    mic: 'Mikrofon',
+    cam: 'Kamera',
+    speaker: 'Hoparlör',
+    systemDefault: 'varsayılan',
+    empty: 'cihaz bulunamadı',
+    denied: 'erişim yok — tarayıcı izinlerinden aç',
+    liveHint: 'aramasındayken seçim anında uygulanır',
+    moreInSettings: 'daha fazla ayar',
+  },
   pip: {
     maximize: 'büyüt',
     maximizeAria: 'arama büyüt',
@@ -146,6 +161,7 @@ export default {
       account: 'Hesap',
       security: 'Güvenlik',
       notifications: 'Bildirimler',
+            media: 'Ses ve Video',
       devices: 'Cihazlar',
     },
     account: {

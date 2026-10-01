@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Room, RoomEvent, Track, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets, DisconnectReason } from 'livekit-client';
-import type { LocalParticipant, TrackPublishOptions, VideoCaptureOptions } from 'livekit-client';
+import type { LocalParticipant, TrackPublishOptions, VideoCaptureOptions, AudioCaptureOptions } from 'livekit-client';
 import { api } from '../api/client';
 import type { VoiceTokenResponse } from '../api/types';
 import { useAppStore } from './appStore';
@@ -11,6 +11,7 @@ import { unb64 } from '../crypto/bytes';
 import { onServerEvent, wsSend } from '../ws/socket';
 import { startRing, stopRing } from '../lib/sound';
 import { useSettingsStore } from './settingsStore';
+import { useMediaStore, systemDefaultId, type DeviceKind } from './mediaStore';
 // official subpath export; ?worker&inline bundles the SFrame worker into the app
 import E2EEWorker from 'livekit-client/e2ee-worker?worker&inline';
 
@@ -69,6 +70,9 @@ interface VoiceState {
   toggleScreen: () => Promise<void>;
   /** Discord Go Live akışı: diyaloğa girilen ayrıntılarla yayın başlat */
   startScreen: (opts: ShareOpts) => Promise<void>;
+  /** cihaz değişimi — yayın sürerken anında uygulanır (oynadaki track'ler
+   *  yeniden başlatılır). Oda yoksa seçim bir sonraki join için saklanır. */
+  switchDevice: (kind: DeviceKind, deviceId: string) => Promise<void>;
   startDmCall: (dmId: string, video?: boolean) => Promise<void>;
   acceptIncoming: () => Promise<void>;
   declineIncoming: () => Promise<void>;
@@ -212,6 +216,38 @@ const cleanup = (room: Room | null): void => {
     // already gone
   }
 };
+
+// seçili cihazı capture constraint'ine yazar; '' = sistem varsayılanı
+// (constraint hiç yazılmaz). Kalite preset'inin üstüne bindirilir.
+function withMicDevice(opts?: AudioCaptureOptions): AudioCaptureOptions | undefined {
+  const id = useMediaStore.getState().selected.mic;
+  if (!id) return opts;
+  return { ...(opts ?? {}), deviceId: { exact: id } };
+}
+
+function withCamDevice(opts?: VideoCaptureOptions): VideoCaptureOptions | undefined {
+  const id = useMediaStore.getState().selected.cam;
+  if (!id) return opts;
+  return { ...(opts ?? {}), deviceId: { exact: id } };
+}
+
+/** Hoparlör değişimi: LiveKit uzak sesleri AudioContext üzerinden işler,
+ *  setSinkId doğrudan <video> sink'ini değiştirir — yalnız sayfada duran
+ *  media element'lerine uygulanır. Desteklenmeyen tarayıcıda no-op.
+ *  AudioContext'ın gerçek çıkışı track'ler üzerinden yönlendiği için bu
+ *  pratikte tarayıcı varsayılan hoparlörü değiştirir. */
+async function setSinkId(deviceId: string): Promise<void> {
+  if (typeof HTMLMediaElement === 'undefined') return;
+  const el = HTMLMediaElement.prototype as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+  if (typeof el.setSinkId !== 'function') return;
+  for (const node of document.querySelectorAll('audio, video')) {
+    try {
+      await el.setSinkId.call(node, deviceId);
+    } catch {
+      // eleman yok/ayrılmış ya da cihaz yok — diğerlerine devam
+    }
+  }
+}
 
 // Faz 5d — SFrame anahtarı artık v4 DH zincirinden türetilir (spec §7):
 // kanal sesi epok DH çapasına, DM araması iki tarafın statik kimlik DH'ine
@@ -436,7 +472,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
             wsSend({ type: 'voice_state', channel_id: channelId, state: 'joined' });
             let micOpened = false;
             try {
-              await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
+              await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true, withMicDevice());
               micOpened = true;
             } catch {
               // mic permission denied or no mic
@@ -501,7 +537,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
     const room = get().room;
     if (!room) return;
     const next = !get().micOn;
-    await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(next);
+    await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(next, next ? withMicDevice() : undefined);
     set({ micOn: next });
   },
 
@@ -512,11 +548,33 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
     const q = qualityTiers[get().quality];
     await (room.localParticipant as LocalParticipant).setCameraEnabled(
       next,
-      next ? q.camCapture : undefined,
+      next ? withCamDevice(q.camCapture) : undefined,
       next ? q.camPublish : undefined,
     );
     if (next) hintTrack(Track.Source.Camera);
     set({ camOn: next });
+  },
+
+  switchDevice: async (kind, deviceId) => {
+    useMediaStore.getState().select(kind, deviceId);
+    const room = get().room;
+    if (!room) return; // oda yoksa seçim yalnızca saklandı, sonraki join'e kalır
+    if (kind === 'audiooutput') {
+      // hoparlör: sayfadaki media element'lerinin sink'ini değiştir.
+      // '' = sistem varsayılanı — setSinkId('') bunu zaten anlar.
+      await setSinkId(deviceId);
+      return;
+    }
+    // deviceId boş = sistem varsayılanına dönüş. switchActiveDevice boş
+    // id kabul etmez; tarayıcının varsayılan cihazının id'sini bulup onu
+    // geçiyoruz (yoksa liste boşsa değişiklik zaten uygulanamaz).
+    const target = deviceId || systemDefaultId(kind);
+    if (!target) return;
+    try {
+      await room.switchActiveDevice(kind, target);
+    } catch (err) {
+      set({ error: err instanceof Error ? `cihaz değiştirilemedi: ${err.message}` : 'cihaz değiştirilemedi' });
+    }
   },
 
   toggleScreen: async () => {
@@ -610,7 +668,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       // open mic by default
       let micOpened = false;
       try {
-        await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
+        await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true, withMicDevice());
         micOpened = true;
       } catch {
         // mic permission denied or no mic
@@ -620,7 +678,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       if (video) {
         const q = qualityTiers[get().quality];
         try {
-          await (room.localParticipant as LocalParticipant).setCameraEnabled(true, q.camCapture, q.camPublish);
+          await (room.localParticipant as LocalParticipant).setCameraEnabled(true, withCamDevice(q.camCapture), q.camPublish);
           camOpened = true;
         } catch {
           // permission denied or no camera — fall back to voice only
@@ -678,7 +736,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       connectedRoom = room;
       let micOpened = false;
       try {
-        await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true);
+        await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true, withMicDevice());
         micOpened = true;
       } catch {
         // mic error / permission denied

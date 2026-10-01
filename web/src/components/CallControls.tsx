@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Maximize, Mic, MicOff, Minimize, MonitorUp, PhoneOff, PictureInPicture2, Signal, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { ChevronUp, Maximize, Mic, MicOff, Minimize, MonitorUp, PhoneOff, PictureInPicture2, Signal, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useLocalParticipant } from '@livekit/components-react';
 import { useVoiceStore, type CallQuality, type ShareOpts } from '../state/voiceStore';
+import DeviceMenu from './DeviceMenu';
 import Modal from './Modal';
 import { useT } from '../i18n/I18nProvider';
 
@@ -85,6 +86,7 @@ export default function CallControls({
   // kaynak ipucu + çözünürlük + fps + ses, sonra tarayıcıdan kaynak seçimi
   const [screenPrompt, setScreenPrompt] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [deviceMenu, setDeviceMenu] = useState<'mic' | 'cam' | null>(null);
   const [resH, setResH] = useState(() => QUALITY_TO_RES[quality]);
   const [fps, setFps] = useState<ShareOpts['fps']>(30); // 15 fps akıcılık için düşük kalıyor — varsayılan 30
   const [shareAudio, setShareAudio] = useState(true);
@@ -101,12 +103,52 @@ export default function CallControls({
 
   return (
     <div className="flex items-center justify-center gap-2.5 border-t border-night-700 bg-night-900/80 px-4 py-3">
-      <button onClick={() => void toggleMic()} className={round(micOn)} title={micOn ? t('call.micOn') : t('call.micOff')} aria-label={micOn ? t('call.micOn') : t('call.micOff')} aria-pressed={micOn}>
-        {micOn ? <Mic size={18} /> : <MicOff size={18} />}
-      </button>
-      <button onClick={() => void toggleCam()} className={round(camOn)} title={camOn ? t('call.camOn') : t('call.camOff')} aria-label={camOn ? t('call.camOn') : t('call.camOff')} aria-pressed={camOn}>
-        {camOn ? <Video size={18} /> : <VideoOff size={18} />}
-      </button>
+      <div className="flex items-center">
+        <button
+          onClick={() => void toggleMic()}
+          className={`${round(micOn)} !rounded-r-none`}
+          title={micOn ? t('call.micOn') : t('call.micOff')}
+          aria-label={micOn ? t('call.micOn') : t('call.micOff')}
+          aria-pressed={micOn}
+        >
+          {micOn ? <Mic size={18} /> : <MicOff size={18} />}
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeviceMenu((m) => (m === 'mic' ? null : 'mic'))}
+          className={`${round(micOn)} !-ml-px !w-7 !rounded-l-none`}
+          title={t('devices.mic')}
+          aria-label={t('devices.mic')}
+          aria-haspopup="menu"
+          aria-expanded={deviceMenu === 'mic'}
+        >
+          <ChevronUp size={13} />
+        </button>
+        {deviceMenu === 'mic' && <DeviceMenu onClose={() => setDeviceMenu(null)} />}
+      </div>
+      <div className="flex items-center">
+        <button
+          onClick={() => void toggleCam()}
+          className={`${round(camOn)} !rounded-r-none`}
+          title={camOn ? t('call.camOn') : t('call.camOff')}
+          aria-label={camOn ? t('call.camOn') : t('call.camOff')}
+          aria-pressed={camOn}
+        >
+          {camOn ? <Video size={18} /> : <VideoOff size={18} />}
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeviceMenu((m) => (m === 'cam' ? null : 'cam'))}
+          className={`${round(camOn)} !-ml-px !w-7 !rounded-l-none`}
+          title={t('devices.cam')}
+          aria-label={t('devices.cam')}
+          aria-haspopup="menu"
+          aria-expanded={deviceMenu === 'cam'}
+        >
+          <ChevronUp size={13} />
+        </button>
+        {deviceMenu === 'cam' && <DeviceMenu onClose={() => setDeviceMenu(null)} />}
+      </div>
       <button
         onClick={() => (screenOn ? void toggleScreen() : setScreenPrompt(true))}
         className={round(screenOn)}

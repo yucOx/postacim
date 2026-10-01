@@ -17,6 +17,7 @@ export default {
     balanced: 'équilibrée',
     high: 'haute',
     qualityStale: 's applique au prochain stream',
+        qualityHint: 'résolution et ips du stream — le changement s’applique au prochain partage',
     cam720Note: 'test : caméra limitée à 720p — 1080p plus tard',
     qualityTitle: 'qualité : {name}',
     resolution: 'résolution',
@@ -77,6 +78,20 @@ export default {
     mute: 'couper le son du stream',
     volLabel: 'volume du stream',
   },
+  // micro / caméra / haut-parleur
+  devices: {
+    title: 'Voix et vidéo',
+    hint: 'le micro, la caméra et le haut-parleur utilisés — le choix est conservé d’un appel à l’autre',
+    pick: 'choisir les appareils',
+    mic: 'Micro',
+    cam: 'Caméra',
+    speaker: 'Haut-parleur',
+    systemDefault: 'par défaut',
+    empty: 'aucun appareil détecté',
+    denied: 'pas d’accès — activez-le dans les autorisations du navigateur',
+    liveHint: 'choisir pendant un appel s’applique immédiatement',
+    moreInSettings: 'plus de réglages',
+  },
   pip: {
     maximize: 'agrandir',
     maximizeAria: 'agrandir l appel',
@@ -132,7 +147,7 @@ export default {
   },
   settings: {
     title: 'Paramètres',
-    tabs: { account: 'Compte', security: 'Sécurité', notifications: 'Notifications', devices: 'Appareils' },
+    tabs: { account: 'Compte', security: 'Sécurité', notifications: 'Notifications', devices: 'Appareils', media: 'Voix et vidéo' },
     account: {
       profileBtn: 'Modifier le profil',
       profileHint: 'avatar, empreinte de clé, suppression du compte',
