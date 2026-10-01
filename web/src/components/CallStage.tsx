@@ -7,8 +7,10 @@ import { MicOff, LayoutGrid, Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
 import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
+import { useAuthStore } from '../state/authStore';
 import { useSafeIsSpeaking } from '../lib/speaking';
 import Avatar from './Avatar';
+import ParticipantMenu from './ParticipantMenu';
 
 /** Remote mic audio — invisible <audio> elements. Without this nothing in the
  *  app attaches RemoteAudioTracks (stage tiles are video-only), so peers would
@@ -17,19 +19,28 @@ function RemoteAudio(): React.ReactNode {
   const tracks = useTracks([Track.Source.Microphone], { onlySubscribed: true });
   const volume = useVoiceStore((s) => s.volume);
   const deafened = useVoiceStore((s) => s.deafened);
+  // kişi bazlı kısma/susturma (sağ tık menüsünden ayarlanır); kayıt yoksa
+  // ana seviye uygulanır
+  const userVolumes = useVoiceStore((s) => s.userVolumes);
+  const userMuted = useVoiceStore((s) => s.userMuted);
   return (
     <>
       {tracks
         .filter((t) => !t.participant.isLocal)
-        .map((t) => (
-          <AudioTrack
-            key={t.participant.identity}
-            trackRef={t}
-            volume={deafened ? 0 : volume}
-            muted={deafened}
-            className="hidden"
-          />
-        ))}
+        .map((t) => {
+          const id = t.participant.identity;
+          const level = userVolumes[id] ?? volume;
+          const muted = deafened || !!userMuted[id];
+          return (
+            <AudioTrack
+              key={id}
+              trackRef={t}
+              volume={muted ? 0 : level}
+              muted={muted}
+              className="hidden"
+            />
+          );
+        })}
     </>
   );
 }
@@ -164,6 +175,7 @@ interface SpeakingTileProps {
   className?: string;
   children?: React.ReactNode;
   onClick?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   title?: string;
   style?: React.CSSProperties;
 }
@@ -175,6 +187,7 @@ function SpeakingTile({
   className = '',
   children,
   onClick,
+  onContextMenu,
   title,
   style,
 }: SpeakingTileProps): React.ReactNode {
@@ -187,6 +200,7 @@ function SpeakingTile({
   return (
     <div
       onClick={onClick}
+      onContextMenu={onContextMenu}
       title={title}
       style={style}
       className={`transition-all duration-150 ${borderClass} ${className}`}
@@ -208,9 +222,10 @@ interface TileProps {
   overlay?: React.ReactNode;
   /** tooltip override — the dominant tile's click toggles layout, not "büyüt" */
   title?: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill, overlay, title: titleProp }: TileProps): React.ReactNode {
+function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocus = false, fill, overlay, title: titleProp, onContextMenu }: TileProps): React.ReactNode {
   const { t } = useT();
   return (
     <SpeakingTile
@@ -218,6 +233,7 @@ function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocu
       isScreen={isScreen}
       active={active}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       title={titleProp ?? (onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined)}
       className={`relative cursor-pointer overflow-hidden rounded-md border bg-night-850 ${
         fill ? 'min-h-0 min-w-0 flex-1' : 'aspect-video w-full'
@@ -299,13 +315,31 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   // that person also shares their screen
   const [spotlight, setSpotlight] = useState<string | null>(null);
   const spotId = spotlight?.split(':')[1] ?? null;
+  // Discord tarzı sağ tık: kutuya sağ tık → kişi/yayın ses menüsü
+  const [ctxTarget, setCtxTarget] = useState<{ x: number; y: number; identity: string; nick: string; hasShare: boolean; isSelf: boolean } | null>(null);
+  const openCtx = (identity: string, nick: string, hasShare: boolean) => (e: React.MouseEvent): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxTarget({
+      x: e.clientX,
+      y: e.clientY,
+      identity,
+      nick,
+      hasShare,
+      isSelf: identity === useAuthStore.getState().user?.id,
+    });
+  };
 
   const toggleScreen = useVoiceStore((s) => s.toggleScreen);
   // paylaşım görünümü yerleşimi: odak (büyük + sağ şerit) / yan yana eşit bölmeler
   const [shareLayout, setShareLayout] = useState<'focus' | 'side'>('focus');
   // izleyici yayın sesi: 0-1 + sessize alma (ekran paylaşımı sesi)
-  const [shareVolume, setShareVolume] = useState(1);
-  const [shareMuted, setShareMuted] = useState(false);
+  // yayın sesi seviyesi/kesme store'da — sağ tık menüsü ve sahne kontrolü
+  // aynı değeri paylaşsın (iki ayrı gerçek olmasın)
+  const shareVolume = useVoiceStore((s) => s.shareVolume);
+  const setShareVolume = useVoiceStore((s) => s.setShareVolume);
+  const shareMuted = useVoiceStore((s) => s.shareMuted);
+  const toggleShareMuted = useVoiceStore((s) => s.toggleShareMuted);
 
   const toggleSpotlight = (kind: 'screen' | 'cam', identity: string): void => {
     const key = `${kind}:${identity}`;
@@ -472,9 +506,23 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     }
   }, [screens, spotlight]);
 
+  // Discord tarzı sağ tık menüsü (her düzende ortak)
+  const ctxMenu = ctxTarget && (
+    <ParticipantMenu
+      x={ctxTarget.x}
+      y={ctxTarget.y}
+      identity={ctxTarget.identity}
+      nick={ctxTarget.nick}
+      hasShare={ctxTarget.hasShare}
+      isSelf={ctxTarget.isSelf}
+      onClose={() => setCtxTarget(null)}
+    />
+  );
+
   if (participants.length === 0) {
     return (
       <>
+        {ctxMenu}
         <RemoteAudio />
         {emptyLabel ? (
           <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{emptyLabel}</div>
@@ -496,6 +544,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         participant={p}
         active={focused}
         onClick={() => toggleSpotlight('cam', p.identity)}
+        onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
         style={aspect ? { aspectRatio: `${aspect}` } : undefined}
         className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
@@ -514,6 +563,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         participant={p}
         active={focused}
         onClick={() => toggleSpotlight('cam', p.identity)}
+        onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
         className="flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
       >
@@ -581,6 +631,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           isScreen={v.isScreen}
           active={spotlight === v.key}
           onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
+          onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
           title={v.isScreen ? t('stream.enlargeStream') : t('stream.enlarge')}
           className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
         >
@@ -602,6 +653,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     const videoIds = new Set(allVideos.map((v) => v.identity));
     return (
       <>
+        {ctxMenu}
         <RemoteAudio />
         <ShareAudio
           volume={shareVolume}
@@ -617,6 +669,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 key={slotKey(p.identity)}
                 participant={p}
                 onClick={() => focusFromSide(p.identity)}
+                onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={t('stream.enlarge')}
                 className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
               >
@@ -659,6 +712,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
               isScreen={v.isScreen}
               active={spotlight === v.key}
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
+              onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
               title={t('stream.enlarge')}
               style={aspect ? { aspectRatio: `${aspect}` } : undefined}
               className={`relative h-full aspect-video shrink-0 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
@@ -684,6 +738,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
           key={slotKey(p.identity) + '-slot'}
           participant={p}
           onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
+          onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
           title={p.identity === focusId ? undefined : t('stream.enlarge')}
           className="relative flex h-full aspect-video shrink-0 items-center justify-center overflow-hidden rounded-md border bg-night-850"
         >
@@ -695,6 +750,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
     };
     return (
       <>
+        {ctxMenu}
         <RemoteAudio />
         <ShareAudio
           volume={shareVolume}
@@ -715,6 +771,11 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                   if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
                   else releaseSpot();
                 }}
+                onContextMenu={openCtx(
+                  focusedVideo.identity,
+                  nickFor(focusedVideo.identity),
+                  focusedVideo.isScreen,
+                )}
                 overlay={
                   <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
                     <button
@@ -749,7 +810,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setShareMuted((m) => !m);
+                            toggleShareMuted();
                           }}
                           className="text-paper-300 transition-colors hover:text-lamp-400"
                           title={shareMuted ? t('stream.unmute') : t('stream.mute')}
@@ -765,7 +826,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) => {
                             setShareVolume(Number(e.target.value) / 100);
-                            setShareMuted(false);
+                            if (shareMuted) toggleShareMuted();
                           }}
                           className="w-20 accent-lamp-500"
                           aria-label={t('stream.volLabel')}
@@ -782,6 +843,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                   participant={focusPerson}
                   active
                   onClick={releaseSpot}
+                  onContextMenu={openCtx(focusId!, nickFor(focusId!), shareByIdentity.has(focusId!))}
                   title={t('stream.enlargeExit')}
                   className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
                 >
@@ -808,6 +870,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   if (count <= 2) {
     return (
       <>
+        {ctxMenu}
         <RemoteAudio />
         <div className="flex min-h-0 flex-1 items-center justify-center gap-3 p-4">
           {participants.map((p) => {
@@ -822,6 +885,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
                 participant={p}
                 active={focused}
                 onClick={() => toggleSpotlight('cam', p.identity)}
+                onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
                 style={{ aspectRatio: `${aspect}` }}
                 className={`relative h-full min-w-0 max-w-full w-auto cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
@@ -849,6 +913,7 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
 
   return (
     <>
+      {ctxMenu}
       <RemoteAudio />
       <div
         className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-4"

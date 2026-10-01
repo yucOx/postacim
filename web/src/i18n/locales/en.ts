@@ -469,6 +469,15 @@ export default {
     friendAdded: '{nick} is now your friend',
     communityInvite: 'Invite to {name} — {nick}',
   },
+  // right-click menu (audio)
+  ctx: {
+    shareMute: 'mute stream audio',
+    shareUnmute: 'unmute stream audio',
+    shareVolume: 'stream volume',
+    userMute: 'mute this person',
+    userUnmute: 'unmute this person',
+    userVolume: 'user volume',
+  },
   confirm: {
     cancel: 'cancel',
     busy: '…',

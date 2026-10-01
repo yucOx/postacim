@@ -464,6 +464,15 @@ export default {
     friendAdded: '{nick} ist jetzt dein Freund',
     communityInvite: 'Einladung zu {name} — {nick}',
   },
+  // Rechtsklick-Menü (Audio)
+  ctx: {
+    shareMute: 'Stream-Audio stummschalten',
+    shareUnmute: 'Stream-Audio einschalten',
+    shareVolume: 'Stream-Lautstärke',
+    userMute: 'diese Person stummschalten',
+    userUnmute: 'Stummschaltung aufheben',
+    userVolume: 'Lautstärke der Person',
+  },
   confirm: {
     cancel: 'abbrechen',
     busy: '…',

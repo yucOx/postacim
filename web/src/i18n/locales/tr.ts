@@ -498,6 +498,15 @@ export default {
     friendAdded: '{nick} artık arkadaşın',
     communityInvite: '{name} topluluğuna davet — {nick}',
   },
+  // sağ tık menüsü (ses)
+  ctx: {
+    shareMute: 'yayın sesini kapat',
+    shareUnmute: 'yayın sesini aç',
+    shareVolume: 'yayın sesi seviyesi',
+    userMute: 'bu kişiyi sustur',
+    userUnmute: 'susturmayı kaldır',
+    userVolume: 'kişi ses seviyesi',
+  },
   // ConfirmDialog
   confirm: {
     cancel: 'vazgeç',

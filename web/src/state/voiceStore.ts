@@ -42,6 +42,19 @@ interface VoiceState {
   volume: number;
   /** deafened / muted incoming audio */
   deafened: boolean;
+  /** per-participant mic gain 0..1 (Discord "user volume"); identity -> level.
+   *  Kayıtlı değil = ana seviye (volume) kullanılır. */
+  userVolumes: Record<string, number>;
+  setUserVolume: (identity: string, v: number) => void;
+  /** per-participant mute — o kişinin mikrofonunu bize duyma (yerel) */
+  userMuted: Record<string, boolean>;
+  toggleUserMuted: (identity: string) => void;
+  /** yayın sesini aç/kapat (screen share audio, yerel) */
+  shareMuted: boolean;
+  toggleShareMuted: () => void;
+  /** yayın sesi seviyesi 0..1 */
+  shareVolume: number;
+  setShareVolume: (v: number) => void;
   setVolume: (v: number) => void;
   toggleDeafen: () => void;
   /** selected publish quality (kalite seçici); persisted in localStorage */
@@ -374,6 +387,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
   screenOn: false,
   volume: 1,
   deafened: false,
+  userVolumes: {},
+  userMuted: {},
+  shareMuted: false,
+  shareVolume: 1,
+  setUserVolume: (identity, v) =>
+    set((s) => ({ userVolumes: { ...s.userVolumes, [identity]: Math.max(0, Math.min(1, v)) } })),
+  toggleUserMuted: (identity) =>
+    set((s) => ({ userMuted: { ...s.userMuted, [identity]: !s.userMuted[identity] } })),
+  toggleShareMuted: () => set((s) => ({ shareMuted: !s.shareMuted })),
+  setShareVolume: (v) => set({ shareVolume: Math.max(0, Math.min(1, v)) }),
   setVolume: (v) => set({ volume: Math.max(0, Math.min(1, v)), deafened: false }),
   toggleDeafen: () => set((s) => ({ deafened: !s.deafened })),
   quality: loadQuality(),

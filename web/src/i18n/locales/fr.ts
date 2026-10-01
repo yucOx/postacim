@@ -464,6 +464,15 @@ export default {
     friendAdded: '{nick} est désormais votre ami',
     communityInvite: 'Invitation à {name} — {nick}',
   },
+  // menu clic droit (audio)
+  ctx: {
+    shareMute: 'couper le son du stream',
+    shareUnmute: 'rétablir le son du stream',
+    shareVolume: 'volume du stream',
+    userMute: 'couper cette personne',
+    userUnmute: 'réactiver cette personne',
+    userVolume: 'volume de la personne',
+  },
   confirm: {
     cancel: 'annuler',
     busy: '…',
