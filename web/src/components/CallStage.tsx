@@ -755,7 +755,10 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
         <ShareAudio
           volume={shareVolume}
           muted={shareMuted}
-          activeIds={focusedVideo?.isScreen && !focusedVideo.trackRef.participant.isLocal ? [focusedVideo.identity] : []}
+          // odak kamerada olsa bile YAYIN sesi duyulur (Discord): ses kaynağı
+          // ayrı bir track, hangi kutuya baktığımızla ilgisi yok. Yalnız
+          // izlenen yayının sahibi bağlanır.
+          activeIds={screens.filter((t) => !t.participant.isLocal).map((t) => t.participant.identity)}
         />
         <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
           <div className="flex min-h-0 min-w-0 flex-1">

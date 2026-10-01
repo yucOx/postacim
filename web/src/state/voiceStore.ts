@@ -646,12 +646,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       set({ screenOn: true, screenQuality: null });
       // teşhis: yayın sesinin gerçekten publish edildiğini doğrula. Tarayıcı
       // "sekme sesi" onayı vermediyse track hiç oluşmuyor (getDisplayMedia
-      // audio:true isteğini sessizce reddedebiliyor).
+      // audio:true isteğini sessizce reddedebiliyor). readyState 'live' değilse
+      // track sessiz — yayında ses kaynağı yok demektir.
+      const audioPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
       console.debug(
         '[share-audio] gönderim: audio istenmiş =', opts.audio,
-        '| ScreenShareAudio track var mı =',
-        !!room.localParticipant
-          .getTrackPublication(Track.Source.ScreenShareAudio)?.track,
+        '| ScreenShareAudio track var mı =', !!audioPub?.track,
+        '| muted =', audioPub?.isMuted,
+        '| readyState =', audioPub?.track?.mediaStreamTrack?.readyState,
       );
     } catch (err) {
       set({ error: err instanceof Error ? `yayın başlatılamadı: ${err.message}` : 'yayın başlatılamadı' });
