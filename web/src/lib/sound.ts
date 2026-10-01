@@ -74,6 +74,12 @@ const FALLBACK: Partial<Record<SoundKey, { freqs: number[]; step: number; dur: n
   leave: { freqs: [783.99, 523.25], step: 0.07, dur: 0.25, peak: 0.12 },
   mute: { freqs: [349.23], step: 0.05, dur: 0.12, peak: 0.12 },
   unmute: { freqs: [523.25], step: 0.05, dur: 0.12, peak: 0.12 },
+  streamOn: { freqs: [392, 587.33, 783.99], step: 0.08, dur: 0.3, peak: 0.13 },
+  streamOff: { freqs: [783.99, 587.33, 392], step: 0.08, dur: 0.3, peak: 0.13 },
+  camOn: { freqs: [698.46], step: 0.05, dur: 0.12, peak: 0.12 },
+  camOff: { freqs: [466.16], step: 0.05, dur: 0.12, peak: 0.12 },
+  deafen: { freqs: [261.63, 196], step: 0.09, dur: 0.18, peak: 0.14 },
+  undeafen: { freqs: [329.63, 392], step: 0.08, dur: 0.16, peak: 0.12 },
 };
 
 /** tek seferlik ses çalar. `force` = ayarlarda önizleme düğmesi:

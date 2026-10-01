@@ -926,7 +926,7 @@ function RevokeConfirm({
 
 // ---------- Ses anahtarları ----------
 
-const SOUND_ROWS: { key: SoundKey; label: 'settings.sndMessage' | 'settings.sndMention' | 'settings.sndCall' | 'settings.sndInvite' | 'settings.sndFriend' | 'settings.sndJoin' | 'settings.sndLeave' | 'settings.sndMute' | 'settings.sndUnmute' }[] = [
+const SOUND_ROWS: { key: SoundKey; label: 'settings.sndMessage' | 'settings.sndMention' | 'settings.sndCall' | 'settings.sndInvite' | 'settings.sndFriend' | 'settings.sndJoin' | 'settings.sndLeave' | 'settings.sndMute' | 'settings.sndUnmute' | 'settings.sndStreamOn' | 'settings.sndStreamOff' | 'settings.sndCamOn' | 'settings.sndCamOff' | 'settings.sndDeafen' | 'settings.sndUndeafen' }[] = [
   { key: 'message', label: 'settings.sndMessage' },
   { key: 'mention', label: 'settings.sndMention' },
   { key: 'call', label: 'settings.sndCall' },
@@ -936,6 +936,12 @@ const SOUND_ROWS: { key: SoundKey; label: 'settings.sndMessage' | 'settings.sndM
   { key: 'leave', label: 'settings.sndLeave' },
   { key: 'mute', label: 'settings.sndMute' },
   { key: 'unmute', label: 'settings.sndUnmute' },
+  { key: 'streamOn', label: 'settings.sndStreamOn' },
+  { key: 'streamOff', label: 'settings.sndStreamOff' },
+  { key: 'camOn', label: 'settings.sndCamOn' },
+  { key: 'camOff', label: 'settings.sndCamOff' },
+  { key: 'deafen', label: 'settings.sndDeafen' },
+  { key: 'undeafen', label: 'settings.sndUndeafen' },
 ];
 
 /** Her olay için ayrı ses anahtarı + önizleme düğmesi. */

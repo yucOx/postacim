@@ -10,7 +10,22 @@ const ASKED_KEY = 'pgv_desktop_asked';
 
 // Her olayın kendi sesi ve anahtarı. soundOn ana anahtar olur — kapalıysa
 // hiçbiri çalmaz; açıkken soundKeys hangi kategorinin çalacağını belirler.
-export type SoundKey = 'message' | 'mention' | 'call' | 'invite' | 'friend' | 'join' | 'leave' | 'mute' | 'unmute';
+export type SoundKey =
+  | 'message'
+  | 'mention'
+  | 'call'
+  | 'invite'
+  | 'friend'
+  | 'join'
+  | 'leave'
+  | 'mute'
+  | 'unmute'
+  | 'streamOn'
+  | 'streamOff'
+  | 'camOn'
+  | 'camOff'
+  | 'deafen'
+  | 'undeafen';
 
 const SOUND_KEYS: Record<SoundKey, string> = {
   message: 'pgv_snd_msg',
@@ -22,6 +37,12 @@ const SOUND_KEYS: Record<SoundKey, string> = {
   leave: 'pgv_snd_leave',
   mute: 'pgv_snd_mute',
   unmute: 'pgv_snd_unmute',
+  streamOn: 'pgv_snd_streamon',
+  streamOff: 'pgv_snd_streamoff',
+  camOn: 'pgv_snd_camon',
+  camOff: 'pgv_snd_camoff',
+  deafen: 'pgv_snd_deafen',
+  undeafen: 'pgv_snd_undeafen',
 };
 
 function loadBool(key: string, dflt: boolean): boolean {
@@ -72,6 +93,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     leave: loadBool(SOUND_KEYS.leave, true),
     mute: loadBool(SOUND_KEYS.mute, true),
     unmute: loadBool(SOUND_KEYS.unmute, true),
+    streamOn: loadBool(SOUND_KEYS.streamOn, true),
+    streamOff: loadBool(SOUND_KEYS.streamOff, true),
+    camOn: loadBool(SOUND_KEYS.camOn, true),
+    camOff: loadBool(SOUND_KEYS.camOff, true),
+    deafen: loadBool(SOUND_KEYS.deafen, true),
+    undeafen: loadBool(SOUND_KEYS.undeafen, true),
   },
   desktopOn: loadBool(DESKTOP_KEY, false),
   mutedCommunities: loadMuted(),

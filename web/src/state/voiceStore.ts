@@ -411,7 +411,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   toggleShareMuted: () => set((s) => ({ shareMuted: !s.shareMuted })),
   setShareVolume: (v) => set({ shareVolume: Math.max(0, Math.min(1, v)) }),
   setVolume: (v) => set({ volume: Math.max(0, Math.min(1, v)), deafened: false }),
-  toggleDeafen: () => set((s) => ({ deafened: !s.deafened })),
+  toggleDeafen: () => {
+    const next = !get().deafened;
+    set({ deafened: next });
+    // yerel geri bildirim (Discord): tüm sesi kısınca pes, açınca yükselen çift
+    playSound(next ? 'deafen' : 'undeafen');
+  },
   quality: loadQuality(),
   screenQuality: null,
   error: null,
@@ -602,6 +607,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     );
     if (next) hintTrack(Track.Source.Camera);
     set({ camOn: next });
+    // yerel geri bildirim: açılınca tiz, kapanınca pes tek tık
+    playSound(next ? 'camOn' : 'camOff');
   },
 
   switchDevice: async (kind, deviceId) => {
@@ -642,6 +649,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       warnNoShareAudio(room, true);
     }
     set({ screenOn: next, screenQuality: next ? q : null });
+    // Discord Go Live geri bildirimi: başlayınca yükselen, bitince düşen desen
+    playSound(next ? 'streamOn' : 'streamOff');
   },
 
   // detaylı diyaloğun seçimleriyle yayın başlat (Discord Go Live benzeri).
@@ -670,6 +679,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       hintTrack(Track.Source.ScreenShare);
       warnNoShareAudio(room, opts.audio);
       set({ screenOn: true, screenQuality: null });
+      playSound('streamOn');
     } catch (err) {
       set({ error: err instanceof Error ? `yayın başlatılamadı: ${err.message}` : 'yayın başlatılamadı' });
     }
