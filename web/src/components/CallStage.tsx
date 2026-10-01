@@ -187,18 +187,20 @@ function SpeakingTile({
   style,
 }: SpeakingTileProps): React.ReactNode {
   const isSpeaking = useSafeIsSpeaking(participant);
-  const borderClass = !isScreen && isSpeaking
-    ? 'border-emerald-500 ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+  // kart çerçevesi yok (Discord: video doğrudan koyu zeminde durur); konuşma
+  // ve odak geri bildirimi yalnız ince bir ring olarak çizilir
+  const ringClass = !isScreen && isSpeaking
+    ? 'ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
     : active
-      ? 'border-lamp-500/80 ring-1 ring-lamp-500/50'
-      : 'border-brass-700/50 hover:border-brass-500';
+      ? 'ring-1 ring-lamp-500/50'
+      : '';
   return (
     <div
       onClick={onClick}
       onContextMenu={onContextMenu}
       title={title}
       style={style}
-      className={`transition-all duration-150 ${borderClass} ${className}`}
+      className={`transition-all duration-150 ${ringClass} ${className}`}
     >
       {children}
     </div>
@@ -230,7 +232,7 @@ function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocu
       onClick={onClick}
       onContextMenu={onContextMenu}
       title={titleProp ?? (onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined)}
-      className={`relative cursor-pointer overflow-hidden rounded-md border bg-night-850 ${
+      className={`relative cursor-pointer overflow-hidden rounded-md ${
         fill ? 'min-h-0 min-w-0 flex-1' : 'h-full w-full'
       } [&_video]:object-contain ${TILE_HIDE}`}
     >
@@ -268,7 +270,7 @@ function PlaceholderTile({
       active={active}
       onClick={onClick}
       title={onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined}
-      className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-md border bg-night-850 ${
+      className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-md ${
         onClick ? 'cursor-pointer' : ''
       }`}
     >
@@ -550,7 +552,7 @@ export default function CallStage({
         onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-        className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+        className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
       >
         <ParticipantTile
           trackRef={cam}
@@ -568,7 +570,7 @@ export default function CallStage({
         onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-        className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
+        className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-night-850"
       >
         <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
         <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
@@ -636,7 +638,7 @@ export default function CallStage({
           onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
           onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
           title={v.isScreen ? t('stream.enlargeStream') : t('stream.enlarge')}
-          className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+          className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
         >
           <ParticipantTile
             trackRef={v.trackRef}
@@ -674,7 +676,7 @@ export default function CallStage({
                 onClick={() => focusFromSide(p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={t('stream.enlarge')}
-                className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
+                className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-night-850"
               >
                 <Avatar userId={p.identity} label={nickFor(p.identity)} size={72} srcOverride={null} />
                 <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} />
@@ -686,12 +688,11 @@ export default function CallStage({
     );
   }
 
-  // odak modu (Discord Go Live): odak/yayın büyük + ALT yatay şeritte TÜM
-  // katılımcılar yan yana (akışı olanın tile'ı, olmayanın avatarı) — kimse
-  // kaybolmaz
-  // 1-2 kişide focus modu YOK: iki video eşit grid olarak yan yana kalsın
-  // (biri devasa diğeri minik kalmasın). count<=2 dalı aşağıda.
-  if (focusedKey && (focusedVideo || focusPerson) && participants.length > 2) {
+  // odak modu (Discord): odak/yayın büyük + ALT yatay şeritte TÜM katılımcılar
+  // yan yana (akışı olanın tile'ı, olmayanın avatarı) — kimse kaybolmaz.
+  // Discord gibi tıklama her kişi sayısında odak moduna sokar; odak yokken
+  // 1-2 kişi aşağıdaki eşit grid dalında kalır.
+  if (focusedKey && (focusedVideo || focusPerson)) {
     const slotFor = (p: Participant): React.ReactNode => {
       // Şeritte hangi videolar gösterilir:
       //  - focused bir SCREEN ise, o kişinin kendi screen'i atlanır (büyük
@@ -719,7 +720,7 @@ export default function CallStage({
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
               title={t('stream.enlarge')}
-              className={`relative h-full min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+              className={`relative h-full min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
             >
               <ParticipantTile
                 trackRef={v.trackRef}
@@ -744,7 +745,7 @@ export default function CallStage({
           onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
           onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
           title={p.identity === focusId ? undefined : t('stream.enlarge')}
-          className="relative flex h-full min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md border bg-night-850"
+          className="relative flex h-full min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md bg-night-850"
         >
           <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
           <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} />
@@ -852,7 +853,7 @@ export default function CallStage({
                   onClick={releaseSpot}
                   onContextMenu={openCtx(focusId!, nickFor(focusId!), shareByIdentity.has(focusId!))}
                   title={t('stream.enlargeExit')}
-                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
+                  className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-night-850"
                 >
                   <Avatar userId={focusId!} label={nickFor(focusId!)} size={96} srcOverride={null} />
                   <NamePlate participant={focusPerson} identity={focusId!} isLocal={focusPerson.isLocal} isScreen={false} isFocus />
@@ -899,7 +900,7 @@ export default function CallStage({
                 onClick={() => toggleSpotlight('cam', p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-                className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+                className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md ${TILE_HIDE}`}
               >
                 {cam ? (
                   <ParticipantTile
