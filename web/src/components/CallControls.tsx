@@ -102,7 +102,7 @@ export default function CallControls({
     }`;
 
   return (
-    <div className="flex items-center justify-center gap-2.5 border-t border-night-700 bg-night-900/80 px-4 py-3">
+    <div className="flex shrink-0 items-center justify-center gap-2.5 border-t border-night-700 bg-night-900/80 px-4 py-0">
       <div className="relative flex items-center">
         <button
           onClick={() => void toggleMic()}

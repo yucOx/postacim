@@ -19,7 +19,7 @@ export default function CallQualityPicker({ align = 'center' }: { align?: 'cente
   const staleShare = useVoiceStore((s) => s.screenOn && s.screenQuality !== null && s.screenQuality !== s.quality);
 
   return (
-    <div className={`flex items-center gap-1.5 ${align === 'center' ? 'justify-center pb-1' : 'flex-wrap'}`}>
+    <div className={`flex shrink-0 items-center gap-1.5 ${align === 'center' ? 'justify-center' : 'flex-wrap'}`}>
       <span className="plate !text-[10px]">{t('call.quality')}</span>
       {LEVEL_IDS.map((id) => {
         const label = t(LEVEL_KEYS[id]);

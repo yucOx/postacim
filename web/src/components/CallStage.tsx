@@ -292,7 +292,15 @@ function PlaceholderTile({
  *  Discord-style spotlight: clicking any tile enlarges that participant (their
  *  screen share if they have one, else camera); clicking again returns to the
  *  automatic layout. Screen shares are never cropped — they letterbox. */
-export default function CallStage({ emptyLabel }: { emptyLabel?: string }): React.ReactNode {
+export default function CallStage({
+  emptyLabel,
+  onAspect,
+}: {
+  emptyLabel?: string;
+  /** görüntülenen video oranını yukarı bildirir — kutu bu orana göre
+   *  boyutlanır, video alanı hep tam dolu görünür */
+  onAspect?: (aspect: number) => void;
+}): React.ReactNode {
   const { t } = useT();
   const participants = useParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
@@ -315,6 +323,20 @@ export default function CallStage({ emptyLabel }: { emptyLabel?: string }): Reac
   // that person also shares their screen
   const [spotlight, setSpotlight] = useState<string | null>(null);
   const spotId = spotlight?.split(':')[1] ?? null;
+
+  // Görüntülenen alanın oranını yukarı bildir. Kutu bu orana göre
+  // boyutlanınca kamera 4:3 de olsa 16:9 da olsa video alanı kutuyu
+  // tamamen doldurur (sabit aspect-video kamerayı küçültüyordu).
+  useEffect(() => {
+    if (!onAspect) return;
+    // öncelik: odaklanan video → ekran paylaşımı → ilk canlı kamera
+    const focused = spotlight
+      ? tracks.find((t) => `${t.source === Track.Source.ScreenShare ? 'screen' : 'cam'}:${t.participant.identity}` === spotlight && live(t))
+      : null;
+    const subject = focused ?? screens[0] ?? [...camByIdentity.values()][0];
+    const aspect = subject ? trackAspect(subject) ?? 16 / 9 : 16 / 9;
+    onAspect(aspect);
+  }, [onAspect, spotlight, tracks, screens, camByIdentity]);
   // Discord tarzı sağ tık: kutuya sağ tık → kişi/yayın ses menüsü
   const [ctxTarget, setCtxTarget] = useState<{ x: number; y: number; identity: string; nick: string; hasShare: boolean; isSelf: boolean } | null>(null);
   const openCtx = (identity: string, nick: string, hasShare: boolean) => (e: React.MouseEvent): void => {
