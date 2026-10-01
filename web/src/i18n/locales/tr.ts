@@ -33,6 +33,8 @@ export default {
     audio: 'ses',
     audioOn: 'sekme/sistem sesi yayında',
     audioOff: 'sessiz yayın',
+    audioNoTrack: 'tarayıcı ses vermedi — ses için sekmeyi paylaş ve "sekme sesini de paylaş" kutusunu işaretle (pencere paylaşımında ses olmaz)',
+    audioWindowHint: 'pencere paylaşımında tarayıcı ses vermez — ses için sekme veya ekran paylaş',
     cancel: 'vazgeç',
     goLive: 'yayını başlat',
     screenPromptTitle: 'Yayın başlat',

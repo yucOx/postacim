@@ -305,6 +305,9 @@ export default function CallControls({
                 {shareAudio ? t('call.audioOn') : t('call.audioOff')}
               </span>
             </button>
+            {shareAudio && surface === 'window' && (
+              <p className="text-[11px] leading-snug text-stamp-400">{t('call.audioWindowHint')}</p>
+            )}
             <div className="flex gap-2">
               <button onClick={() => setScreenPrompt(false)} className="btn-ghost flex-1">
                 {t('call.cancel')}

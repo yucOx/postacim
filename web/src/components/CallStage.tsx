@@ -220,11 +220,12 @@ function SpeakingTile({
   const isSpeaking = useSafeIsSpeaking(participant);
   // kart çerçevesi yok (Discord: video doğrudan koyu zeminde durur); konuşma
   // ve odak geri bildirimi yalnız ince bir ring olarak çizilir — VideoFit
-  // matematiğiyle görüntünün dikdörtgenine oturur
+  // matematiğiyle görüntünün dikdörtgenine oturur. ring-inset şart: dışa çizilen
+  // ring video tile kenarına değince overflow-hidden tarafından kırpılıyordu
   const ring = !isScreen && isSpeaking
-    ? 'rounded-md ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+    ? 'rounded-md ring-inset ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
     : active
-      ? 'rounded-md ring-1 ring-lamp-500/50'
+      ? 'rounded-md ring-inset ring-1 ring-lamp-500/50'
       : '';
   const r = aspect && aspect > 0 ? aspect : 16 / 9;
   return (

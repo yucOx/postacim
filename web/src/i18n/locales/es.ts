@@ -29,6 +29,8 @@ export default {
     audio: 'audio',
     audioOn: 'audio de pestaña/sistema en la transmisión',
     audioOff: 'transmisión silenciosa',
+    audioNoTrack: 'el navegador no compartió audio — comparte una pestaña y marca «compartir también el audio de la pestaña» (las ventanas no tienen audio)',
+    audioWindowHint: 'compartir una ventana no lleva audio — para sonido comparte pestaña o pantalla',
     cancel: 'cancelar',
     goLive: 'iniciar transmisión',
     screenPromptTitle: 'Iniciar transmisión',

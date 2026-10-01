@@ -25,6 +25,8 @@ export default {
     audio: 'audio',
     audioOn: 'tab/system audio in stream',
     audioOff: 'silent stream',
+    audioNoTrack: 'the browser shared no audio — share a tab and tick "also share tab audio" (window shares have no audio)',
+    audioWindowHint: 'window shares carry no audio — share a tab or screen for sound',
     cancel: 'cancel',
     goLive: 'start stream',
     screenPromptTitle: 'Start stream',

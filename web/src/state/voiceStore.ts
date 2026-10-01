@@ -354,8 +354,21 @@ async function connectRoom(
   return { room, keyProvider };
 }
 
-export const useVoiceStore = create<VoiceState>((set, get) => {
-  // full teardown: disconnect any live room and clear every call flag so the
+// getDisplayMedia audio isteğini sessizce reddedebilir (pencere paylaşımında
+// ses hiç olmaz; sekme/ekran paylaşımlarında tarayıcı kutusunun işaretlenmesi
+// gerekir) — ses istenip track gelmediyse yayıncıya nedenini söyle
+function warnNoShareAudio(room: Room, requested: boolean): void {
+  const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+  console.debug(
+    '[share-audio] gönderim: istenmiş =', requested,
+    '| track var mı =', !!pub?.track,
+    '| muted =', pub?.isMuted,
+    '| readyState =', pub?.track?.mediaStreamTrack?.readyState,
+  );
+  if (requested && !pub?.track) toast.info(t('call.audioNoTrack'));
+}
+
+export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardown: disconnect any live room and clear every call flag so the
   // next join / startDmCall / acceptIncoming never collides with stale state
   const teardownAll = (keepCallState = false): void => {
     joinSeq++; // in-flight join'i geçersiz kıl
@@ -615,7 +628,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       { audio: true },
       next ? qualityTiers[q].screenPublish : undefined,
     );
-    if (next) hintTrack(Track.Source.ScreenShare);
+    if (next) {
+      hintTrack(Track.Source.ScreenShare);
+      warnNoShareAudio(room, true);
+    }
     set({ screenOn: next, screenQuality: next ? q : null });
   },
 
@@ -643,18 +659,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
         },
       );
       hintTrack(Track.Source.ScreenShare);
+      warnNoShareAudio(room, opts.audio);
       set({ screenOn: true, screenQuality: null });
-      // teşhis: yayın sesinin gerçekten publish edildiğini doğrula. Tarayıcı
-      // "sekme sesi" onayı vermediyse track hiç oluşmuyor (getDisplayMedia
-      // audio:true isteğini sessizce reddedebiliyor). readyState 'live' değilse
-      // track sessiz — yayında ses kaynağı yok demektir.
-      const audioPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
-      console.debug(
-        '[share-audio] gönderim: audio istenmiş =', opts.audio,
-        '| ScreenShareAudio track var mı =', !!audioPub?.track,
-        '| muted =', audioPub?.isMuted,
-        '| readyState =', audioPub?.track?.mediaStreamTrack?.readyState,
-      );
     } catch (err) {
       set({ error: err instanceof Error ? `yayın başlatılamadı: ${err.message}` : 'yayın başlatılamadı' });
     }

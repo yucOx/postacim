@@ -29,6 +29,8 @@ export default {
     audio: 'audio',
     audioOn: 'audio onglet/système dans le stream',
     audioOff: 'stream silencieux',
+    audioNoTrack: 'le navigateur n a pas partagé le son — partage un onglet et coche « partager aussi l audio de l onglet » (les fenêtres n ont pas de son)',
+    audioWindowHint: 'le partage de fenêtre ne transporte pas de son — pour du son, partage un onglet ou l écran',
     cancel: 'annuler',
     goLive: 'démarrer le stream',
     screenPromptTitle: 'Démarrer le stream',

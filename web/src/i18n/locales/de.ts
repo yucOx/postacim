@@ -29,6 +29,8 @@ export default {
     audio: 'audio',
     audioOn: 'tab-/systemaudio im stream',
     audioOff: 'stummer stream',
+    audioNoTrack: 'der browser hat keinen ton geteilt — tab teilen und „tab-audio ebenfalls teilen" anhaken (fenster-freigabe hat keinen ton)',
+    audioWindowHint: 'fenster-freigabe überträgt keinen ton — für ton tab oder bildschirm teilen',
     cancel: 'abbrechen',
     goLive: 'stream starten',
     screenPromptTitle: 'Stream starten',
