@@ -236,7 +236,7 @@ function VideoTile({ trackRef, onClick, active = false, isScreen = false, isFocu
       onContextMenu={onContextMenu}
       title={titleProp ?? (onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined)}
       className={`relative cursor-pointer overflow-hidden rounded-md border bg-night-850 ${
-        fill ? 'min-h-0 min-w-0 flex-1' : 'aspect-video w-full'
+        fill ? 'min-h-0 min-w-0 flex-1' : 'h-full w-full'
       } ${fill ? '[&_video]:object-contain' : fit(isScreen)}${TILE_HIDE}`}
     >
       <ParticipantTile trackRef={trackRef} className="h-full w-full [&_video]:h-full [&_video]:w-full" />
@@ -273,7 +273,7 @@ function PlaceholderTile({
       active={active}
       onClick={onClick}
       title={onClick ? (active ? t('stream.enlargeExit') : t('stream.enlarge')) : undefined}
-      className={`relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border bg-night-850 ${
+      className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-md border bg-night-850 ${
         onClick ? 'cursor-pointer' : ''
       }`}
     >
@@ -555,12 +555,11 @@ export default function CallStage({
         onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-        style={aspect ? { aspectRatio: `${aspect}` } : undefined}
-        className={`relative aspect-video w-full cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+        className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
       >
         <ParticipantTile
           trackRef={cam}
-          className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+          className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
         />
         <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
         <MuteBadge participant={p} isScreen={false} />
@@ -574,7 +573,7 @@ export default function CallStage({
         onClick={() => toggleSpotlight('cam', p.identity)}
         onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
         title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-        className="flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
+        className="flex min-h-0 min-w-0 flex-1 cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-night-850"
       >
         <Avatar userId={p.identity} label={nickFor(p.identity)} size={56} srcOverride={null} />
         <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} isFocus={focused} />
@@ -723,12 +722,11 @@ export default function CallStage({
               onClick={() => (v.isScreen ? watchScreen(v.identity) : spotCam(v.identity))}
               onContextMenu={openCtx(v.identity, nickFor(v.identity), v.isScreen)}
               title={t('stream.enlarge')}
-              style={aspect ? { aspectRatio: `${aspect}` } : undefined}
-              className={`relative h-full aspect-video shrink-0 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+              className={`relative h-full min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
             >
               <ParticipantTile
                 trackRef={v.trackRef}
-                className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+                className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
               />
               <NamePlate
                 participant={v.trackRef.participant}
@@ -749,7 +747,7 @@ export default function CallStage({
           onClick={p.identity === focusId ? undefined : () => spotCam(p.identity)}
           onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
           title={p.identity === focusId ? undefined : t('stream.enlarge')}
-          className="relative flex h-full aspect-video shrink-0 items-center justify-center overflow-hidden rounded-md border bg-night-850"
+          className="relative flex h-full min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md border bg-night-850"
         >
           <Avatar userId={p.identity} label={nickFor(p.identity)} size={44} srcOverride={null} />
           <NamePlate participant={p} identity={p.identity} isLocal={p.isLocal} isScreen={false} />
@@ -884,13 +882,13 @@ export default function CallStage({
       <>
         {ctxMenu}
         <RemoteAudio />
-        <div className="flex min-h-0 flex-1 items-center justify-center gap-3 p-1.5" style={{ paddingBottom: dockH + 6 }}>
+        {/* items-stretch: kutular yüksekliğin tamamını alır, ortada
+            sıkışık kalmaz. gap-2 + flex-1 ile yan yana videolar alanı
+            aralarında siyah bant bırakmadan paylaşır. */}
+        <div className="flex min-h-0 flex-1 items-stretch justify-center gap-2 p-1.5" style={{ paddingBottom: dockH + 6 }}>
           {participants.map((p) => {
             const cam = camByIdentity.get(p.identity);
             const focused = spotlight === `cam:${p.identity}`;
-            // çerçeve görüntüyü sarsın — flex-1 dolu kutu değil, yayın
-            // oranında (bilinmiyorsa 16:9) sahneye sığan pencere
-            const aspect = cam ? (trackAspect(cam) ?? 16 / 9) : 16 / 9;
             return (
               <SpeakingTile
                 key={slotKey(p.identity)}
@@ -899,13 +897,12 @@ export default function CallStage({
                 onClick={() => toggleSpotlight('cam', p.identity)}
                 onContextMenu={openCtx(p.identity, nickFor(p.identity), shareByIdentity.has(p.identity))}
                 title={focused ? t('stream.enlargeExit') : t('stream.enlarge')}
-                style={{ aspectRatio: `${aspect}` }}
-                className={`relative h-full min-w-0 max-w-full w-auto cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
+                className={`relative min-h-0 min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border bg-night-850 ${TILE_HIDE}`}
               >
                 {cam ? (
                   <ParticipantTile
                     trackRef={cam}
-                    className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-contain"
+                    className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
@@ -928,7 +925,7 @@ export default function CallStage({
       {ctxMenu}
       <RemoteAudio />
       <div
-        className="grid flex-1 auto-rows-min content-center gap-3 overflow-y-auto p-1.5"
+        className="grid flex-1 auto-rows-fr content-center gap-3 overflow-y-auto p-1.5"
         style={{
           gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
           paddingBottom: dockH + 6,
