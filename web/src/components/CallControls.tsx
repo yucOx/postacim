@@ -103,7 +103,7 @@ export default function CallControls({
 
   return (
     <div className="flex items-center justify-center gap-2.5 border-t border-night-700 bg-night-900/80 px-4 py-3">
-      <div className="flex items-center">
+      <div className="relative flex items-center">
         <button
           onClick={() => void toggleMic()}
           className={`${round(micOn)} !rounded-r-none`}
@@ -126,7 +126,7 @@ export default function CallControls({
         </button>
         {deviceMenu === 'mic' && <DeviceMenu onClose={() => setDeviceMenu(null)} />}
       </div>
-      <div className="flex items-center">
+      <div className="relative flex items-center">
         <button
           onClick={() => void toggleCam()}
           className={`${round(camOn)} !rounded-r-none`}
