@@ -99,6 +99,97 @@ or keys.
   the tab title, notification sound for background DMs. Read state is
   client-only — the server never knows what you read.
 
+## How it works — nobody can read your messages
+
+The server is a post office: it carries envelopes but **can never open one**.
+Every layer is blind by design — a network listener hits TLS, the server hits
+encryption, the media server hits SFrame. Below is the real path of a message,
+from the moment it is typed to the moment it is read.
+
+### 1. A message's journey
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as 👤 Alice — browser
+    participant S as 📮 Server — blind relay
+    participant B as 👤 Bob — browser
+
+    Note over A,B: Alice types: "see you tomorrow then"
+    A->>A: DH ratchet: generate ephemeral X25519 pair,<br/>derive step key from the chain
+    A->>A: encrypt with XChaCha20-Poly1305<br/>(AAD = channel + epoch — relocation breaks decryption)
+    A->>A: sign with Ed25519 — a forged sender_id<br/>fails the signature
+    A->>A: round length into a bucket (256B/1K/4K)<br/>— nothing leaks beyond "short/long"
+    A-->>S: only opaque ciphertext + signature + header
+    Note over S: ❌ Cannot decrypt. The key never reached this machine.<br/>It sees: random bytes, sender, time.
+    S-->>B: relay as-is — stores, forwards, never interprets
+    B->>B: verify signature against the key ledger<br/>(append-only hash chain)
+    B->>B: derive the same key from the DH chain itself<br/>(receiver is stateless — from the message header)
+    B->>B: decrypt ✅ "see you tomorrow then"
+```
+
+In the server's database that message looks **like this** — check it yourself
+with the command in the [manual test](#manual-test-two-browser-profiles)
+section:
+
+```
+{ nonce: '9f3a1c…', ciphertext: 'c8e2b41d77a0f6…' }   ← nothing readable inside
+```
+
+### 2. Keys never leave the browser
+
+```mermaid
+flowchart TB
+    subgraph REG["🔐 Sign-up — just nick + password"]
+        direction LR
+        PW["Password"] -->|"Argon2id<br/>64 MiB · t=3"| OUT["64B output"]
+        OUT --> PROOF["first 32B → auth proof<br/>(server verifies this, never sees the password)"]
+        OUT --> KEK["last 32B → KEK 🔑<br/>(lives in browser RAM, never transmitted)"]
+    end
+    KEK -->|"wraps with XChaCha20"| BLOB[("Identity blob — stored ENCRYPTED on the server:<br/>X25519 + Ed25519 private keys")]
+    subgraph DIST["📦 Channel key distribution"]
+        direction LR
+        CK["32B random<br/>channel key"] -->|"sealed-box: wrapped to each<br/>member's PUBLIC key"| U1["👤 Member 1<br/>unwraps with their private key"]
+        CK -->|"sealed-box"| U2["👤 Member 2<br/>unwraps with their private key"]
+        CK -->|"sealed-box"| U3["👤 New member — can only open<br/>the new epoch, not the past"]
+    end
+    KICK["👤 Member removed → forced rekey:<br/>new key + new DH anchor"] -.-> CK
+```
+
+If the password is lost: the BIP-39 recovery phrase (12 words) restores the
+identity — the phrase itself is end-to-end wrapped, so **the server cannot
+open it either**; lose both and the account is gone. That is the price of E2EE.
+
+### 3. Voice, video and screen share follow the same pipe
+
+```mermaid
+flowchart LR
+    MIC["🎤 Alice<br/>mic/camera/screen"] -->|"browser encrypts with SFrame<br/>frame by frame"| C1["🔒 encrypted RTP"]
+    C1 --> SFU["LiveKit SFU<br/>— media server routes<br/>opaque bytes only"]
+    SFU --> C2["🔒 encrypted RTP"]
+    C2 -->|"key = H(DH chain ‖ 'voice')<br/>zero extra trust for media"| EAR["🎧 Bob"]
+    style SFU fill:#1a1a2e,stroke:#888
+```
+
+The voice-room key is derived from the message chain (`H(step_root ‖ 'voice')`)
+— meaning "everyone who can read the channel can hear the voice, nobody else
+can". What the SFU sees: bytes. Not what is said, not what is shared.
+
+### 4. Who sees what — and what nobody sees
+
+| | Sees | Cannot see |
+|---|---|---|
+| **Network listener** (ISP, WiFi) | TLS traffic size/timing | content, nick, keys |
+| **Server** (even if malicious) | opaque ciphertext, sender identity, time, length bucket | message, voice, video, keys, password |
+| **LiveKit SFU** | encrypted frame bytes, who is connected | spoken/shared content |
+| **A removed member** | whatever their old epoch keys already opened | **any new message after the rekey** (DH-rekey + PCS-lite) |
+
+> The guarantee rests not on this machine but on **math**: opening
+> XChaCha20-Poly1305 or X25519 requires the key; keys are derived only inside
+> members' browsers and never travel in the clear. The server's "blindness" is
+> also test-enforced — `server/test/hardening.test.ts` automatically fails if
+> plaintext ever touches the database, on every CI run.
+
 ## Cryptography
 
 | Purpose | Method |

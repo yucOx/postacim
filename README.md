@@ -43,6 +43,96 @@ düz hâlini **hiçbir zaman** görmez.
 - **1:1 arama**: DM'de 📞 — karşı tarafta zil (WebAudio) + kabul/red; kabulde her ikisi LiveKit odasına aynı DM anahtarıyla SFrame E2EE bağlanır. Meşgulse otomatik red.
 - **Okunmadı**: kanal/DM listelerinde nokta+sayaç, 🕊️ rozeti, sekme başlığında `(n)`, arka plan DM'lerinde bildirim sesi. Okuma durumu yalnız istemcide — sunucu neyi okuduğunu bilmez.
 
+## Nasıl çalışır? — kimse mesajlarınızı göremiyor
+
+Sunucu bir postanedir: zarfları taşır, ama **hiçbir zarfı açamaz**. Her katman
+kör design edilmiştir — ağ dinleyicisi TLS'e, sunucu şifreye, medya sunucusu
+SFrame'e takılır. Aşağıda bir mesajın nick yazıldığı andan karşı tarafta
+okunduğu ana kadar gerçek akışı var.
+
+### 1. Bir mesajın yolculuğu
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as 👤 Alice — tarayıcı
+    participant S as 📮 Sunucu — kör taşıyıcı
+    participant B as 👤 Bob — tarayıcı
+
+    Note over A,B: Alice yazar: "bu arada yarın görüşelim"
+    A->>A: DH ratchet: ephemeral X25519 çifti üret,<br/>zincirden adım anahtarı türet
+    A->>A: XChaCha20-Poly1305 ile şifrele<br/>(AAD = kanal + epok — mesaj yeri değişirse açılmaz)
+    A->>A: Ed25519 ile imzala — sunucu sender_id<br/>uydursa imza düşer
+    A->>A: Boyutu bucket'a yuvarla (256B/1K/4K)<br/>— "kısa/uzun" dışında uzunluk sızmaz
+    A-->>S: yalnız opak ciphertext + imza + başlık
+    Note over S: ❌ Açamaz. Anahtar buraya hiç gelmedi.<br/>Gördüğü: rastgele bayt, gönderen, zaman.
+    S-->>B: aynen ilet — depolar, taşıır, yorumlamaz
+    B->>B: imzayı anahtar defterinden doğrula<br/>(defter append-only hash zinciri)
+    B->>B: aynı DH zincirinden anahtarı kendisi türet<br/>(alıcı stateless — mesaj başlığından)
+    B->>B: çöz ✅ "bu arada yarın görüşelim"
+```
+
+Sunucunun veritabanında bu mesaj **böyle** durur — [elle test](#elle-test-iki-tarayıcı-profili)
+adımındaki komutla kendin bak:
+
+```
+{ nonce: '9f3a1c…', ciphertext: 'c8e2b41d77a0f6…' }   ← içinden hiçbir şey okunmaz
+```
+
+### 2. Anahtarlar tarayıcıdan hiç çıkmaz
+
+```mermaid
+flowchart TB
+    subgraph REG["🔐 Kayıt — sadece nick + şifre"]
+        direction LR
+        PW["Şifre"] -->|"Argon2id<br/>64 MiB · t=3"| OUT["64B çıktı"]
+        OUT --> PROOF["ilk 32B → auth kanıtı<br/>(sunucu bunu doğrular, şifreyi asla görmez)"]
+        OUT --> KEK["son 32B → KEK 🔑<br/>(tarayıcı RAM'inde kalır, hiç gönderilmez)"]
+    end
+    KEK -->|"XChaCha20 ile sarar"| BLOB[("Kimlik blob'u — sunucuda ŞİFRELİ durur:<br/>X25519 + Ed25519 private anahtarlar")]
+    subgraph DIST["📦 Kanal anahtarı dağıtımı"]
+        direction LR
+        CK["32B rastgele<br/>kanal anahtarı"] -->|"sealed-box: her üyenin<br/>PUBLIC anahtarına sarılır"| U1["👤 Üye 1<br/>kendi private'ı ile açar"]
+        CK -->|"sealed-box"| U2["👤 Üye 2<br/>kendi private'ı ile açar"]
+        CK -->|"sealed-box"| U3["👤 Yeni üye — yalnız yeni<br/>epoğu açar, geçmişi okuyamaz"]
+    end
+    KICK["👤 Üye çıkarıldı → zorunlu rekey:<br/>yeni anahtar + DH çapası döner"] -.-> CK
+```
+
+Şifre kaybolursa: BIP-39 kurtarma ifadesi (12 kelime) kimliği geri getirir —
+ifade de uçtan uca sarılı olduğundan **sunucu onu da açamaz**; her şey
+kaybolursa hesap geri gelmez, bu E2EE'nin bedelidir.
+
+### 3. Ses, görüntü ve ekran paylaşımı aynı hattı izler
+
+```mermaid
+flowchart LR
+    MIC["🎤 Alice<br/>mikrofon/kamera/ekran"] -->|"tarayıcıda SFrame<br/>çerçeve çerçeve şifreler"| C1["🔒 şifreli RTP"]
+    C1 --> SFU["LiveKit SFU<br/>— medya sunucusu<br/>yalnız opak bayt yönlendirir"]
+    SFU --> C2["🔒 şifreli RTP"]
+    C2 -->|"anahtar = H(DH zinciri ‖ 'voice')<br/>yayın çerçevelerine ek sıfır bilgi"| EAR["🎧 Bob"]
+    style SFU fill:#1a1a2e,stroke:#888
+```
+
+Ses odası anahtarı mesaj zincirinden türetilir (`H(step_root ‖ 'voice')`) —
+yani "kanalı okuyabilen herkes sesi de duyar, başkası duyamaz". SFU'nun
+gördüğü: bayt. Ne söylendiğini, ne paylaşıldığını göremez.
+
+### 4. Kim ne görüyor, kim ne göremiyor?
+
+| | Gören | Göremeyen |
+|---|---|---|
+| **Ağ dinleyici** (ISP, WiFi) | TLS trafik boyutu/zamanı | içerik, nick, anahtar |
+| **Sunucu** (kötü niyetli olsa bile) | opak ciphertext, gönderen kimliği, zaman, boyut bucket'ı | mesaj, ses, görüntü, anahtar, şifre |
+| **LiveKit SFU** | şifreli çerçeve baytları, kim kime bağlı | konuşulan/paylaşılan içerik |
+| **Başka üye** (gruptan atılan) | atılana kadar olanı bilmese de geçmiş epok anahtarları elindeyse geçmiş | rekey sonrası **hiçbir yeni mesaj** (DH-rekey + PCS-lite) |
+
+> Kanıt makinada değil, **matematikte**: XChaCha20-Poly1305 ve X25519 açmak
+> için anahtar gerekir; anahtar yalnız üyelerin tarayıcısında türetilir ve
+> hiçbir noktaya şifresiz iletilmez. Sunucunun "görememe" iddiası testle de
+> sabit — `server/test/hardening.test.ts` veritabanında plaintext oluşumunu
+> otomatik reddeder, her CI çalışmasında.
+
 ## Kripto mimarisi
 
 | Amaç | Yöntem |

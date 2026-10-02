@@ -6,6 +6,13 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ## [Unreleased]
 
+### Eklenen
+
+- **README "Nasıl çalışır?" bölümü**: mesajın yazıldığı andan okunduğu ana
+  mermaid sequence diyagramı, anahtar dağıtımı ve SFrame ses akışı flowchart'ları,
+  "kim ne görüyor" matrisi + sunucu DB'sindeki opak satır örneği (tr+en;
+  diyagramlar mmdc ile render doğrulandı)
+
 ### Düzeltilen
 
 - **Yayın sesi kökeni çözüldü + sessiz yayın görünürlüğü**: iki taraflı canlı
