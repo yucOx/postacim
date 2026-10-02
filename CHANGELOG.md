@@ -6,6 +6,18 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ## [Unreleased]
 
+### Düzeltilen
+
+- **Yayın sesi kökeni çözüldü + sessiz yayın görünürlüğü**: iki taraflı canlı
+  repro ile kanıtlandı — transport/E2EE (SFrame)/abone zinciri ScreenShareAudio
+  için tamamen çalışıyor (uygulamanın birebir Room + publish seçenekleriyle
+  ölçülen ses genliği duyulur seviyede); sesin gitmemesi tarayıcı capture
+  katmanından: pencere paylaşımı hiçbir platformda ses vermez, Linux'ta ekran
+  da vermez (yalnız sekme + "sekme sesini de paylaş" kutusu). İzleyici tarafı
+  artık sessiz yayını görür: yayın plakasında ve canlı-yayın rozetinde
+  "sessiz yayın" göstergesi (yayıncıya zaten toast gidiyordu); Go Live
+  diyaloğu Linux'ta ekran seçili + ses açıkken önceden uyarır (5 dil)
+
 ## [v1.1.0] — 2026-10-02
 
 ### Eklenen

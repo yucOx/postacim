@@ -21,6 +21,13 @@ const FPS_ROWS: Array<ShareOpts['fps']> = [15, 30, 60];
 // (etiketler useT ile çevrilir, aşağıda)
 const SURFACE_KEYS: ShareOpts['surface'][] = ['monitor', 'window', 'browser'];
 const QUALITY_TO_RES: Record<CallQuality, number> = { hizli: 360, dengeli: 720, yuksek: 1080 };
+// Linux'ta tarayıcılar getDisplayMedia'da ekran/pencere yüzeyleri için audio
+// track ÜRETMEZ (yalnız sekme + "sekme sesini de paylaş" kutusu işaretliyken)
+// — ses istenmişse kullanıcıyı önceden uyar, başladıktan sonra sessiz kalmasın
+const UA_PLATFORM =
+  (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ??
+  navigator.platform;
+const IS_LINUX = /linux/i.test(UA_PLATFORM) && !/android/i.test(navigator.userAgent);
 
 /** Shared call control bar — DM calls and community voice rooms differ only
  *  in their end action and whether minimize-to-PiP exists. */
@@ -307,6 +314,9 @@ export default function CallControls({
             </button>
             {shareAudio && surface === 'window' && (
               <p className="text-[11px] leading-snug text-stamp-400">{t('call.audioWindowHint')}</p>
+            )}
+            {shareAudio && IS_LINUX && surface === 'monitor' && (
+              <p className="text-[11px] leading-snug text-stamp-400">{t('call.audioLinuxHint')}</p>
             )}
             <div className="flex gap-2">
               <button onClick={() => setScreenPrompt(false)} className="btn-ghost flex-1">

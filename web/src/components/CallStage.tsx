@@ -110,12 +110,16 @@ function NamePlate({
   isLocal,
   isScreen,
   isFocus,
+  silentStream,
 }: {
   participant?: Participant;
   identity: string;
   isLocal: boolean;
   isScreen: boolean;
   isFocus?: boolean;
+  /** yayın ses track'i yok — izleyici sessiz yayını bozuk sesle
+   *  karıştırmasın (yayıncıya zaten toast gidiyor) */
+  silentStream?: boolean;
 }): React.ReactNode {
   const { t } = useT();
   return (
@@ -126,6 +130,14 @@ function NamePlate({
       </span>
       {isScreen && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameScreen')}</span>}
       {isFocus && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameFocus')}</span>}
+      {silentStream && (
+        <span
+          className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] text-stamp-400"
+          title={t('stream.silentHint')}
+        >
+          <VolumeX size={10} /> {t('stream.silent')}
+        </span>
+      )}
     </span>
   );
 }
@@ -261,6 +273,8 @@ interface TileProps {
   trackRef: TrackReference;
   isScreen?: boolean;
   isFocus?: boolean;
+  /** uzak yayın ses track'i yok — plakada "sessiz yayın" rozeti */
+  silent?: boolean;
   /** absolute overlay inside the tile (e.g. the sharer's stop button) */
   overlay?: React.ReactNode;
   onContextMenu?: (e: React.MouseEvent) => void;
@@ -270,7 +284,7 @@ interface TileProps {
 
 /** Odak modunun büyük döşemesi — yalnız KAMERA GÖRÜNTÜSÜ tıklanabilir
  *  (VideoFit kutusu); karanlık letterbox alanına tıklamak hiçbir şey yapmaz. */
-function VideoTile({ trackRef, isScreen = false, isFocus = false, overlay, onContextMenu, onVideoClick }: TileProps): React.ReactNode {
+function VideoTile({ trackRef, isScreen = false, isFocus = false, silent = false, overlay, onContextMenu, onVideoClick }: TileProps): React.ReactNode {
   const aspect = trackAspect(trackRef);
   return (
     <SpeakingTile
@@ -290,6 +304,7 @@ function VideoTile({ trackRef, isScreen = false, isFocus = false, overlay, onCon
           isLocal={trackRef.participant.isLocal}
           isScreen={isScreen}
           isFocus={isFocus}
+          silentStream={silent}
         />
         <MuteBadge participant={trackRef.participant} isScreen={isScreen} />
       </VideoFit>
@@ -326,6 +341,14 @@ export default function CallStage({
   // avatar placeholder comes back instead.
   const live = (t: TrackReference): boolean => !!t.publication && !t.publication.isMuted;
   const screens = tracks.filter((t) => t.source === Track.Source.ScreenShare && live(t));
+  // hangi yayınlarda SES track'i var? Yayıncının tarayıcısı getDisplayMedia'dan
+  // audio alamadıysa (pencere her yerde; Linux'ta ekran da) ScreenShareAudio
+  // publication'ı hiç oluşmaz — izleyici "sessiz yayın" rozetiyle ayırt eder
+  const shareAudioRefs = useTracks([Track.Source.ScreenShareAudio], { onlySubscribed: false });
+  const shareAudioIds = new Set(
+    shareAudioRefs.filter((r) => r.publication).map((r) => r.participant.identity),
+  );
+  const streamSilent = (identity: string): boolean => !shareAudioIds.has(identity);
   const camByIdentity = new Map<string, TrackReference>();
   for (const t of tracks) {
     if (t.source === Track.Source.Camera && live(t) && !camByIdentity.has(t.participant.identity)) {
@@ -465,10 +488,11 @@ export default function CallStage({
               setJoinPrompt(identity);
             }}
             className="flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
-            title={t('stream.badgeTitle')}
+            title={streamSilent(identity) ? `${t('stream.badgeTitle')} — ${t('stream.silent')}` : t('stream.badgeTitle')}
           >
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-stamp-500" aria-hidden />
             {t('stream.badgeWatch')}
+            {streamSilent(identity) && <VolumeX size={10} aria-label={t('stream.silent')} />}
           </button>
         )}
       </div>
@@ -656,6 +680,7 @@ export default function CallStage({
   if (screens.length > 0 && shareLayout === 'side') {
     const paneFor = (v: { key: string; trackRef: TrackReference; isScreen: boolean; identity: string }): React.ReactNode => {
       const own = v.trackRef.participant.isLocal && v.isScreen;
+      const silent = v.isScreen && !v.trackRef.participant.isLocal && streamSilent(v.identity);
       return (
         <SpeakingTile
           key={v.key}
@@ -680,6 +705,7 @@ export default function CallStage({
               identity={v.identity}
               isLocal={v.trackRef.participant.isLocal}
               isScreen={v.isScreen}
+              silentStream={silent}
             />
             <MuteBadge participant={v.trackRef.participant} isScreen={v.isScreen} />
           </VideoFit>
@@ -746,6 +772,7 @@ export default function CallStage({
       if (pVideos.length > 0) {
         return pVideos.map((v) => {
           const own = v.trackRef.participant.isLocal && v.isScreen;
+          const silent = v.isScreen && !v.trackRef.participant.isLocal && streamSilent(v.identity);
           const aspect = trackAspect(v.trackRef);
           return (
             <SpeakingTile
@@ -769,6 +796,7 @@ export default function CallStage({
                   identity={v.identity}
                   isLocal={v.trackRef.participant.isLocal}
                   isScreen={v.isScreen}
+                  silentStream={silent}
                 />
                 <MuteBadge participant={v.trackRef.participant} isScreen={v.isScreen} />
               </VideoFit>
@@ -818,6 +846,7 @@ export default function CallStage({
                 trackRef={focusedVideo.trackRef}
                 isScreen={focusedVideo.isScreen}
                 isFocus={!!spotlight}
+                silent={focusedVideo.isScreen && !focusedVideo.trackRef.participant.isLocal && streamSilent(focusedVideo.identity)}
                 onVideoClick={() => {
                   if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
                   else releaseSpot();
