@@ -51,9 +51,11 @@ or keys.
   (Android doesn't cut the mic; Chrome may trigger automatic PiP); if the
   camera is on without PiP, the publish honestly switches to "camera off" —
   peers see a clean signal instead of a frozen frame — and re-enables
-  automatically on return. **iOS honest limit:** Safari never streams the
-  camera from a backgrounded web app (a native app is required); the mic
-  usually survives via the keepalive
+  automatically on return. Presence survives too: even if the mobile OS
+  kills the presence WS, the server keeps the user in the room for a
+  120 s grace and the client re-announces on reconnect. **iOS honest
+  limit:** Safari never streams the camera from a backgrounded web app
+  (a native app is required); the mic usually survives via the keepalive
 - **Device selection** — mic/camera/speaker; from the in-call menu or
   Settings → Voice & Video, persisted, applied instantly mid-call
 - **Notification sounds** (Discord parity) — 15 events: message, mention,

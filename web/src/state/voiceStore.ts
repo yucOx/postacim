@@ -8,7 +8,7 @@ import { useAuthStore } from './authStore';
 import { unwrapMyKey } from '../crypto/identity';
 import { dhVoiceKeyAnchor, dhVoiceKeyDm } from '../crypto/dhratchet';
 import { unb64 } from '../crypto/bytes';
-import { onServerEvent, wsSend } from '../ws/socket';
+import { onServerEvent, onWsStatus, wsSend } from '../ws/socket';
 import { startRing, stopRing, playSound } from '../lib/sound';
 import { toast } from '../components/Toast';
 import { translate as t } from '../lib/translate';
@@ -1094,6 +1094,16 @@ if (typeof document !== 'undefined') {
     else if (!s.room && prev.room) {
       stopKeepalive();
       useVoiceStore.setState({ camPausedByHide: false });
+    }
+  });
+  // presence WS'i mobil arka planda ölür (LiveKit hattı yaşamaya devam eder);
+  // yeniden bağlanınca oda hâlâ canlıysa voice_state'i yeniden duyur ki
+  // sidebar (sunucu grace'i) beklemeksizin doğru görünsün
+  onWsStatus((st) => {
+    if (st !== 'open') return;
+    const s = useVoiceStore.getState();
+    if (s.room && s.joinedChannelId && !s.isDmCall) {
+      wsSend({ type: 'voice_state', channel_id: s.joinedChannelId, state: 'joined' });
     }
   });
 }

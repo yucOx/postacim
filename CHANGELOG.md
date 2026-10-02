@@ -29,6 +29,15 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ### Düzeltilen
 
+- **Mobilde arka planda presence düşmesi**: presence WS'i mobil OS
+  tarafından kapatılınca kullanıcı ses odasında yokmuş gibi görünüyordu
+  (LiveKit medya hattı ayrı olduğundan ses akmaya devam ediyordu).
+  Discord gibi: sunucu WS disconnect'te presence'ı anında silmek yerine
+  120 sn grace bekler — grace içinde geri bağlanılırsa presence hiç
+  sarsılmaz (çoklu sekme güvenli), gelmezse gerçek ayrılma + DM aramasına
+  call:ended işlenir. İstemci WS yeniden bağlanınca oda hâlâ canlıysa
+  `voice_state joined`'ı yeniden duyurur
+
 - **Yayın sesi kökeni çözüldü + sessiz yayın görünürlüğü**: iki taraflı canlı
   repro ile kanıtlandı — transport/E2EE (SFrame)/abone zinciri ScreenShareAudio
   için tamamen çalışıyor (uygulamanın birebir Room + publish seçenekleriyle

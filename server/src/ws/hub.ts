@@ -25,6 +25,14 @@ interface DmCallRow {
 // 16 ms fark edilmez; mesaj 1-2 frame kayıyor (Discord/Slack benzeri).
 const BROADCAST_TICK_MS = 16;
 
+// Mobil tarayıcılar arka plana geçince presence WS'ini kapatır (OS radyo
+// yönetimi / iOS ~30 sn) — ama LiveKit medya hattı (WebRTC + istemci
+// keepalive) canlı kalabilir: ses odada akar, sidebar'da kullanıcı yok
+// görünürdu. Discord gibi: WS düşünce kullanıcı anında düşürülmez; grace
+// içinde geri bağlanırsa presence hiç sarsılmaz, gelmezse gerçek ayrılma
+// (presence temizliği + DM aramasına call:ended) işlenir.
+const VOICE_GRACE_MS = 120_000;
+
 class Hub {
   private clients = new Map<WebSocket, HubClient>();
   private voice: VoiceMap = new Map();
@@ -38,6 +46,8 @@ class Hub {
   // reactions.test.ts: rapid add→remove delivered only "remove").
   private outboundFrames = new Map<WebSocket, Set<string>>();
   private batcher: NodeJS.Timeout | null = null;
+  // userId -> pending leave grace timer (socket closed, waiting for reconnect)
+  private leaveGraces = new Map<string, NodeJS.Timeout>();
 
   register(ws: WebSocket, user: { id: string; nick: string }): void {
     const communities = new Set(
@@ -48,22 +58,49 @@ class Hub {
       ).map((r) => r.community_id),
     );
     this.clients.set(ws, { userId: user.id, nick: user.nick, communities, alive: true });
+    // the user reconnected inside the grace window — presence never dropped,
+    // cancel the pending real-leave
+    const grace = this.leaveGraces.get(user.id);
+    if (grace) {
+      clearTimeout(grace);
+      this.leaveGraces.delete(user.id);
+    }
   }
 
   unregister(ws: WebSocket): void {
     const client = this.clients.get(ws);
     this.clients.delete(ws);
     if (!client) return;
-    // drop the user's voice presence entries; each affected channel broadcasts
+    // the user still has another open socket (multi-tab) — nothing to do
+    for (const c of this.clients.values()) {
+      if (c.userId === client.userId) return;
+    }
+    if (this.leaveGraces.has(client.userId)) return; // already waiting
+    const userId = client.userId;
+    const t = setTimeout(() => {
+      this.leaveGraces.delete(userId);
+      // grace expired — bail if a new socket appeared meanwhile
+      for (const c of this.clients.values()) {
+        if (c.userId === userId) return;
+      }
+      // drop the user's voice presence entries; each affected channel broadcasts
+      this.dropVoiceFor(userId);
+      // a DM-call peer never came back — end the call for the other side too
+      this.endDmCallFor(userId, 'peer_disconnected');
+    }, VOICE_GRACE_MS);
+    // never keep the process alive just for a grace timer (tests, shutdown)
+    t.unref?.();
+    this.leaveGraces.set(userId, t);
+  }
+
+  private dropVoiceFor(userId: string): void {
     for (const [communityId, byChannel] of this.voice) {
       for (const [channelId, users] of byChannel) {
-        if (users.delete(client.userId)) {
+        if (users.delete(userId)) {
           this.broadcastVoice(communityId, channelId);
         }
       }
     }
-    // a DM-call peer just dropped — end the call for the other side too
-    this.endDmCallFor(client.userId, 'peer_disconnected');
   }
 
   markAlive(ws: WebSocket): void {
