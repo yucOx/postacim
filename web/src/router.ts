@@ -6,6 +6,15 @@ export type RouteTarget =
   | null;
 
 // invite links own the hash (#/davet/<code>[/<key>]) — routing never touches one
+
+/** "nasıl çalışır?" anlatım sayfasının slug'ı — README'den doğrudan
+ *  linklenebilir (auth gerektirmez, giriş yapmış kullanıcıda da açılır) */
+export const HOW_IT_WORKS_ROUTE = '#/nasil-calisir';
+
+export function isHowItWorksRoute(hash: string): boolean {
+  return hash.replace(/^#\/?/, '') === 'nasil-calisir';
+}
+
 /** current location.hash → in-app route; null = default (mektuplar home) */
 export function readRoute(): RouteTarget {
   if (parseInviteLink(location.hash)) return null;
@@ -25,6 +34,8 @@ export function readRoute(): RouteTarget {
  *  replaceState — no history spam, no hashchange loop */
 export function writeRoute(view: 'community' | 'dm', dmId: string | null, channelId: string | null): void {
   if (parseInviteLink(location.hash)) return;
+  // anlatım sayfası açıkken hash'i ezme — kapatınca mevcut view döner
+  if (isHowItWorksRoute(location.hash)) return;
   const hash =
     view === 'dm' && dmId ? `#/dm/${encodeURIComponent(dmId)}` : view === 'community' && channelId ? `#/ch/${encodeURIComponent(channelId)}` : '';
   if (location.hash === hash) return;

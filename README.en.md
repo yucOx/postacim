@@ -114,7 +114,8 @@ or keys.
 The server is a post office: it carries envelopes but **can never open one**.
 Every layer is blind by design — a network listener hits TLS, the server hits
 encryption, the media server hits SFrame. Below is the real path of a message,
-from the moment it is typed to the moment it is read.
+from the moment it is typed to the moment it is read. An animated, login-free
+version of this walkthrough lives in the app at `/#/nasil-calisir`.
 
 ### 1. A message's journey
 

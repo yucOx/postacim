@@ -10,7 +10,7 @@ import Turnstile, { turnstileEnabled } from './Turnstile';
 import { PigeonMark, Postmark, SealMark } from './Brand';
 import { SponsorNote } from './SponsorNote';
 import LocalePicker from './LocalePicker';
-import HowItWorks from './HowItWorks';
+import { HOW_IT_WORKS_ROUTE } from '../router';
 
 type Step = 'login' | 'register' | 'phrase' | 'forgot';
 
@@ -24,8 +24,8 @@ export default function Login() {
   const [ackReady, setAckReady] = useState(false); // 3s anti-reflex timer
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // giriş öncesi "nasıl çalışır?" anlatım sayfası (auth gerektirmez)
-  const [showHow, setShowHow] = useState(false);
+  // "nasıl çalışır?" App katmanında hash slug'ından açılır (#/nasil-calisir) —
+  // buradaki buton yalnız slug'a yönlendirir
   // Turnstile tokens are single-use: a failed attempt burns the token, so the
   // widget is remounted (key=attempt) to mint a fresh one for the next try.
   const [tsToken, setTsToken] = useState<string | null>(null);
@@ -69,8 +69,6 @@ export default function Login() {
   // hook count change across renders (needs_password → anonymous) and React
   // throws into a blank screen.
   if (status === 'needs_password') return <ReauthStep nick={sessionNick} />;
-  // anlatım sayfası tüm ekranı kaplar — hook'ların altında kalması yeterli
-  if (showHow) return <HowItWorks onBack={() => setShowHow(false)} />;
 
   const pwScore = passwordScore(password);
   const canRegister =
@@ -142,7 +140,9 @@ export default function Login() {
             </ul>
             <button
               type="button"
-              onClick={() => setShowHow(true)}
+              onClick={() => {
+                location.hash = HOW_IT_WORKS_ROUTE;
+              }}
               className="mt-6 flex w-full max-w-xs items-center justify-center gap-2 rounded border border-brass-600/70 bg-night-800/60 px-4 py-2.5 text-sm font-semibold text-lamp-300 transition-colors hover:border-lamp-500/70 hover:bg-lamp-100/40"
             >
               <Info size={15} />

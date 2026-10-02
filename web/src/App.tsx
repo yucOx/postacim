@@ -7,7 +7,8 @@ import JoinScreen from './components/JoinScreen';
 import { ToastContainer } from './components/Toast';
 import { SealMark } from './components/Brand';
 import { parseInviteLink, type ParsedInvite } from './crypto/invite';
-import { writeRoute } from './router';
+import { writeRoute, isHowItWorksRoute } from './router';
+import HowItWorks from './components/HowItWorks';
 import { I18nProvider } from './i18n/I18nProvider';
 import { useI18nStore } from './i18n/store';
 
@@ -15,6 +16,9 @@ export default function App() {
   const status = useAuthStore((s) => s.status);
   const restore = useAuthStore((s) => s.restore);
   const [invite, setInvite] = useState<ParsedInvite | null>(() => parseInviteLink(location.hash));
+  // "nasıl çalışır?" slug'ı (#/nasil-calisir) — README'den gelen link hem anon
+  // hem authed kullanıcıda açılır; hash tek doğruluk kaynağı
+  const [showHow, setShowHow] = useState(() => isHowItWorksRoute(location.hash));
 
   // mirror the in-app view into the URL slug — F5 (after re-auth) lands back
   // in the same conversation
@@ -31,10 +35,19 @@ export default function App() {
   }, [restore]);
 
   useEffect(() => {
-    const onHash = (): void => setInvite(parseInviteLink(location.hash));
+    const onHash = (): void => {
+      setInvite(parseInviteLink(location.hash));
+      setShowHow(isHowItWorksRoute(location.hash));
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
+
+  // replaceState hashchange tetiklemez — hash'i temizlerken state'i elle düşür
+  const closeHow = (): void => {
+    history.replaceState(null, '', location.pathname + location.search);
+    setShowHow(false);
+  };
 
   let screen: React.JSX.Element;
   if (status === 'loading') {
@@ -45,6 +58,8 @@ export default function App() {
         </div>
       </div>
     );
+  } else if (showHow) {
+    screen = <HowItWorks onBack={closeHow} />;
   } else if (status !== 'authed') {
     screen = <Login />;
   } else if (invite) {

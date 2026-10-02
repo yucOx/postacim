@@ -49,7 +49,8 @@ düz hâlini **hiçbir zaman** görmez.
 Sunucu bir postanedir: zarfları taşır, ama **hiçbir zarfı açamaz**. Her katman
 kör design edilmiştir — ağ dinleyicisi TLS'e, sunucu şifreye, medya sunucusu
 SFrame'e takılır. Aşağıda bir mesajın nick yazıldığı andan karşı tarafta
-okunduğu ana kadar gerçek akışı var.
+okunduğu ana kadar gerçek akışı var. Bunun animasyonlu web sürümü — giriş
+gerektirmeyen anlatım sayfası — uygulamanın `/#/nasil-calisir` adresinde.
 
 ### 1. Bir mesajın yolculuğu
 
