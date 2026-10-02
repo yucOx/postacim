@@ -37,6 +37,10 @@ interface VoiceState {
   keyProvider: ExternalE2EEKeyProvider | null;
   micOn: boolean;
   camOn: boolean;
+  /** mobilde sekme arka plana alınınca kamera yayınımız OS tarafından
+   *  durduruldu — düzgün "kamera kapalı" sinyali için biz kapattık;
+   *  ön plana dönünce otomatik geri açılır */
+  camPausedByHide: boolean;
   screenOn: boolean;
   /** master output volume 0..1 */
   volume: number;
@@ -397,6 +401,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   keyProvider: null,
   micOn: false,
   camOn: false,
+  camPausedByHide: false,
   screenOn: false,
   volume: 1,
   deafened: false,
@@ -606,7 +611,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       next ? q.camPublish : undefined,
     );
     if (next) hintTrack(Track.Source.Camera);
-    set({ camOn: next });
+    set({ camOn: next, camPausedByHide: false });
     // yerel geri bildirim: açılınca tiz, kapanınca pes tek tık
     playSound(next ? 'camOn' : 'camOff');
   },
@@ -951,6 +956,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
           set({
             micOn: false,
             camOn: false,
+            camPausedByHide: false,
             screenOn: false,
             callState: { phase: 'ended', channelId: call.channelId, note: reason },
           });
@@ -970,3 +976,124 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   },
   };
 });
+
+// --- mobil arka plan davranışı (Discord paritesi) ------------------------
+// Mobil tarayıcılar sekme arka plana geçince kamera capture'ını OS seviyesinde
+// durdurur: karşı taraf donuk bir kare görür. Discord mobil bunu native
+// foreground service ile çözer; tarayıcıda elimizdeki araçlar:
+//  1) sessiz audio keepalive + MediaSession — arama sürerken sekmenin ses
+//     hattı canlı kalır (Android arka planda mikrofonu kesmez, kullanıcı
+//     uygulamadan ayrılınca Chrome otomatik PiP tetikleyebilir)
+//  2) visibilitychange (yalnız mobil): kamera açık + PiP yok + sekme gizli →
+//     publish dürüstçe kapatılır — karşı taraf donuk kare yerine düzgün
+//     "kamera kapalı" kutusu görür; ön plana dönünce otomatik geri açılır.
+// iOS dürüst sınırı: Safari arka planda kamerayı ASLA akıtmaz (native
+// uygulama gerekir) — mikrofon keepalive ile çoğu zaman yaşar.
+
+let keepaliveEl: HTMLAudioElement | null = null;
+
+/** 4 saniyelik sessiz WAV — data URI olarak programatik üretilir, ağ isteği yok */
+function silentWavDataUri(): string {
+  const sampleRate = 8000;
+  const samples = sampleRate * 4;
+  const buf = new ArrayBuffer(44 + samples);
+  const dv = new DataView(buf);
+  const ascii = (off: number, s: string): void => {
+    for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
+  };
+  ascii(0, 'RIFF');
+  dv.setUint32(4, 36 + samples, true);
+  ascii(8, 'WAVEfmt ');
+  dv.setUint32(16, 16, true); // fmt chunk boyu
+  dv.setUint16(20, 1, true); // PCM
+  dv.setUint16(22, 1, true); // mono
+  dv.setUint32(24, sampleRate, true);
+  dv.setUint32(28, sampleRate, true); // byte rate
+  dv.setUint16(32, 1, true); // blok hizası
+  dv.setUint16(34, 8, true); // bit derinliği
+  ascii(36, 'data');
+  dv.setUint32(40, samples, true);
+  // örnekler 0 kalır (sessizlik) — 32 KB'ı base64'e kovalara bölerek taşı
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 8192) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return `data:audio/wav;base64,${btoa(bin)}`;
+}
+
+function startKeepalive(): void {
+  if (typeof document === 'undefined' || keepaliveEl) return;
+  try {
+    const el = document.createElement('audio');
+    el.src = silentWavDataUri();
+    el.loop = true;
+    // join bir kullanıcı jesti (buton) ardından koşar — sticky activation
+    // play()'e izin verir; engellenirse sessizce devam (keepalive'siz de arama çalışır)
+    void el.play().catch(() => {});
+    keepaliveEl = el;
+    // Android'in arka plan medya yönetimine "çalan medya" olarak görün:
+    // bildirimde postacim görünür, otomatik PiP için ön koşul
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: 'postacim' });
+    }
+  } catch {
+    // desteklenmeyen ortam — sessizce geç
+  }
+}
+
+function stopKeepalive(): void {
+  if (keepaliveEl) {
+    keepaliveEl.pause();
+    keepaliveEl.removeAttribute('src');
+    keepaliveEl = null;
+  }
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = null;
+  }
+}
+
+const isMobileUA = (): boolean =>
+  typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
+
+function onVisibilityChange(): void {
+  const s = useVoiceStore.getState();
+  if (!s.room) return;
+  const hidden = document.visibilityState === 'hidden';
+  const inPip = !!document.pictureInPictureElement;
+  if (hidden && isMobileUA() && s.camOn && !inPip) {
+    // arka plan: OS kamera akışını zaten dondurdu — donuk kare yerine
+    // karşı tarafa düzgün "kamera kapalı" sinyali ver (LiveKit mute modeli)
+    (s.room.localParticipant as LocalParticipant).setCameraEnabled(false).catch(() => {});
+    useVoiceStore.setState({ camOn: false, camPausedByHide: true });
+  } else if (!hidden && s.camPausedByHide && !s.camOn) {
+    // ön plana dönüş: gizlemeden önce açıktı — geri aç
+    const st = useVoiceStore.getState();
+    const room = st.room;
+    useVoiceStore.setState({ camPausedByHide: false });
+    if (!room) return;
+    const q = qualityTiers[st.quality];
+    (room.localParticipant as LocalParticipant)
+      .setCameraEnabled(true, withCamDevice(q.camCapture), q.camPublish)
+      .then(() => {
+        hintTrack(Track.Source.Camera);
+        useVoiceStore.setState({ camOn: true });
+      })
+      .catch(() => {
+        // izin/CIHAZ gitmiş olabilir — kullanıcı manuel açar
+      });
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  // keepalive'i room yaşam döngüsüne bağla: join / startDmCall / acceptIncoming
+  // ve tüm teardown yolları (leave, cancel, disconnect) tek noktadan kapsanır
+  useVoiceStore.subscribe((s, prev) => {
+    if (s.room && !prev.room) startKeepalive();
+    else if (!s.room && prev.room) {
+      stopKeepalive();
+      useVoiceStore.setState({ camPausedByHide: false });
+    }
+  });
+}

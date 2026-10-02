@@ -46,6 +46,14 @@ or keys.
   speaking glow, in-call side chat (split view), minimize-to-corner (PiP —
   draggable + pin above everything), **right-click menu**: per-participant
   volume/mute and stream-audio control, ping indicator in the control bar
+- **Mobile background behavior** — while a call is live, a silent keepalive
+  audio + MediaSession keeps the tab's audio pipeline alive when backgrounded
+  (Android doesn't cut the mic; Chrome may trigger automatic PiP); if the
+  camera is on without PiP, the publish honestly switches to "camera off" —
+  peers see a clean signal instead of a frozen frame — and re-enables
+  automatically on return. **iOS honest limit:** Safari never streams the
+  camera from a backgrounded web app (a native app is required); the mic
+  usually survives via the keepalive
 - **Device selection** — mic/camera/speaker; from the in-call menu or
   Settings → Voice & Video, persisted, applied instantly mid-call
 - **Notification sounds** (Discord parity) — 15 events: message, mention,

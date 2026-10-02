@@ -8,6 +8,14 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ### Eklenen
 
+- **Mobilde arka plan arama davranışı**: arama sürerken sessiz audio
+  keepalive + MediaSession ses hattını canlı tutar (Android mikrofonu
+  kesmez, Chrome otomatik PiP tetikleyebilir); mobilde sekme arka plana
+  alınınca kamera açık + PiP yoksa yayın dürüstçe "kamera kapalı"na döner
+  (karşı taraf donuk kare yerine temiz sinyal görür), ön plana dönünce
+  otomatik geri açılır. iOS dürüst sınırı README'de belgelendi (Safari
+  arka planda kamerayı hiçbir web uygulamasına akıttırmaz)
+
 - **Giriş ekranında "Nasıl çalışır?" sayfası**: marka kolonundaki butondan
   açılan, auth gerektirmeyen tam sayfa anlatım — animasyonlu mesaj
   yolculuğu (tel üzerinde Alice'ten Bob'a kayan şifreli zarf, 5 otomatik
