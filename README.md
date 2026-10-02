@@ -3,6 +3,8 @@
 [![CI](https://github.com/yucOx/postacim/actions/workflows/ci.yml/badge.svg)](https://github.com/yucOx/postacim/actions/workflows/ci.yml)
 [![tests](https://img.shields.io/badge/tests-322%20passed-brightgreen)](#otomatik-testler)
 
+Türkçe · **[English](README.en.md)**
+
 Gizlilik odaklı, uçtan uca şifreli (E2EE) Discord-benzeri sohbet uygulaması.
 Sunucu yalnızca şifreli veri taşır — mesajların, sesin, görüntünün ve anahtarların
 düz hâlini **hiçbir zaman** görmez.

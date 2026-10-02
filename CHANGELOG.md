@@ -6,6 +6,8 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ## [Unreleased]
 
+## [v1.1.0] — 2026-10-02
+
 ### Eklenen
 
 - **Olay bazlı bildirim sesleri (Discord paritesi)**: 15 olayın her birinin
