@@ -8,6 +8,12 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ### Eklenen
 
+- **Giriş ekranında "Nasıl çalışır?" sayfası**: marka kolonundaki butondan
+  açılan, auth gerektirmeyen tam sayfa anlatım — animasyonlu mesaj
+  yolculuğu (tel üzerinde Alice'ten Bob'a kayan şifreli zarf, 5 otomatik
+  adım), Argon2id bölünmesi + sealed-box anahtar dağıtımı, SFrame ses
+  akışı, "kim ne görüyor" matrisi ve sunucu DB'sindeki opak satır örneği
+  (5 dil; README'deki anlatımın web sürümü)
 - **README "Nasıl çalışır?" bölümü**: mesajın yazıldığı andan okunduğu ana
   mermaid sequence diyagramı, anahtar dağıtımı ve SFrame ses akışı flowchart'ları,
   "kim ne görüyor" matrisi + sunucu DB'sindeki opak satır örneği (tr+en;
