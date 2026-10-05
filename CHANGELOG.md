@@ -29,6 +29,14 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ### Düzeltilen
 
+- **Aramada ses bozulması (pat pat + boğuk)**: mobil keepalive için üretilen
+  sessiz WAV'ta örnekler 0 bırakılmıştı — 8-bit PCM'de unsigned olduğundan
+  0 = tam genlik negatif DC; "sessiz" track output miksini bastırıp arama
+  sesini boğuklaştırıyor, loop döngüsünde hoparlöre pat pat basıyordu.
+  Ayrıca 8 kHz yerine 48 kHz'e çekildi — düşük rate'li stream bazı ses
+  yığınlarında (Bluetooth/PulseAudio) çıkış cihazının rate'ini kilitleyip
+  tizleri kesiyordu. Sessizlik artık gerçek midpoint (128), rate masaüstü
+  ses standardında
 - **Mobilde arka planda presence düşmesi**: presence WS'i mobil OS
   tarafından kapatılınca kullanıcı ses odasında yokmuş gibi görünüyordu
   (LiveKit medya hattı ayrı olduğundan ses akmaya devam ediyordu).

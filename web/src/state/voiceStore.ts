@@ -992,10 +992,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
 
 let keepaliveEl: HTMLAudioElement | null = null;
 
-/** 4 saniyelik sessiz WAV — data URI olarak programatik üretilir, ağ isteği yok */
+/** 2 saniyelik sessiz WAV — data URI olarak programatik üretilir, ağ isteği yok.
+ *  48 kHz: masaüstü ses yığınının standart oranı — 8 kHz'lik stream açan ilk
+ *  istemci (Bluetooth/PulseAudio) çıkış cihazının rate'ini kilitler, arama
+ *  sesi 8 kHz bandına sıkışıp tizleri kaybederdi */
 function silentWavDataUri(): string {
-  const sampleRate = 8000;
-  const samples = sampleRate * 4;
+  const sampleRate = 48_000;
+  const samples = sampleRate * 2;
   const buf = new ArrayBuffer(44 + samples);
   const dv = new DataView(buf);
   const ascii = (off: number, s: string): void => {
@@ -1013,8 +1016,11 @@ function silentWavDataUri(): string {
   dv.setUint16(34, 8, true); // bit derinliği
   ascii(36, 'data');
   dv.setUint32(40, samples, true);
-  // örnekler 0 kalır (sessizlik) — 32 KB'ı base64'e kovalara bölerek taşı
+  // 8-bit PCM unsigned: sessizlik = 128 (midpoint). 0 = tam genlik negatif
+  // DC — output miksini bastırıp arama sesini boğuklaştırır, loop döngüsünde
+  // hoparlöre "pat pat" basar. ~96 KB'ı base64'e kovalara bölerek taşı
   const bytes = new Uint8Array(buf);
+  bytes.fill(128, 44);
   let bin = '';
   for (let i = 0; i < bytes.length; i += 8192) {
     bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
