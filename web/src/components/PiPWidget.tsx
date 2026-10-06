@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { RoomContext, useTracks, useSpeakingParticipants, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
-import { ChevronDown, ChevronUp, Maximize2, Mic, MicOff, PhoneOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, ChevronUp, Maximize2, Mic, MicOff, PhoneOff, PictureInPicture2, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
@@ -31,6 +31,7 @@ export default function PiPWidget(): React.ReactNode {
   const setPipPos = useVoiceStore((s) => s.setPipPos);
   const dms = useAppStore((s) => s.dms);
   const selectChannel = useAppStore((s) => s.selectChannel);
+  const setPopoutOpen = useVoiceStore((s) => s.setPopoutOpen);
   const channel = useAppStore((s) => s.communities.flatMap((c) => c.channels).find((ch) => ch.id === joinedVoiceChannel));
 
   const [expanded, setExpanded] = useState(() => {
@@ -165,6 +166,15 @@ export default function PiPWidget(): React.ReactNode {
         >
           {expanded ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
         </button>
+        {/* her şeyin üstünde ayrı pencere (Document PiP) — CallPopout */}
+        <button
+          onClick={() => setPopoutOpen(true)}
+          className="rounded p-1 text-paper-400 transition-colors hover:bg-night-800 hover:text-paper-100"
+          title={t('pip.popout')}
+          aria-label={t('pip.popoutAria')}
+        >
+          <PictureInPicture2 size={15} />
+        </button>
         <button
           onClick={onMaximize}
           className="rounded p-1 text-paper-400 transition-colors hover:bg-night-800 hover:text-paper-100"
@@ -199,8 +209,9 @@ export default function PiPWidget(): React.ReactNode {
 /** Discord tarzı PiP sahnesi:
  *  - Ana ekranda konuşan kişi (veya karşı tarafın ekranı/kamerası/avatarı)
  *  - Sağ alt köşede küçük pencere (bizim kendi kameramız veya avatarımız)
+ *  CallPopout da kullanır — className verilirse yükseklik onunla ezilir.
  */
-function PiPStage({ expanded }: { expanded?: boolean }): React.ReactNode {
+export function PiPStage({ expanded, className }: { expanded?: boolean; className?: string }): React.ReactNode {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: false,
   });
@@ -232,7 +243,7 @@ function PiPStage({ expanded }: { expanded?: boolean }): React.ReactNode {
   const isSelfSpeaking = useSafeIsSpeaking(useVoiceStore((s) => s.room?.localParticipant as Participant | undefined));
 
   return (
-    <div className={`relative ${expanded ? 'h-64' : 'h-44'} w-full overflow-hidden bg-night-900 flex items-center justify-center transition-all duration-200`}>
+    <div className={`relative ${className ?? (expanded ? 'h-64' : 'h-44')} w-full overflow-hidden bg-night-900 flex items-center justify-center transition-all duration-200`}>
       {/* Ana büyük pencere (Karşı taraf / Konuşan) */}
       {pick ? (
         <div className={`relative h-full w-full ${isMainSpeaking ? 'ring-2 ring-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.45)]' : ''}`}>
@@ -271,7 +282,7 @@ function PiPStage({ expanded }: { expanded?: boolean }): React.ReactNode {
 }
 
 /** Discord tarzı şık ve kompakt PiP kontrol çubuğu */
-function PiPControls({ onEnd }: { onEnd: () => void }): React.ReactNode {
+export function PiPControls({ onEnd }: { onEnd: () => void }): React.ReactNode {
   const { t } = useT();
   const micOn = useVoiceStore((s) => s.micOn);
   const camOn = useVoiceStore((s) => s.camOn);

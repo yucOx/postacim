@@ -104,6 +104,9 @@ export default {
   pip: {
     maximize: 'vergrößern',
     maximizeAria: 'anruf vergrößern',
+    popout: 'über allem schweben',
+    popoutAria: 'anruf über allem schweben lassen',
+    popoutUnsupported: 'dieser browser kann kein fenster über allem öffnen — Chrome/Edge nötig',
     endCall: 'anruf beenden',
     endCallAria: 'anruf beenden',
     waitingPeer: 'warte auf die andere seite',

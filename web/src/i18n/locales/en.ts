@@ -104,6 +104,9 @@ export default {
   pip: {
     maximize: 'enlarge',
     maximizeAria: 'enlarge call',
+    popout: 'float on top of everything',
+    popoutAria: 'float the call on top of everything',
+    popoutUnsupported: 'this browser cannot float a window on top — Chrome/Edge required',
     endCall: 'end call',
     endCallAria: 'end call',
     waitingPeer: 'waiting for the other side',

@@ -111,6 +111,9 @@ export default {
   pip: {
     maximize: 'büyüt',
     maximizeAria: 'arama büyüt',
+    popout: 'her şeyin üstünde aç',
+    popoutAria: 'aramayı her şeyin üstünde aç',
+    popoutUnsupported: 'bu tarayıcı her şeyin üstünde pencere açamaz — Chrome/Edge gerekir',
     endCall: 'aramayı bitir',
     endCallAria: 'aramayı bitir',
     waitingPeer: 'karşı taraf bekleniyor',

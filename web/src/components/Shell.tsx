@@ -16,7 +16,7 @@ import DmChat from './DmChat';
 import IncomingCall from './IncomingCall';
 import CallView from './CallView';
 import PiPWidget from './PiPWidget';
-import VoicePip from './VoicePip';
+import CallPopout from './CallPopout';
 import SettingsModal from './SettingsModal';
 import LocalePicker from './LocalePicker';
 import { PigeonMark } from './Brand';
@@ -76,6 +76,7 @@ export default function Shell() {
   const callDmId = callState?.channelId ?? null;
   const joinedVoiceChannel = useVoiceStore((s) => s.joinedChannelId);
   const pip = useVoiceStore((s) => s.pip);
+  const popoutOpen = useVoiceStore((s) => s.popoutOpen);
   const isCallMinimized = isDmCall && !!room && (pip || view !== 'dm' || activeDm?.id !== callDmId);
   // arama sırasında sohbet paneli — varsayılan kapalı (Discord: video önce)
   const [showCallChat, setShowCallChat] = useState(false);
@@ -374,7 +375,8 @@ export default function Shell() {
       {settingsModal && <SettingsModal onClose={() => setSettingsModal(false)} />}
       {deviceOffer && <DeviceLockModal onClose={() => setDeviceOffer(false)} />}
       <InvitePrompt />
-      {showPiP && <PiPWidget />}
+      {showPiP && !popoutOpen && <PiPWidget />}
+      {showPiP && popoutOpen && <CallPopout />}
       {room && (
         <RoomContext.Provider value={room}>
           <GlobalCallAudio />

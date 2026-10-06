@@ -81,6 +81,10 @@ interface VoiceState {
   /** pinned = the mini call widget floats above modals/menus too. Persisted. */
   pipPinned: boolean;
   setPipPinned: (v: boolean) => void;
+  /** Discord tarzı "her şeyin üstünde" popout arama penceresi açık —
+   *  açıkken köşe widget'ı (PiPWidget) gizlenir */
+  popoutOpen: boolean;
+  setPopoutOpen: (v: boolean) => void;
   join: (channelId: string) => Promise<void>;
   leave: () => Promise<void>;
   toggleMic: () => Promise<void>;
@@ -390,6 +394,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       screenOn: false,
       isDmCall: false,
       pip: false,
+      popoutOpen: false,
       callState: keepCallState ? st.callState : null,
     });
   };
@@ -431,6 +436,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   pip: false,
   pipPos: loadPipPos(),
   pipPinned: loadPipPinned(),
+  popoutOpen: false,
 
   setQuality: (q) => {
     try {
@@ -442,6 +448,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   },
 
   setPip: (v) => set({ pip: v }),
+  setPopoutOpen: (v) => set({ popoutOpen: v }),
   setPipPos: (p) => {
     try {
       localStorage.setItem('postacim.pipPos', JSON.stringify(p));
@@ -509,7 +516,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
                 if (st.joinedChannelId && !st.isDmCall) {
                   wsSend({ type: 'voice_state', channel_id: st.joinedChannelId, state: 'left' });
                 }
-                useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
+                useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false, popoutOpen: false });
               }
             };
             const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
@@ -587,6 +594,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       isDmCall: false,
       callState: null,
       pip: false,
+      popoutOpen: false,
     });
   },
 
@@ -734,7 +742,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       const onDisconnected = (): void => {
         const st = useVoiceStore.getState();
         if (connectedRoom && st.room === connectedRoom) {
-          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
+          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false, popoutOpen: false });
         }
       };
       const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
@@ -819,7 +827,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       const onDisconnected = (): void => {
         const st = useVoiceStore.getState();
         if (connectedRoom && st.room === connectedRoom) {
-          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
+          useVoiceStore.setState({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false, popoutOpen: false });
         }
       };
       const { room, keyProvider } = await connectRoom(voiceKey, url, token, onDisconnected);
@@ -934,7 +942,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
         const call = get().callState;
         if (call && call.channelId === e.channel_id) {
           cleanup(get().room);
-          set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, pip: false, callState: { phase: 'ended', channelId: call.channelId, note: 'reddedildi' } });
+          set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, pip: false, popoutOpen: false, callState: { phase: 'ended', channelId: call.channelId, note: 'reddedildi' } });
           // no 3s lock — the "ara" button reads phase and is enabled in 'ended' too
         }
       } else if (e.type === 'call:cancelled') {

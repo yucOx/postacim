@@ -104,6 +104,9 @@ export default {
   pip: {
     maximize: 'agrandir',
     maximizeAria: 'agrandir l appel',
+    popout: 'flotter au-dessus de tout',
+    popoutAria: 'faire flotter l appel au-dessus de tout',
+    popoutUnsupported: 'ce navigateur ne peut pas ouvrir une fenêtre au-dessus de tout — Chrome/Edge requis',
     endCall: 'mettre fin à l appel',
     endCallAria: 'mettre fin à l appel',
     waitingPeer: 'en attente de l autre côté',

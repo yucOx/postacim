@@ -104,6 +104,9 @@ export default {
   pip: {
     maximize: 'ampliar',
     maximizeAria: 'ampliar llamada',
+    popout: 'flotar sobre todo',
+    popoutAria: 'flotar la llamada sobre todo',
+    popoutUnsupported: 'este navegador no puede abrir una ventana sobre todo — se necesita Chrome/Edge',
     endCall: 'finalizar llamada',
     endCallAria: 'finalizar llamada',
     waitingPeer: 'esperando al otro lado',
