@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { RoomContext, useTracks, useSpeakingParticipants, ParticipantTile } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
-import { ChevronDown, ChevronUp, Maximize2, Mic, MicOff, PhoneOff, PictureInPicture2, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, ChevronUp, Maximize2, Mic, MicOff, PhoneOff, PictureInPicture2, Pin, PinOff, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useT } from '../i18n/I18nProvider';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../state/authStore';
@@ -29,6 +29,8 @@ export default function PiPWidget(): React.ReactNode {
   const leave = useVoiceStore((s) => s.leave);
   const pipPos = useVoiceStore((s) => s.pipPos);
   const setPipPos = useVoiceStore((s) => s.setPipPos);
+  const pipPinned = useVoiceStore((s) => s.pipPinned);
+  const setPipPinned = useVoiceStore((s) => s.setPipPinned);
   const dms = useAppStore((s) => s.dms);
   const selectChannel = useAppStore((s) => s.selectChannel);
   const setPopoutOpen = useVoiceStore((s) => s.setPopoutOpen);
@@ -147,9 +149,9 @@ export default function PiPWidget(): React.ReactNode {
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onDoubleClick={snapToCorner}
-      className={`fixed z-40 cursor-grab select-none overflow-hidden rounded-xl border border-brass-600/70 bg-night-950 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] transition-all duration-200 active:cursor-grabbing ${
-        expanded ? 'w-[460px]' : 'w-[310px]'
-      }`}
+      className={`fixed cursor-grab select-none overflow-hidden rounded-xl border border-brass-600/70 bg-night-950 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] transition-all duration-200 active:cursor-grabbing ${
+        pipPinned ? 'z-[60]' : 'z-40'
+      } ${expanded ? 'w-[460px]' : 'w-[310px]'}`}
       style={{ left: pos.x, top: pos.y, touchAction: 'none' }}
     >
       <div className="flex items-center gap-2 border-b border-night-700 bg-night-900/80 px-3 py-2">
@@ -157,6 +159,18 @@ export default function PiPWidget(): React.ReactNode {
         <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold uppercase tracking-[0.08em] text-paper-50">
           {title}
         </span>
+        {/* sabitle — widget modal/menülerin (z-50) de üstünde kalır */}
+        <button
+          onClick={() => setPipPinned(!pipPinned)}
+          className={`rounded p-1 transition-colors ${
+            pipPinned ? 'text-lamp-400 hover:text-lamp-300' : 'text-paper-400 hover:bg-night-800 hover:text-paper-100'
+          }`}
+          title={pipPinned ? t('pip.unpin') : t('pip.pinTop')}
+          aria-label={pipPinned ? t('pip.unpin') : t('pip.pinTop')}
+          aria-pressed={pipPinned}
+        >
+          {pipPinned ? <Pin size={15} /> : <PinOff size={15} />}
+        </button>
         {/* Discord tarzı pencere boyutunu büyütüp küçültme butonu */}
         <button
           onClick={toggleExpanded}
