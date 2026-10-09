@@ -12,7 +12,7 @@ import { onServerEvent, onWsStatus, wsSend } from '../ws/socket';
 import { startRing, stopRing, playSound } from '../lib/sound';
 import { toast } from '../components/Toast';
 import { translate as t } from '../lib/translate';
-import { useMediaStore, systemDefaultId, type DeviceKind } from './mediaStore';
+import { useMediaStore, systemDefaultId, speakerSupported, type DeviceKind } from './mediaStore';
 // official subpath export; ?worker&inline bundles the SFrame worker into the app
 import E2EEWorker from 'livekit-client/e2ee-worker?worker&inline';
 
@@ -256,22 +256,12 @@ function withCamDevice(opts?: VideoCaptureOptions): VideoCaptureOptions | undefi
   return { ...(opts ?? {}), deviceId: { exact: id } };
 }
 
-/** Hoparlör değişimi: LiveKit uzak sesleri AudioContext üzerinden işler,
- *  setSinkId doğrudan <video> sink'ini değiştirir — yalnız sayfada duran
- *  media element'lerine uygulanır. Desteklenmeyen tarayıcıda no-op.
- *  AudioContext'ın gerçek çıkışı track'ler üzerinden yönlendiği için bu
- *  pratikte tarayıcı varsayılan hoparlörü değiştirir. */
-async function setSinkId(deviceId: string): Promise<void> {
-  if (typeof HTMLMediaElement === 'undefined') return;
-  const el = HTMLMediaElement.prototype as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
-  if (typeof el.setSinkId !== 'function') return;
-  for (const node of document.querySelectorAll('audio, video')) {
-    try {
-      await el.setSinkId.call(node, deviceId);
-    } catch {
-      // eleman yok/ayrılmış ya da cihaz yok — diğerlerine devam
-    }
-  }
+/** Kayıtlı hoparlör tercihi — Room'a constructor'da verilir: RemoteAudioTrack
+ *  bu sink ile doğar, dolayısıyla odaya SONRADAN katılan herkesin sesi de
+ *  seçili hoparlörden çıkar. Boşsa seçilmemiştir (sistem varsayılanı). */
+function withSpeakerDevice(): { deviceId: string } | undefined {
+  const id = useMediaStore.getState().selected.speaker;
+  return speakerSupported() && id ? { deviceId: id } : undefined;
 }
 
 // Faz 5d — SFrame anahtarı artık v4 DH zincirinden türetilir (spec §7):
@@ -317,6 +307,7 @@ async function connectRoom(
     adaptiveStream: true,
     dynacast: true,
     encryption: { keyProvider, worker },
+    audioOutput: withSpeakerDevice(),
     // 2 vCPU/3 GB VPS için uplink sınırı (docs/NETWORKING.md §10). Server
     // tarafı v1.x bu alanları kabul etmiyor; client-side cap uyguluyoruz
     // (manipüle edilebilir ama gizlilik için sorun değil — SFrame zaten
@@ -628,18 +619,18 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     useMediaStore.getState().select(kind, deviceId);
     const room = get().room;
     if (!room) return; // oda yoksa seçim yalnızca saklandı, sonraki join'e kalır
-    if (kind === 'audiooutput') {
-      // hoparlör: sayfadaki media element'lerinin sink'ini değiştir.
-      // '' = sistem varsayılanı — setSinkId('') bunu zaten anlar.
-      await setSinkId(deviceId);
-      return;
-    }
     // deviceId boş = sistem varsayılanına dönüş. switchActiveDevice boş
     // id kabul etmez; tarayıcının varsayılan cihazının id'sini bulup onu
     // geçiyoruz (yoksa liste boşsa değişiklik zaten uygulanamaz).
+    if (kind === 'audiooutput' && !speakerSupported()) return;
     const target = deviceId || systemDefaultId(kind);
     if (!target) return;
     try {
+      // audiooutput için switchActiveDevice hem mevcut elementlere uygular
+      // HEM room.options.audioOutput'a yazar — sonradan abone olan track'ler
+      // (odaya yeni katılan biri) de seçili hoparlörden başlar. Eski
+      // element-gezen setSinkId bunu yapmıyordu: her yeni katılımcı
+      // varsayılan hoparlöre düşüyordu.
       await room.switchActiveDevice(kind, target);
     } catch (err) {
       set({ error: err instanceof Error ? `cihaz değiştirilemedi: ${err.message}` : 'cihaz değiştirilemedi' });
