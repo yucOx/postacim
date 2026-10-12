@@ -57,7 +57,7 @@ npm run dist
 ```
 desktop/
 ├── src/main.js       # ana süreç (Electron main)
-├── src/preload.js    # yalnız ilk-kurulum penceresi için postacim.saveServer(url) köprüsü
+ ├── src/preload.cjs   # yalnız ilk-kurulum penceresi için postacim.saveServer(url) köprüsü
 └── build/icon.png    # uygulama ikonu
 ```
 

@@ -1,0 +1,48 @@
+{
+  "name": "postacim-desktop",
+  "productName": "postacim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "postacim masaüstü uygulaması — Electron sarmalayıcı (ince istemci)",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke --no-sandbox",
+    "dist": "electron-builder --linux AppImage deb"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "im.postacim.desktop",
+    "productName": "postacim",
+    "desktopName": "postacim.desktop",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**",
+      "build/**"
+    ],
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Network;InstantMessaging;Chat",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  }
+}
