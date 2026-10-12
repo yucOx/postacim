@@ -1,13 +1,19 @@
 # postacim 🕊️
 
 [![CI](https://github.com/yucOx/postacim/actions/workflows/ci.yml/badge.svg)](https://github.com/yucOx/postacim/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-322%20passed-brightgreen)](#automated-tests)
+[![tests](https://img.shields.io/badge/tests-326%20passed-brightgreen)](#automated-tests)
 
 **[Türkçe](README.md)** · English
 
 Privacy-focused, end-to-end encrypted (E2EE) Discord-style chat. The server
 only relays ciphertext — it **never** sees plaintext messages, audio, video,
 or keys.
+
+Hosted instance: **https://postacim.dev** · Desktop app: [postacim-cli](#desktop-app)
+
+| Desktop | Mobile |
+|---|---|
+| ![postacim on desktop](docs/screenshots/desktop.png) | ![postacim on mobile](docs/screenshots/mobile.png) |
 
 ## Features
 
@@ -45,7 +51,9 @@ or keys.
 - **Call experience** (Discord layout) — focus/grid stage switching,
   speaking glow, in-call side chat (split view), minimize-to-corner (PiP —
   draggable + pin above everything), **right-click menu**: per-participant
-  volume/mute and stream-audio control, ping indicator in the control bar
+  volume/mute and stream-audio control, ping indicator in the control bar;
+  **always-on-top call window** (browser Document Picture-in-Picture —
+  floats above every other app, also in the desktop app)
 - **Mobile background behavior** — while a call is live, a silent keepalive
   audio + MediaSession keeps the tab's audio pipeline alive when backgrounded
   (Android doesn't cut the mic; Chrome may trigger automatic PiP); if the
@@ -57,7 +65,8 @@ or keys.
   limit:** Safari never streams the camera from a backgrounded web app
   (a native app is required); the mic usually survives via the keepalive
 - **Device selection** — mic/camera/speaker; from the in-call menu or
-  Settings → Voice & Video, persisted, applied instantly mid-call
+  Settings → Voice & Video, persisted, applied instantly mid-call; speaker
+  choice persists across calls and applies to participants who join later
 - **Notification sounds** (Discord parity) — 15 events: message, mention,
   incoming call, invite, friend request, room join/leave, mic on/off,
   stream start/stop, camera on/off, deafen/undeafen. Each can be
@@ -104,7 +113,9 @@ or keys.
   epoch keys.
 - **1:1 calls**: 📞 in a DM — ring on the other side (WebAudio) +
   accept/decline; on acceptance both sides join the LiveKit room with the
-  same DM key over SFrame E2EE. Busy means auto-decline.
+  same DM key over SFrame E2EE. Busy means auto-decline; if the other side
+  stays in the room after you leave, a green "in a call" banner with
+  one-click rejoin appears in the DM (survives reload — WS presence)
 - **Unread state**: dot + counter in channel/DM lists, 🕊️ badge, `(n)` in
   the tab title, notification sound for background DMs. Read state is
   client-only — the server never knows what you read.
@@ -470,6 +481,15 @@ docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
 - Self-signed is not enough for a public deployment — use a real
   certificate (Let's Encrypt), mounted instead of `certs/`
 
+## Desktop App
+
+The code lives in a separate repo: yucOx/postacim-cli — an Electron
+wrapper, a thin client (the web app is loaded from the server, the Discord
+model). Hide-to-tray, unread counter, secure-context exemption on http
+LAN, screen/window source picker, auto-update, launch at system startup.
+Releases are published from CI as AppImage + deb + exe + dmg under the
+`desktop-v*` tag.
+
 ## Development (without containers)
 
 Requirements: Node 22+, Docker.
@@ -486,7 +506,7 @@ Verify: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Automated tests
 
 ```bash
-npm test    # 322 tests: crypto/client unit + black-box integration (temp server + temp DB)
+npm test    # 326 tests: crypto/client unit + black-box integration (temp server + temp DB)
 ```
 
 Covering: AEAD/AAD binding, identity wrapping, BIP-39 checksum, invite link
@@ -498,8 +518,11 @@ transparency chain verification, keylog gossip state machines, opaque WS
 relay invariants (server never persists plaintext), registration/login rate
 limits + httpOnly cookies, pagination cursors, moderation roles/ban/kick →
 freeze → rotate, open/targeted invites + join password, friends/DM/group
-DM rekey, live WS events, account deletion, weak-secret rejection and the
-fresh-DB migration chain. CI runs type checks + all tests on every push/PR.
+DM rekey, DM call presence (`dm:voice`): announce reaches the peer, stale
+wrong-channel close ignored, non-member cannot announce, register
+snapshot (F5), live WS events, account deletion, weak-secret rejection and
+the fresh-DB migration chain. CI runs type checks + all tests on every
+push/PR.
 
 ## Manual test (two browser profiles)
 
@@ -562,7 +585,7 @@ crypto specification:
   transparency gossip, multi-device, audit readiness (v1.0.0)
 - [x] UI/UX pass — Discord-parity call layout: focus/grid + PiP, device
   selection, event-based sounds (15 events), consent-based member adding,
-  community profile (today: 34 files, 322 tests)
+  community profile (today: 35 files, 326 tests)
 
 ## Contributing
 

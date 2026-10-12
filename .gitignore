@@ -30,3 +30,6 @@ web/.env.local
 # Let's Encrypt çalışma dizinleri (özel anahtar içerir)
 certbot/
 *.bak
+
+# TLS sertifikaları — scripts/gen-certs.sh üretir, repo'ya girmez (özel anahtar!)
+certs/
