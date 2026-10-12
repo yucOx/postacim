@@ -390,6 +390,14 @@ docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
 - Herkese açık dağıtımda self-signed yeterli değildir — Let's Encrypt gibi gerçek
   sertifika kullan (`certs/` yerine mount et)
 
+## Masaüstü Uygulaması
+
+- Electron sarmalayıcı — ince istemci, web uygulaması sunucudan yüklenir (Discord modeli)
+- Tepsiye gizlenme, okunmamış sayacı (rozet + tepsi), http LAN'da secure-context muafiyeti, ekran paylaşımında yerel kaynak seçimi, sunucu başına kalıcı partition
+- Çalıştırma: `cd desktop && npm install && npm start` — sunucu adresi ilk açılışta sorulur ya da `POSTACIM_URL=https://sunucu npm start`
+- Paketleme: `npm run dist` → `desktop/dist/` altında AppImage + deb (x64, Linux)
+- Ayrıntılı doküman: [desktop/README.md](desktop/README.md)
+
 ## Geliştirme (konteynersiz)
 
 Gereksinimler: Node 22+, Docker.
