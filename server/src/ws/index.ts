@@ -36,6 +36,7 @@ export function attachWs(app: FastifyInstance): void {
         id?: number;
         hash?: string;
         communities?: unknown;
+        in?: boolean;
       };
       try {
         msg = JSON.parse(raw.toString());

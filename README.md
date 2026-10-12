@@ -1,625 +1,603 @@
 # postacim 🕊️
 
 [![CI](https://github.com/yucOx/postacim/actions/workflows/ci.yml/badge.svg)](https://github.com/yucOx/postacim/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-326%20passed-brightgreen)](#otomatik-testler)
+[![tests](https://img.shields.io/badge/tests-326%20passed-brightgreen)](#automated-tests)
 
-Türkçe · **[English](README.en.md)**
+English · **[Türkçe](README.tr.md)**
 
-Gizlilik odaklı, uçtan uca şifreli (E2EE) Discord-benzeri sohbet uygulaması.
-Sunucu yalnızca şifreli veri taşır — mesajların, sesin, görüntünün ve anahtarların
-düz hâlini **hiçbir zaman** görmez.
+Privacy-focused, end-to-end encrypted (E2EE) Discord-style chat. The server
+only relays ciphertext — it **never** sees plaintext messages, audio, video,
+or keys.
 
-Canlı örnek: **https://postacim.dev** · Masaüstü uygulaması: [postacim-cli](#masaüstü-uygulaması)
+Hosted instance: **https://postacim.dev** · Desktop app: [postacim-cli](#desktop-app)
 
-| Masaüstü | Mobil |
+| Desktop | Mobile |
 |---|---|
-| ![postacim masaüstünde](docs/screenshots/desktop.png) | ![postacim mobilde](docs/screenshots/mobile.png) |
+| ![postacim on desktop](docs/screenshots/desktop.png) | ![postacim on mobile](docs/screenshots/mobile.png) |
 
-## Özellikler
+## Features
 
-- **Kayıt: sadece nick + şifre** — e-posta/telefon yok, zero-knowledge; kayıt sırasında **BIP-39 kurtarma ifadesi** ritüeli (12 kelime, 3'ünü doğrulama, metin dosyası indirme) — şifre kaybında kimlik ve geçmiş kurtarılır
-- **Yazı odaları** — XChaCha20-Poly1305 ile istemci tarafında şifreli, gerçek zamanlı (WebSocket)
-- **Kaybolan mesajlar** — composer'dan mesaj başına TTL (kapalı / 1 saat / 1 gün / 1 hafta), kanal ve DM/grup başına hatırlanır; süre dolan mesajlar sunucuda tombstone'a çevrilir, istemcide "süresi doldu" olarak görünür (TTL sunucu için metadata — bkz. Bilinen sınırlar)
-- **Sesli/görüntülü odalar** — LiveKit SFU üzerinde SFrame ile gerçek E2EE, onlarca katılımcı
-- **Topluluklar** — Discord benzeri sunucu → kanal yapısı, sahip/üye rolleri
-- **Anahtar dağıtımı** — kanal anahtarları her üyeye sealed-box ile sarılır; sunucu açamaz
-- **Üye çıkarma = rekey (zorunlu)** — çıkarılan/banlanan üyeden sonra kanallar **kilitlenir**: yazışma, ses odası, davet üretimi/kullanımı ve yeni üye ekleme, sahip veya admin "anahtarı yenileyene" kadar kapalıdır (eski anahtar risk altında olduğundan). Atılan üye elindeki davetle geri dönüp okuyamaz; sesli odadaysa canlı bağlantısı düşürülür.
-- **Şifre değiştirme** — kimlik blob yeniden sarılır, kanal anahtarları etkilenmez; değişince **tüm oturumlar düşer** (çalınan token da dahil)
-- **Çoklu cihaz** (Faz 7) — her cihaz bağımsız X25519+Ed25519 keypair (kimlik blob'u v3, `device_id`); Ayarlar → Cihazlar sekmesinden cihaz listesi, WS tabanlı linking (primary onayı), cihaz iptali = zorunlu rekey. Per-cihaz DH step: aynı kullanıcının farklı cihazları farklı adım sayacı tutar (F5 per-sender modelinin doğal uzantısı) — bir cihazdaki state sızıntısı diğerini etkilemez
-- **Ekran paylaşımı** — aynı E2EE hattı üzerinden; **Go Live diyaloğu**: çözünürlük × fps × kaynak tipi (ekran/pencere/sekme) × sekme/sistem sesi seçimi, Discord'un bitrat hedeflerine eşlenen tablo. Tarayıcı sınırı: pencere paylaşımı hiçbir platformda ses taşımaz; Linux'ta ekran da taşımaz (yalnız sekme + "sekme sesini de paylaş" kutusu) — ses track'i olmayan yayınlar izleyicide "sessiz yayın" rozetiyle görünür, Go Live diyaloğu Linux'ta önceden uyarır
-- **Arama deneyimi** (Discord düzeni) — odak/ızgara sahne geçişi, konuşmacı parlaması, arama içi yan sohbet (split-view), köşeye küçültme (PiP — sürükle + her şeyin üstünde pin), **her şeyin üstünde arama penceresi** (Document PiP — tarayıcıda ve masaüstü uygulamasında OS seviyesinde always-on-top), **sağ tık menüsü**: kişi başına ses seviyesi/susturma ve yayın sesi kontrolü, kontrol çubuğunda ping göstergesi
-- **Mobilde arka plan** — arama sürerken sekme arka plana alınınca ses hattı sessiz bir keepalive + MediaSession ile canlı tutulur (Android mikrofonu kesmez, Chrome otomatik PiP tetikleyebilir); kamera açık + PiP yoksa yayın dürüstçe "kamera kapalı"na döner — karşı taraf donuk kare yerine temiz sinyal görür —, ön plana dönünce otomatik geri açılır. Presence da korunur: mobil OS presence WS'ini kapatsa bile sunucu 120 sn grace ile kullanıcıyı odada tutar, istemci yeniden bağlanınca durumu yeniden duyurur. **iOS dürüst sınırı:** Safari arka planda kamerayı hiçbir web uygulamasına akıttırmaz (native uygulama gerekir); mikrofon keepalive ile çoğu zaman sürer
-- **Cihaz seçimi** — mikrofon/kamera/hoparlör; arama içi menüden veya Ayarlar → Ses ve Video'dan, seçim kalıcı (hoparlör tercihi aramalar arasında saklanır ve sonradan katılanlara da uygulanır), arama sırasında değişince anında uygulanır
-- **Bildirim sesleri** (Discord paritesi) — 15 olay: mesaj, mention, gelen arama, davet, arkadaşlık isteği, oda giriş/çıkış, mikrofon aç/kapa, yayın aç/kapa, kamera aç/kapa, tüm sesi kıs/aç. Her biri Ayarlar → Bildirimler'den **tek tek kapatılabilir** ve Dinle düğmesiyle önizlenir; melik olanlar MP3, kısa tık desenleri WebAudio ile sentezlenir
+- **Sign-up: nick + password only** — no email/phone, zero-knowledge; during
+  registration a **BIP-39 recovery phrase** ritual (12 words, verify 3,
+  download as text file) — identity and history survive a lost password
+- **Text channels** — encrypted client-side with XChaCha20-Poly1305,
+  real-time over WebSocket
+- **Disappearing messages** — per-message TTL in the composer
+  (off / 1 hour / 1 day / 1 week), remembered per channel and DM/group;
+  expired messages become tombstones on the server and render as "expired"
+  client-side (TTL is server-visible metadata — see Known limits)
+- **Voice/video rooms** — true E2EE via SFrame over a LiveKit SFU, dozens
+  of participants
+- **Communities** — Discord-style server → channel structure, owner/member
+  roles
+- **Key distribution** — channel keys wrapped to each member with sealed
+  boxes; the server cannot open them
+- **Member removal = mandatory rekey** — after a member is kicked/banned,
+  channels **lock**: messaging, voice rooms, invite generation/use and
+  member-adding stay closed until an owner or admin "renews the key" (the
+  old key is at risk). A removed member cannot return via a leftover invite
+  and read; if they were in a voice room, their live connection is dropped.
+- **Password change** — identity blob is re-wrapped, channel keys untouched;
+  changing it **drops every session** (including stolen tokens)
+- **Multi-device** (Phase 7) — each device has an independent
+  X25519+Ed25519 keypair (identity blob v3, `device_id`); Settings →
+  Devices lists devices, linking is WS-based (primary approval), revoking
+  a device forces a rekey. Per-device DH step: different devices of the
+  same user keep separate step counters — a state leak on one device does
+  not affect the other
+- **Screen sharing** — over the same E2EE path; **Go Live dialog**:
+  resolution × fps × source type (screen/window/tab) × tab/system audio,
+  bitrate table matched to Discord's Go Live targets
+- **Call experience** (Discord layout) — focus/grid stage switching,
+  speaking glow, in-call side chat (split view), minimize-to-corner (PiP —
+  draggable + pin above everything), **right-click menu**: per-participant
+  volume/mute and stream-audio control, ping indicator in the control bar;
+  **always-on-top call window** (browser Document Picture-in-Picture —
+  floats above every other app, also in the desktop app)
+- **Mobile background behavior** — while a call is live, a silent keepalive
+  audio + MediaSession keeps the tab's audio pipeline alive when backgrounded
+  (Android doesn't cut the mic; Chrome may trigger automatic PiP); if the
+  camera is on without PiP, the publish honestly switches to "camera off" —
+  peers see a clean signal instead of a frozen frame — and re-enables
+  automatically on return. Presence survives too: even if the mobile OS
+  kills the presence WS, the server keeps the user in the room for a
+  120 s grace and the client re-announces on reconnect. **iOS honest
+  limit:** Safari never streams the camera from a backgrounded web app
+  (a native app is required); the mic usually survives via the keepalive
+- **Device selection** — mic/camera/speaker; from the in-call menu or
+  Settings → Voice & Video, persisted, applied instantly mid-call; speaker
+  choice persists across calls and applies to participants who join later
+- **Notification sounds** (Discord parity) — 15 events: message, mention,
+  incoming call, invite, friend request, room join/leave, mic on/off,
+  stream start/stop, camera on/off, deafen/undeafen. Each can be
+  **individually disabled** in Settings → Notifications and previewed with
+  a Listen button; melodic ones are MP3, short clicks are synthesized with
+  WebAudio
 
-### Moderasyon ve katılım
+### Moderation and membership
 
-- **Roller**: sahip → admin → üye. Admin: üye ekleme/atma+rekey, ban, kanal, davet, başvuru onayı. Admin atama ve katılım şifresi yalnız sahipte. Üye ekleme **onaylıdır**: hedef kullanıcıya davet penceresi açılır, kabul etmeden üyelik basılmaz.
-- **Topluluk profili**: sahip/admin ⚙️'den topluluk adını değiştirir, fotoğraf ekler — kanal adları gibi düz metadata'dır, anahtarlara dokunmaz; yalnız üyeler görür.
-- **Kalıcı ban**: banlı üye yeniden eklenemez, davet kullanamaz, başvuramaz; ban listesi ⚙️ altından yönetilir.
-- **Davet linkleri** (`↗` → üret): **açık** davet — geçici X25519 anahtarın özel yarısı linkin `#` fragmentında taşınır, sahip offline olsa bile katılım çalışır; **hedefli** davet — anahtarlar doğrudan hedefin kimliğine sarılır, kod sızsa bile başkası kullanamaz. Kullanım sayısı/süre sınırı, iptal.
-- **Başvurular**: topluluk adını bilen başvurur (`↗`); sahip/admin onaylayınca anahtarlar onun kimliğine sarılır; red sonrası tekrar başvurulabilir.
-- **Katılım şifresi** (sahip, ⚙️ → Şifre): davet linkine ek ikinci faktör. Argon2id ile türetilen anahtar kanal anahtarlarını sarar — sunucu yalnızca verifier görür.
-- **Topluluklar gizlidir**: hiçbir yerde listelenmez; yalnız üyeler görür. Ad bilmek başvuru için giriş sinyalidir.
+- **Roles**: owner → admin → member. Admins: add/remove members + rekey,
+  ban, channels, invites, application approval. Promoting admins and the
+  join password are owner-only. Adding a member is **consent-based**: the
+  target gets an invite prompt; membership lands only on acceptance.
+- **Community profile**: owner/admins rename the community and set a photo
+  from ⚙️ — plain metadata (like channel names), never touches keys; visible
+  to members only.
+- **Permanent bans**: banned members cannot be re-added, use invites, or
+  apply; the ban list is managed under ⚙️.
+- **Invite links** (`↗` → generate): **open** invites — the private half of
+  an ephemeral X25519 key travels in the link's `#` fragment, joining works
+  even while the owner is offline; **targeted** invites — keys are wrapped
+  directly to the target's identity, a leaked code is useless to anyone
+  else. Usage/duration limits, revocation.
+- **Applications**: anyone knowing the community name can apply (`↗`);
+  on owner/admin approval keys are wrapped to their identity; re-applying
+  after a rejection is allowed.
+- **Join password** (owner, ⚙️ → Password): an optional second factor on
+  top of the invite link. The Argon2id-derived key wraps channel keys —
+  the server only ever sees a verifier.
+- **Communities are private**: they are listed nowhere; only members see
+  them. Knowing the name is merely an application signal.
 
-### Arkadaşlar, özel mesaj ve arama
+### Friends, DMs and calls
 
-- **Arkadaşlık** (🕊️): nick ile istek gönder; kabul/red. Sadece arkadaşlar DM açabilir — tanımadığın biri mesajlayamaz.
-- **Özel mesaj (DM)**: iki kişilik E2EE kanal; anahtar açan taraf tarafından iki kimliğe sealed-box ile sarılır, DM mesajları `dm:` kapsamlı AAD ile XChaCha20-Poly1305 şifrelidir. Arkadaşlık bitince gönderim kapanır, geçmiş okunur kalır.
-- **Grup DM** (🕊️ → + grup): arkadaşlarından grup kur; üye eklerken/ayrılırken anahtar yenilenir — yeni üye eski mesajları, ayrılan üye sonraki mesajları **okuyamaz**; kalan üyeler tüm geçmişi epoch anahtarlarıyla okur.
-- **1:1 arama**: DM'de 📞 — karşı tarafta zil (WebAudio) + kabul/red; kabulde her ikisi LiveKit odasına aynı DM anahtarıyla SFrame E2EE bağlanır. Meşgulse otomatik red. Sen ayrıldıktan sonra karşı taraf odada bekliyorsa DM'de yeşil **"aramada"** bandı + tek tuşla katıl (F5 sonrası da görünür).
-- **Okunmadı**: kanal/DM listelerinde nokta+sayaç, 🕊️ rozeti, sekme başlığında `(n)`, arka plan DM'lerinde bildirim sesi. Okuma durumu yalnız istemcide — sunucu neyi okuduğunu bilmez.
+- **Friending** (🕊️): send a request by nick; accept/decline. Only friends
+  can open DMs — strangers cannot message you.
+- **Direct messages (DM)**: two-person E2EE channel; the key is wrapped by
+  the opening party to both identities with sealed boxes, DM messages are
+  XChaCha20-Poly1305 encrypted with `dm:`-scoped AAD. Unfriending closes
+  sending; history stays readable.
+- **Group DM** (🕊️ → + group): build a group from friends; keys rotate on
+  membership changes — a new member cannot read older messages, a departing
+  one cannot read future ones; remaining members read the full history with
+  epoch keys.
+- **1:1 calls**: 📞 in a DM — ring on the other side (WebAudio) +
+  accept/decline; on acceptance both sides join the LiveKit room with the
+  same DM key over SFrame E2EE. Busy means auto-decline; if the other side
+  stays in the room after you leave, a green "in a call" banner with
+  one-click rejoin appears in the DM (survives reload — WS presence)
+- **Unread state**: dot + counter in channel/DM lists, 🕊️ badge, `(n)` in
+  the tab title, notification sound for background DMs. Read state is
+  client-only — the server never knows what you read.
 
-## Nasıl çalışır? — kimse mesajlarınızı göremiyor
+## How it works — nobody can read your messages
 
-Sunucu bir postanedir: zarfları taşır, ama **hiçbir zarfı açamaz**. Her katman
-kör design edilmiştir — ağ dinleyicisi TLS'e, sunucu şifreye, medya sunucusu
-SFrame'e takılır. Aşağıda bir mesajın nick yazıldığı andan karşı tarafta
-okunduğu ana kadar gerçek akışı var. Bunun animasyonlu web sürümü — giriş
-gerektirmeyen anlatım sayfası — uygulamanın `/#/nasil-calisir` adresinde.
+The server is a post office: it carries envelopes but **can never open one**.
+Every layer is blind by design — a network listener hits TLS, the server hits
+encryption, the media server hits SFrame. Below is the real path of a message,
+from the moment it is typed to the moment it is read. An animated, login-free
+version of this walkthrough lives in the app at `/#/nasil-calisir`.
 
-### 1. Bir mesajın yolculuğu
+### 1. A message's journey
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant A as 👤 Alice — tarayıcı
-    participant S as 📮 Sunucu — kör taşıyıcı
-    participant B as 👤 Bob — tarayıcı
+    participant A as 👤 Alice — browser
+    participant S as 📮 Server — blind relay
+    participant B as 👤 Bob — browser
 
-    Note over A,B: Alice yazar: "bu arada yarın görüşelim"
-    A->>A: DH ratchet: ephemeral X25519 çifti üret,<br/>zincirden adım anahtarı türet
-    A->>A: XChaCha20-Poly1305 ile şifrele<br/>(AAD = kanal + epok — mesaj yeri değişirse açılmaz)
-    A->>A: Ed25519 ile imzala — sunucu sender_id<br/>uydursa imza düşer
-    A->>A: Boyutu bucket'a yuvarla (256B/1K/4K)<br/>— "kısa/uzun" dışında uzunluk sızmaz
-    A-->>S: yalnız opak ciphertext + imza + başlık
-    Note over S: ❌ Açamaz. Anahtar buraya hiç gelmedi.<br/>Gördüğü: rastgele bayt, gönderen, zaman.
-    S-->>B: aynen ilet — depolar, taşıır, yorumlamaz
-    B->>B: imzayı anahtar defterinden doğrula<br/>(defter append-only hash zinciri)
-    B->>B: aynı DH zincirinden anahtarı kendisi türet<br/>(alıcı stateless — mesaj başlığından)
-    B->>B: çöz ✅ "bu arada yarın görüşelim"
+    Note over A,B: Alice types: "see you tomorrow then"
+    A->>A: DH ratchet: generate ephemeral X25519 pair,<br/>derive step key from the chain
+    A->>A: encrypt with XChaCha20-Poly1305<br/>(AAD = channel + epoch — relocation breaks decryption)
+    A->>A: sign with Ed25519 — a forged sender_id<br/>fails the signature
+    A->>A: round length into a bucket (256B/1K/4K)<br/>— nothing leaks beyond "short/long"
+    A-->>S: only opaque ciphertext + signature + header
+    Note over S: ❌ Cannot decrypt. The key never reached this machine.<br/>It sees: random bytes, sender, time.
+    S-->>B: relay as-is — stores, forwards, never interprets
+    B->>B: verify signature against the key ledger<br/>(append-only hash chain)
+    B->>B: derive the same key from the DH chain itself<br/>(receiver is stateless — from the message header)
+    B->>B: decrypt ✅ "see you tomorrow then"
 ```
 
-Sunucunun veritabanında bu mesaj **böyle** durur — [elle test](#elle-test-iki-tarayıcı-profili)
-adımındaki komutla kendin bak:
+In the server's database that message looks **like this** — check it yourself
+with the command in the [manual test](#manual-test-two-browser-profiles)
+section:
 
 ```
-{ nonce: '9f3a1c…', ciphertext: 'c8e2b41d77a0f6…' }   ← içinden hiçbir şey okunmaz
+{ nonce: '9f3a1c…', ciphertext: 'c8e2b41d77a0f6…' }   ← nothing readable inside
 ```
 
-### 2. Anahtarlar tarayıcıdan hiç çıkmaz
+### 2. Keys never leave the browser
 
 ```mermaid
 flowchart TB
-    subgraph REG["🔐 Kayıt — sadece nick + şifre"]
+    subgraph REG["🔐 Sign-up — just nick + password"]
         direction LR
-        PW["Şifre"] -->|"Argon2id<br/>64 MiB · t=3"| OUT["64B çıktı"]
-        OUT --> PROOF["ilk 32B → auth kanıtı<br/>(sunucu bunu doğrular, şifreyi asla görmez)"]
-        OUT --> KEK["son 32B → KEK 🔑<br/>(tarayıcı RAM'inde kalır, hiç gönderilmez)"]
+        PW["Password"] -->|"Argon2id<br/>64 MiB · t=3"| OUT["64B output"]
+        OUT --> PROOF["first 32B → auth proof<br/>(server verifies this, never sees the password)"]
+        OUT --> KEK["last 32B → KEK 🔑<br/>(lives in browser RAM, never transmitted)"]
     end
-    KEK -->|"XChaCha20 ile sarar"| BLOB[("Kimlik blob'u — sunucuda ŞİFRELİ durur:<br/>X25519 + Ed25519 private anahtarlar")]
-    subgraph DIST["📦 Kanal anahtarı dağıtımı"]
+    KEK -->|"wraps with XChaCha20"| BLOB[("Identity blob — stored ENCRYPTED on the server:<br/>X25519 + Ed25519 private keys")]
+    subgraph DIST["📦 Channel key distribution"]
         direction LR
-        CK["32B rastgele<br/>kanal anahtarı"] -->|"sealed-box: her üyenin<br/>PUBLIC anahtarına sarılır"| U1["👤 Üye 1<br/>kendi private'ı ile açar"]
-        CK -->|"sealed-box"| U2["👤 Üye 2<br/>kendi private'ı ile açar"]
-        CK -->|"sealed-box"| U3["👤 Yeni üye — yalnız yeni<br/>epoğu açar, geçmişi okuyamaz"]
+        CK["32B random<br/>channel key"] -->|"sealed-box: wrapped to each<br/>member's PUBLIC key"| U1["👤 Member 1<br/>unwraps with their private key"]
+        CK -->|"sealed-box"| U2["👤 Member 2<br/>unwraps with their private key"]
+        CK -->|"sealed-box"| U3["👤 New member — can only open<br/>the new epoch, not the past"]
     end
-    KICK["👤 Üye çıkarıldı → zorunlu rekey:<br/>yeni anahtar + DH çapası döner"] -.-> CK
+    KICK["👤 Member removed → forced rekey:<br/>new key + new DH anchor"] -.-> CK
 ```
 
-Şifre kaybolursa: BIP-39 kurtarma ifadesi (12 kelime) kimliği geri getirir —
-ifade de uçtan uca sarılı olduğundan **sunucu onu da açamaz**; her şey
-kaybolursa hesap geri gelmez, bu E2EE'nin bedelidir.
+If the password is lost: the BIP-39 recovery phrase (12 words) restores the
+identity — the phrase itself is end-to-end wrapped, so **the server cannot
+open it either**; lose both and the account is gone. That is the price of E2EE.
 
-### 3. Ses, görüntü ve ekran paylaşımı aynı hattı izler
+### 3. Voice, video and screen share follow the same pipe
 
 ```mermaid
 flowchart LR
-    MIC["🎤 Alice<br/>mikrofon/kamera/ekran"] -->|"tarayıcıda SFrame<br/>çerçeve çerçeve şifreler"| C1["🔒 şifreli RTP"]
-    C1 --> SFU["LiveKit SFU<br/>— medya sunucusu<br/>yalnız opak bayt yönlendirir"]
-    SFU --> C2["🔒 şifreli RTP"]
-    C2 -->|"anahtar = H(DH zinciri ‖ 'voice')<br/>yayın çerçevelerine ek sıfır bilgi"| EAR["🎧 Bob"]
+    MIC["🎤 Alice<br/>mic/camera/screen"] -->|"browser encrypts with SFrame<br/>frame by frame"| C1["🔒 encrypted RTP"]
+    C1 --> SFU["LiveKit SFU<br/>— media server routes<br/>opaque bytes only"]
+    SFU --> C2["🔒 encrypted RTP"]
+    C2 -->|"key = H(DH chain ‖ 'voice')<br/>zero extra trust for media"| EAR["🎧 Bob"]
     style SFU fill:#1a1a2e,stroke:#888
 ```
 
-Ses odası anahtarı mesaj zincirinden türetilir (`H(step_root ‖ 'voice')`) —
-yani "kanalı okuyabilen herkes sesi de duyar, başkası duyamaz". SFU'nun
-gördüğü: bayt. Ne söylendiğini, ne paylaşıldığını göremez.
+The voice-room key is derived from the message chain (`H(step_root ‖ 'voice')`)
+— meaning "everyone who can read the channel can hear the voice, nobody else
+can". What the SFU sees: bytes. Not what is said, not what is shared.
 
-### 4. Kim ne görüyor, kim ne göremiyor?
+### 4. Who sees what — and what nobody sees
 
-| | Gören | Göremeyen |
+| | Sees | Cannot see |
 |---|---|---|
-| **Ağ dinleyici** (ISP, WiFi) | TLS trafik boyutu/zamanı | içerik, nick, anahtar |
-| **Sunucu** (kötü niyetli olsa bile) | opak ciphertext, gönderen kimliği, zaman, boyut bucket'ı | mesaj, ses, görüntü, anahtar, şifre |
-| **LiveKit SFU** | şifreli çerçeve baytları, kim kime bağlı | konuşulan/paylaşılan içerik |
-| **Başka üye** (gruptan atılan) | atılana kadar olanı bilmese de geçmiş epok anahtarları elindeyse geçmiş | rekey sonrası **hiçbir yeni mesaj** (DH-rekey + PCS-lite) |
+| **Network listener** (ISP, WiFi) | TLS traffic size/timing | content, nick, keys |
+| **Server** (even if malicious) | opaque ciphertext, sender identity, time, length bucket | message, voice, video, keys, password |
+| **LiveKit SFU** | encrypted frame bytes, who is connected | spoken/shared content |
+| **A removed member** | whatever their old epoch keys already opened | **any new message after the rekey** (DH-rekey + PCS-lite) |
 
-> Kanıt makinada değil, **matematikte**: XChaCha20-Poly1305 ve X25519 açmak
-> için anahtar gerekir; anahtar yalnız üyelerin tarayıcısında türetilir ve
-> hiçbir noktaya şifresiz iletilmez. Sunucunun "görememe" iddiası testle de
-> sabit — `server/test/hardening.test.ts` veritabanında plaintext oluşumunu
-> otomatik reddeder, her CI çalışmasında.
+> The guarantee rests not on this machine but on **math**: opening
+> XChaCha20-Poly1305 or X25519 requires the key; keys are derived only inside
+> members' browsers and never travel in the clear. The server's "blindness" is
+> also test-enforced — `server/test/hardening.test.ts` automatically fails if
+> plaintext ever touches the database, on every CI run.
 
-## Kripto mimarisi
+## Cryptography
 
-| Amaç | Yöntem |
+| Purpose | Method |
 |---|---|
-| Şifreden anahtar türetme | Argon2id (64 MiB, t=3), 64B çıktı: ilk 32B auth kanıtı (sunucuda argon2id verifier), son 32B KEK (tarayıcıdan çıkmaz) |
-| Kimlik | X25519 keypair + **Ed25519 imza keypair**; private key'ler KEK ile XChaCha20-Poly1305 şifreli blob olarak sunucuda. **Blob evrimi:** v1 = X25519 priv; v2 = `0x02 ‖ X25519 ‖ Ed25519` (Faz 1); v3 = `0x03 ‖ X25519 ‖ Ed25519 ‖ 16B device_id` (Faz 7). Eski blob'lar ilk açılışta otomatik son sürüme yükselir; v1/v2 hesaplar `deviceId = null` ile primary alias olarak devam eder |
-| Kanal anahtarı | 32B rastgele; üyelere `crypto_box_seal` (sealed box) ile sarılı |
-| Mesajlar | XChaCha20-Poly1305, AAD = `ch:<kanal>:v<epok>` (yeniden konumlandırmaya dayanıklı) |
-| Gönderen atfı | Her mesaj gönderenin **Ed25519 anahtarıyla imzalı** (`ciphertext‖signature`, imza ciphertext+AAD üzerinden); alıcı açmadan önce anahtar defterinden doğrular — sunucu sahte sender_id ile mesaj uyduramaz. Cutover tarihinden sonraki imzasız mesajlar reddedilir |
-| DH ratchet (v4, tüm scope'lar) | Her mesajda açık taşınan ephemeral X25519 public + DH çıktısı zincire karışır; adım 100 mesajda / 24 saatte bir yenilenir, ephemeral private atılır → **çalınan güncel zincir state'i bir sonraki adımdan itibaren geleceği üretemez** (forward secrecy). DM'de DH karşıtı (ben, peer) sıralı çiftinden türetilen deterministik çapa (`dhAnchor` — 5b hotfix; kendi mesajımız da açılır); kanal/gdm'de epok anahtarından türetilen grup DH çapası — tüm üyeler aynı çifti türetir, alıcı stateless kalır: mesaj başlığından zincir yeniden türetilebilir (F5/pagination/localStorage kaybı doğal). Çapa düzeltmesinden önceki v4 DM'leri okunamaz (bir kez yazılan format değişmez) |
-| Ses/görüntü | SFrame anahtarı kanal anahtarının DH zincirinden türetilir (5d): `H(step_root ‖ 'voice')` — kanal sesi epok DH çapasının kendi üstündeki X25519'üne, DM araması iki tarafın statik kimlik DH'ine bağlı; epok başına sabit, rekey ile döner. SFU opak bayt görür |
-| Anahtar epokları | `key_version`; eski epoklar saklanır → rotasyon öncesi geçmiş okunmaya devam eder |
-| Per-gönderici ratchet | `msg_key_i` zinciri `H(epok anahtarı ‖ 'ratchet' ‖ sender_id)` kökünden türetilir; güncel zincir kökü sızarsa geçmiş korunur (geri türetim yok). Tüm scope'lar bu kökü v4 DH adımıyla birleştirir (yukarıdaki satır) |
-| DH-rekey broadcast + self-update | Üye değişiminde rotate yeni epoku kalan üyelere sarmalayarak dağıtır — çıkarılan üye eski epok bilgisiyle (anahtar + çapa + tüm başlıklar elinde olsa bile) gelecekteki mesaj anahtarlarını türetemez. Ele geçirilen cihazın yerini alan kurban, yeni DH public'ini Ed25519 imzalı `dh_update` duyurusuyla yayınlar (WS relay — sunucu opak geçirir, saklamaz); alıcı imzayı anahtar defterinden doğrur, geçerliyi TOFU pin'ler. Duyuru Ayarlar → Güvenlik'ten tek tıkla yayınlanır (5d); imza doğrulamasını geçemeyen duyuru kırmızı güvenlik bandı tetikler — çöp frame (bozuk biçim/bilinmeyen gönderen) sessizce reddeilir, bant spam'lenmez |
-| Mesaj padding | plaintext boyut bucket'larına (256 B / 1 KiB / 4 KiB / 4 KiB-adım) yuvarlanır — sunucu mesaj uzunluğundan içerik çıkarımı yapamaz |
-| Cihaz kilidi (ops.) | WebAuthn PRF'ten türeyen cihaz KEK'i ile blob IndexedDB'de — F5'te parmak izi, şifre fallback akışı korunur |
-| Cihaz başına kimlik (Faz 7) | Her cihaz bağımsız X25519 + Ed25519 keypair (kimlik blob'u v3 = X25519 priv + Ed25519 priv + 16B device_id); kullanıcı kimliği `users` + `users_devices` (v17) — primary kayıt anında, linked cihazlar primary tarafından onaylanır. Sunucu private key/identity blob saklamaz; yalnız public key + cihaz adı + linking durumu. Cihaz iptali = rekey zorunlu: iptal edilen cihaz yeni mesajları açamaz (eski private'ı yeni DH çıktısını üretemez), eski mesajlar eski anahtarla okunabilir kalır. Per-cihaz DH step: aynı kullanıcının farklı cihazları farklı adım sayacı tutar (F5 per-sender modelinin doğal uzantısı), farklı ephemeral, farklı DH pub başlığı — alıcı için ayrı gönderici. Per-cihaz fingerprint: peer'ın `users_devices.public_key + sign_public_key`'i ile çalışır; primary ve linked cihazlar farklı sayılar üretir |
-| Anahtar defteri | public key'ler append-only hash zincirinde (`key_log`); istemci boot'ta zinciri doğrular, head damgası profilde bant dışı karşılaştırma için. İmza anahtarları da defterden dağıtılır — yalnız zincir bütünlüğü kanıtlanmış kayıtlar imza doğrulamasına beslenir |
-| Kendi mesajımızı kendimiz açar (Faz 1 hotfix) | `chatStore`/`dmChatStore` `toDisplay`, gönderen biz isek RAM'deki `authStore.signPublicKey`'i kısayol olarak kullanır (`resolveSignKeys`) — keytransparency sync beklenmeden kendi mesajımız decode olur. Başkaları için yalnız zincir kanıtı geçerli; model bozulmaz. |
-| Keylog gossip | her istemci doğrulanmış head'ini 5dk'da bir üyesi olduğu topluluklara WS ile yayınlar; aynı id farklı hash = fork kanıtı → kırmızı bant. Sunucu opak relay (saklama/yorum yok) — invariant korunur. Tam CONIKS kanıt zinciri yok: gözlemsel, bant dışı damga karşılaştırması hâlâ en güçlü kanıt |
+| Password → key derivation | Argon2id (64 MiB, t=3), 64B output: first 32B auth proof (argon2id verifier on the server), last 32B KEK (never leaves the browser) |
+| Identity | X25519 keypair + **Ed25519 signing keypair**; private keys live on the server as a KEK-encrypted XChaCha20-Poly1305 blob. **Blob evolution:** v1 = X25519 priv; v2 = `0x02 ‖ X25519 ‖ Ed25519` (Phase 1); v3 = `0x03 ‖ X25519 ‖ Ed25519 ‖ 16B device_id` (Phase 7). Older blobs auto-upgrade on first unlock; v1/v2 accounts continue as primary aliases with `deviceId = null` |
+| Channel key | 32B random; wrapped to members with `crypto_box_seal` (sealed box) |
+| Messages | XChaCha20-Poly1305, AAD = `ch:<channel>:v<epoch>` (relocation-resistant) |
+| Sender attribution | Every message is **signed with the sender's Ed25519 key** (`ciphertext‖signature` over ciphertext+AAD); receivers verify against the key log before decrypting — the server cannot forge messages with a fake sender_id. Unsigned messages are rejected after the cutover date |
+| DH ratchet (v4, all scopes) | Every message carries an ephemeral X25519 public; the DH output mixes into the chain, stepping every 100 messages / 24 h, ephemeral private discarded → **a stolen current chain state cannot produce the future from the next step on** (forward secrecy). In DMs the anchor derives from the deterministically-ordered (me, peer) identity pair (`dhAnchor` — 5b hotfix; our own messages decrypt too); channels/group DMs use a group DH anchor derived from the epoch key — all members derive the same pair and receivers stay stateless: the chain can be re-derived from message headers (natural for pagination/localStorage loss). Pre-fix v4 DMs are unreadable (one-time format break) |
+| Voice/video | The SFrame key derives from the channel key's DH chain (5d): `H(step_root ‖ 'voice')` — channel voice binds to the epoch DH anchor's X25519, DM calls bind to the two parties' static identity DH; fixed per epoch, rotates on rekey. The SFU sees opaque bytes |
+| Key epochs | `key_version`; old epochs are kept → history before a rotation stays readable |
+| Per-sender ratchet | `msg_key_i` chain rooted at `H(epoch key ‖ 'ratchet' ‖ sender_id)`; leaking the current chain root leaves the past protected (no backward derivation). All scopes merge this root with the v4 DH step (row above) |
+| DH-rekey broadcast + self-update | On membership change, rotate wraps the new epoch to remaining members — a removed member cannot derive future message keys even holding the old epoch (key + anchor + all headers). A victim replacing a compromised device publishes a new DH public as an Ed25519-signed `dh_update` announcement (WS relay — the server passes it through opaquely, never stores it); receivers verify against the key log and TOFU-pin the valid one. One-click announcement in Settings → Security (5d); announcements failing signature verification trigger a red security banner — junk frames (malformed/unknown sender) are silently dropped |
+| Message padding | plaintext is rounded into size buckets (256 B / 1 KiB / 4 KiB / 4 KiB-steps) — the server cannot infer content from message length |
+| Device lock (opt.) | Device KEK derived from the WebAuthn PRF keeps the blob in IndexedDB — Phase 5 keeps the fingerprint/password fallback flow |
+| Per-device identity (Phase 7) | Each device holds an independent X25519 + Ed25519 keypair (identity blob v3); user identity = `users` + `users_devices` (v17) — primary at registration, linked devices approved by the primary. The server stores no private keys; only public keys, device names and linking state. Revoking a device = mandatory rekey: it cannot decrypt new messages (its old private key cannot produce the new DH output) while old messages stay readable with old keys. Per-device DH step counters, distinct ephemerals and DH pub headers — a separate sender to receivers. Per-device fingerprints derive from `users_devices.public_key + sign_public_key` |
+| Key log | public keys in an append-only hash chain (`key_log`); clients verify the chain at boot, the head stamp goes into the profile for out-of-band comparison. Signing keys are distributed from the log too — only chain-proven records feed signature verification |
+| Own-message shortcut (Phase 1 hotfix) | `chatStore`/`dmChatStore` `toDisplay` uses the in-RAM `authStore.signPublicKey` for our own messages (`resolveSignKeys`) — own messages decode without waiting for key-transparency sync. Others still require chain proof; the model is intact. |
+| Keylog gossip | every client publishes its verified head to its communities over WS every 5 min; same id with a different hash = fork proof → red banner. The server is an opaque relay (no storage/interpretation) — the invariant holds. No full CONIKS proof tree: observational; out-of-band stamp comparison remains the strongest proof |
 
-> **Bilinen sınırların güncel ve sınıflandırılmış hâli** (KAPATILDI / KISMEN / AYNI / GELECEK etiketleriyle) [aşağıda](#tehdit-modeli-ve-bilinen-sınırlar) ayrı bölümde. Oturum httpOnly+SameSite=Strict çerezle taşınır (XSS çalamaz), CSP/HSTS dahil; TLS için `docker-compose.tls.yml` overlay'i hazır — ağ üzerinden erişimde mutlaka kullan.
+> **The current, classified list of known limits** (labels: CLOSED / PARTIAL /
+> SAME / FUTURE) lives in the [Turkish README's threat model](README.md#tehdit-modeli-ve-bilinen-sınırlar).
+> Sessions ride an httpOnly+SameSite=Strict cookie (XSS cannot steal it),
+> CSP/HSTS included; use the `docker-compose.tls.yml` overlay for any
+> network-facing access.
 
-## Mimari
+## Architecture
 
 ```
 posta-guvercini/
-├── server/   Node 22 + Fastify + SQLite — Bearer auth, WS (/ws), LiveKit token
-│             (çok aşamalı Dockerfile: tsc derlemesi + node dist)
-├── web/      React 19 + Vite + Tailwind — tüm kripto tarayıcıda (libsodium, hash-wasm)
-│             (Dockerfile: vite build → nginx; /api ve /ws reverse proxy)
-└── livekit/  LiveKit SFU (Docker) — medyayı çözmeden iletir
+├── server/   Node 22 + Fastify + SQLite — Bearer auth, WS (/ws), LiveKit tokens
+│             (multi-stage Dockerfile: tsc build + node dist)
+├── web/      React 19 + Vite + Tailwind — all crypto in the browser
+│             (libsodium, hash-wasm; Dockerfile: vite build → nginx;
+│             /api and /ws reverse-proxied)
+└── livekit/  LiveKit SFU (Docker) — relays media without decoding it
 ```
 
-## Deploy (tek komut)
+## Deploy (one command)
 
 ```bash
-cp .env.example .env          # isteğe göre düzenle (aşağıda)
+cp .env.example .env          # edit to taste (below)
 docker compose up -d --build  # livekit + server + web
 ```
 
-- Web arayüzü: `http://<sunucu-ip>/` (port `.env` → `WEB_PORT`)
-- Doğrulama: `curl http://localhost/api/health` → `{"ok":true}`
-- Veritabanı: `./data/` volume — yedekle/sil, her şey orada
+- Web UI: `http://<server-ip>/` (port via `.env` → `WEB_PORT`)
+- Verify: `curl http://localhost/api/health` → `{"ok":true}`
+- Database: `./data/` volume — back it up or delete it, everything is there
 
-### Doğrulama: JS integrity (release manifest)
+### Verifying JS integrity (release manifest)
 
-Web JS'i sunucudan dağıtılır; kötü bir sunucu değişmiş JS ile anahtar çalabilir
-(bkz. [Tehdit modeli](#tehdit-modeli-ve-bilinen-sınırlar)). Bu sınır
-**azaltılır**: her `v*` tag'inde CI, web bundle'ın SHA-256 manifest'ini GitHub
-Release asset'i olarak yayınlar — `INTEGRITY.txt` (`sha256sum -c` biçimi) ve
-`INTEGRITY.sri.txt` (SRI: `sha256-<base64>`, `integrity=""` özniteliği için).
-Kendi sunucunun yaydığı dosyaları manifestle karşılaştır:
+The web JS is served by your server; a malicious server could serve altered
+JS to steal keys (see the threat model). This is **mitigated**: on every
+`v*` tag, CI publishes a SHA-256 manifest of the web bundle as a GitHub
+Release asset — `INTEGRITY.txt` (`sha256sum -c` format) and
+`INTEGRITY.sri.txt` (SRI: `sha256-<base64>`, for `integrity=""` attributes).
+Compare what your server serves against the manifest:
 
 ```bash
-TAG=vX.Y.Z                                        # GitHub Releases'deki tag
+TAG=vX.Y.Z                                        # tag from GitHub Releases
 BASE=https://github.com/yucOx/postacim/releases/download/$TAG
 
-# 1) Manifest'i GitHub'dan al — sunucundan DEĞİL (bant dışı kanal şart)
+# 1) Fetch the manifest from GitHub — NOT from your server (out-of-band required)
 curl -fsSLO "$BASE/INTEGRITY.txt"
 
-# 2) Sunucunun yaydığı her dosyayı manifest listesine göre indir
+# 2) Download every file your server serves, per the manifest list
 mkdir -p dist-check && cd dist-check
 while read -r _ path; do
     mkdir -p "$(dirname "$path")"
-    curl -fsS "https://<sunucunuz>/${path#./}" -o "$path"
+    curl -fsS "https://<your-server>/${path#./}" -o "$path"
 done < ../INTEGRITY.txt
 
-# 3) Karşılaştır — tüm satırlar OK olmalı
+# 3) Compare — every line must be OK
 sha256sum -c ../INTEGRITY.txt
 ```
 
-- `FAILED` satırı, sunucunun release derlemesinden farklı (veya değiştirilmiş)
-  JS yaydığını gösterir.
-- `INTEGRITY.sri.txt`, dosyaları başka bir origin'den
-  `<script integrity="...">` ile yükleyenler içindir.
-- Kendi fork'unu derleyenler aynı listeyi `npm run integrity` ile yerelde
-  üretip kendi derlemesini doğrular.
+- A `FAILED` line means your server serves JS that differs from the release
+  build (or was altered).
+- `INTEGRITY.sri.txt` is for loading files from another origin with
+  `<script integrity="...">`.
+- Fork builders can generate the same list locally with `npm run integrity`.
 
-**Dürüst sınır:** bu karşılaştırma JS trust'ı azaltır, kapatmaz. Kötü sunucu
-manifest'i de değiştirebilir — sunucudan gelen bir manifest kanıt değildir;
-karşılaştırma manifest'i GitHub Release üzerinden alarak yapılmalı. Derleme
-reproducible değildir: manifest belirli bir release derlemesine aittir, aynı
-kaynağın iki ortamda bit-bit aynı çıktısı garanti edilmez. Tarayıcı uzantısı
-(manifest v3, yalnız hash kontrolü) opsiyonel artı olarak roadmap'te durur —
-karar kullanıcıda.
+**Honest limit:** the comparison reduces JS trust, it does not close it. A
+malicious server can also alter the manifest — a manifest served *by the
+server* proves nothing; fetch it from the GitHub Release. Builds are not
+reproducible: the manifest belongs to one specific release build. A browser
+extension (manifest v3, hash-check only) remains an optional extra on the
+roadmap — your call.
 
-### Prod VPS: state'i repodan ayır (önerilen)
+### Production VPS: keep state out of the repo (recommended)
 
-Public sunucuda gerçek secret'lar (`LIVEKIT_SECRET`, `node_ip`) repoya
-girmez — gitignored `.env` ve `livekit/livekit.yaml`, `/etc/postacim/`
-altında tutulur, her `git pull` sonrası post-merge hook otomatik restore
-eder:
+Real secrets (`LIVEKIT_SECRET`, `node_ip`) never enter the repo on a public
+server — gitignored `.env` and `livekit/livekit.yaml` live under
+`/etc/postacim/`, and a post-merge hook restores them after every
+`git pull`:
 
 ```bash
 sudo cp .env.example /etc/postacim/.env && sudo chmod 600 /etc/postacim/.env
 sudo cp livekit/livekit.yaml.example /etc/postacim/livekit.yaml
-# /etc/postacim/* dosyalarını kendi değerlerinle düzenle, sonra:
-bash scripts/deploy-state.sh restore   # state'i repoya kopyala + diff raporu
+# edit /etc/postacim/* with your values, then:
+bash scripts/deploy-state.sh restore   # copy state into the repo + diff report
 docker compose up -d --build
 ```
 
-- `scripts/deploy-state.sh status|diff|restore` — state kontrolü,
-  `.env.example` ile alan farkı raporu (yeni env alanı geldiğinde uyarır)
-- Post-merge hook kurulumu ve sıfırdan VPS kurulumu:
+- `scripts/deploy-state.sh status|diff|restore` — state checks and a field
+  diff against `.env.example` (warns when new env fields arrive)
+- Post-merge hook setup and a from-scratch VPS guide:
   [deploy/vps-fresh-install.md](deploy/vps-fresh-install.md)
 
-**`.env` ayarları:**
-- `LIVEKIT_URL` — tarayıcının LiveKit'e ulaşabildiği adres. Web proxy'si `/livekit`
-  yolunu SFU'ya ilettiği için aynı origin kullanılır: sunucu makinesinde
-  `http://localhost/livekit`; LAN erişimi için `http://<sunucu-ip>/livekit`
-  (TLS modunda `https://<sunucu-ip>/livekit`).
-- `LIVEKIT_API_KEY` / `LIVEKIT_SECRET` — LiveKit ile server'ın ortak anahtarı;
-  prod için güçlü çift üret: `docker run --rm livekit/livekit-server:v1.13.1 generate-keys`
-  (bilinen örnek değerlerde sunucu açılmayı reddeder)
-- `WEB_PORT` — web'in yayın portu (default 8080)
-- `SCREEN_SHARE` — `off` yapılırsa ses token'larından ekran paylaşım izni
-  (`screen_share` publish kaynağı) düşer: istemci UI'ı yine de görebilir ama
-  yayın LiveKit'te fiziksel olarak reddedilir. Acil durum kill switch'i —
-  değiştirince yalnız `docker compose up -d server` yeniden başlatmak yeter.
+**`.env` settings:**
+- `LIVEKIT_URL` — the address the browser uses to reach LiveKit. The web
+  proxy forwards the `/livekit` path to the SFU, so the same origin works:
+  `http://localhost/livekit` on the server itself; `http://<server-ip>/livekit`
+  for LAN access (`https://…` in TLS mode).
+- `LIVEKIT_API_KEY` / `LIVEKIT_SECRET` — the shared key between LiveKit and
+  the server; generate a strong pair for prod:
+  `docker run --rm livekit/livekit-server:v1.13.1 generate-keys`
+  (the server refuses to boot on the known example values)
+- `WEB_PORT` — published web port (default 8080)
+- `SCREEN_SHARE` — set to `off` to drop the screen-share permission
+  (`screen_share` publish source) from voice tokens: the client UI may still
+  show it, but publishing is physically refused by LiveKit. An emergency
+  kill switch — after changing it, `docker compose up -d server` is enough.
 
-### Medya: kalite, limitler ve optimizasyon
+### Media: quality, limits and tuning
 
-İstemci tarafı (tarayıcıda çalışır, sunucu transcode yapmaz — SFU yalnız iletir):
+Client-side (runs in the browser; the server never transcodes — the SFU
+only forwards):
 
-- **Simulcast + Dynacast + AdaptiveStream** (`voiceStore.connectRoom`): gönderici
-  2-3 kalite katmanı basar; SFU her izleyiciye yalnız bant genişliğine ve tile
-  boyutuna uyan katmanı yollar, kimse izlemiyorsa katman durur (Discord'un Go
-  Live mimarisiyle aynı üçlü).
-- **Ekran paylaşımı VP9** codec'li: metin/UI içeriği VP8'e göre ~yarı bitratete
-  aynı netlik taşır. Kamera VP8 kalır (tarayıcı VP9 simulcast desteği zayıf).
-  E2EE (SFrame) codec-agnostiktir — paketlemeden önce şifreler.
-- **`contentHint`**: ekran track'ine `detail` (netlik koru), kameraya `motion`
-  (akıcılık koru) — tarayıcı encoder'ına ücretsiz ipucu.
-- **Kalite katmanları** (kalite seçici: hızlı/dengeli/yüksek) `degradationPreference`
-  ile: hızlı kare hızı koruyup çözünürlükten, yüksek çözünürlük koruyup kareden
-  kırpılır. Yayın diyaloğu tavanı 1080p30 (1440p bilinçli kapalı — tek yayıncı
-  küçük SFU'yu doldurabilir), varsayılan 720p30.
-- **TEST AŞAMASI: kamera 720p tavanlı** — 'yüksek' katman farkı yalnız ekran
-  paylaşımında (1080p30). Kapasite oturunca `voiceStore.qualityTiers`'da
-  `yuksek.camCapture/camPublish` `VideoPresets.h1080`'e döndürülür; UI'daki
-  "1080p ileride açılır" notu (`call.cam720Note`) o zaman kaldırılır.
+- **Simulcast + Dynacast + AdaptiveStream** (`voiceStore.connectRoom`): the
+  sender publishes 2-3 quality layers; the SFU forwards each viewer only the
+  layer matching their bandwidth and tile size, and layers stop when nobody
+  watches (the same trio as Discord's Go Live architecture).
+- **Screen share is VP9**: text/UI content carries the same sharpness at
+  roughly half the bitrate of VP8. Camera stays VP8 (browser VP9 simulcast
+  support is weak). E2EE (SFrame) is codec-agnostic — it encrypts before
+  packetization.
+- **`contentHint`**: `detail` (keep sharpness) on screen tracks, `motion`
+  (keep smoothness) on camera — a free hint to the browser encoder.
+- **Quality tiers** (picker: fast/balanced/high) via
+  `degradationPreference`: fast sheds resolution before frames, high sheds
+  frames before resolution. The Go Live dialog caps at 1080p30 (1440p
+  deliberately off — a single publisher could saturate a small SFU),
+  default 720p30.
+- **TEST STAGE: camera capped at 720p** — the 'high' tier differs only in
+  screen share (1080p30). When capacity settles, `yuksek.camCapture/camPublish`
+  in `voiceStore.qualityTiers` return to `VideoPresets.h1080`; the
+  "1080p coming later" UI note (`call.cam720Note`) is removed then.
 
-Sunucu tarafı (token ile zorlanır — UI'ı aşamaz):
+Server-side (enforced via tokens — cannot be bypassed from the UI):
 
-- **Oda limitleri** her ses token'ına gömülü (`RoomConfiguration`): oda başına
-  12 katılımcı (2 vCPU/3 GB hedefi, 12×11=132 downtrack), boşalan oda
-  5 dakikada kapanır. Yük artarsa önce `maxParticipants` düşürülür, sonra
-  LiveKit ayrı host'a taşınır.
-- **`SCREEN_SHARE=off`** kill switch (yukarıda) — token grant seviyesinde.
-- E2EE (SFrame) stream başına ~%10 encoder/decoder CPU maliyeti koyar; gizlilik
-  vaadinin bilinçli bedelidir, kaldırılamaz.
+- **Room limits** embedded in every voice token (`RoomConfiguration`): 12
+  participants per room (2 vCPU/3 GB target, 12×11=132 downtracks), empty
+  rooms close after 5 minutes. Under load, lower `maxParticipants` first,
+  then move LiveKit to its own host.
+- **`SCREEN_SHARE=off`** kill switch (above) — at the token-grant level.
+- E2EE (SFrame) costs ~10% encoder/decoder CPU per stream — the deliberate
+  price of the privacy promise, not removable.
 
-### 2 vCPU / 3 GB hedef optimizasyonları
+### Tuning for the 2 vCPU / 3 GB target
 
-2 vCPU/3 GB RAM VPS'te 50-80 ses → 120-150 ses, 30-50 video → 60-80 video:
+On a 2 vCPU/3 GB VPS: 50-80 → 120-150 voice, 30-50 → 60-80 video:
 
-- **CPU pinning** (`docker-compose.yml` `cpuset: "0"`/`"1"`) — LiveKit core 0,
-  server core 1; context switch + cache miss sıfır, %15-25 throughput artışı
-- **WS broadcast batching** (`server/src/ws/hub.ts`, 16 ms tick + dedup) — 50 kişilik
-  odada 2500 broadcast/sn yerine ~800 broadcast/sn
-- **LOG_LEVEL=warn** (`.env` + `server/src/index.ts`) — JSON serialize + I/O %5-10 azalır
-- **Publisher cap 1.5 Mbps** (`web/src/state/voiceStore.ts` `publishDefaults.videoEncoding.maxBitrate`)
-  — 4K yayınlayan encoder 1.5 Mbps'ye sıkışır, SFU CPU korunur; gizlilik etkisi yok
-  (SFrame zaten içeriği şifreli)
-- **Netdata prod'da kapalı** (`docker-compose.yml` `profiles: [monitoring]`) — 50-100 MB RAM
-  kurtarır; geliştirme için `docker compose --profile monitoring up -d`
-- **TURN açık** (global kitle, 4G/CGNAT erişim için) — E2EE sayesinde gizlilik etkisi yok
-  (TURN operatörü sadece metadata görür, içerik göremez)
+- **CPU pinning** (`docker-compose.yml` `cpuset: "0"`/`"1"`) — LiveKit on
+  core 0, server on core 1; zero context-switch + cache-miss overhead,
+  15-25% throughput
+- **WS broadcast batching** (`server/src/ws/hub.ts`, 16 ms tick + dedup) —
+  ~800 broadcasts/s instead of 2500/s in a 50-person room
+- **LOG_LEVEL=warn** (`.env` + `server/src/index.ts`) — 5-10% less JSON
+  serialization + I/O
+- **Publisher cap 1.5 Mbps** (`web/src/state/voiceStore.ts`
+  `publishDefaults.videoEncoding.maxBitrate`) — a 4K publisher gets squeezed
+  to 1.5 Mbps, protecting SFU CPU; no privacy impact (SFrame already
+  encrypts content)
+- **Netdata off in prod** (`docker-compose.yml` `profiles: [monitoring]`) —
+  frees 50-100 MB RAM; for development:
+  `docker compose --profile monitoring up -d`
+- **TURN enabled** (global reach, 4G/CGNAT access) — no privacy impact with
+  E2EE (the TURN operator sees metadata only, never content)
 
-> LiveKit v1.13.x server'da `publisher_max_bitrate` ve `simulcast_layers` alanları
-> **yok** (v2.x'te eklendi); bu yüzden uplink sınırı ve simulcast **client tarafında**
-> uygulanır (publishDefaults + adaptiveStream + dynacast).
+> LiveKit server v1.13.x has no `publisher_max_bitrate` or
+> `simulcast_layers` fields (added in v2.x); hence the uplink cap and
+> simulcast are applied **client-side** (publishDefaults + adaptiveStream +
+> dynacast).
 
-### Arayüz dili (i18n)
+### Interface language (i18n)
 
-5 dil: Türkçe, İngilizce, Almanca, Fransızca, İspanyolca. İlk açılışta tarayıcı
-diline bakılır (`tr*` → Türkçe, diğerleri → İngilizce); seçim localStorage'da
-saklanır, dil seçiciye giriş ekranının sağ üstünden ve üst başlıktaki dünya
-ikonundan erişilir. Yeni dil eklemek: `web/src/i18n/types.ts` union'ına kod,
-`locales/<kod>.ts` katalog dosyası; anahtar eksikliği `locale-parity` testini
-kırdığı için CI'da yakalanır.
+5 languages: Turkish, English, German, French, Spanish. First load follows
+the browser language (`tr*` → Turkish, others → English); the choice is
+kept in localStorage; the picker is at the top-right of the login screen
+and behind the globe icon in the header. Adding a language: add the code to
+the `web/src/i18n/types.ts` union and a `locales/<code>.ts` catalog; a
+missing key breaks the `locale-parity` test, so CI catches it.
 
-Güncelleme: `./scripts/deploy.sh` (build + up + livekit restart + health
-kontrolleri tek komut; `.env` yoksa üretir, anahtar çiftini basar). Eşdeğeri:
-`git pull && docker compose up -d --build`.
+Updates: `./scripts/deploy.sh` (build + up + livekit restart + health
+checks in one command; generates `.env` and prints a key pair if missing).
+Equivalent: `git pull && docker compose up -d --build`.
 
-### Host nginx + certbot (elle kurulum, compose dışı)
+### Host nginx + certbot (manual, outside compose)
 
-Varsayılan mod: docker servisleri yalnız `127.0.0.1`'de yayınlanır (`web` →
-`127.0.0.1:8080`, `server` → `127.0.0.1:4000`); dış dünyaya tek giriş host
-nginx'tir (`deploy/nginx-postacim.conf` — kurulum adımları dosyanın başında).
-XFF'yi yazan tek yer host nginx'tir (`$remote_addr` overwrite) — server
-`trustProxy:true` leftmost okuduğu için forged XFF rate-limit'i aşamaz.
+Default mode: docker services publish only on `127.0.0.1` (`web` →
+`127.0.0.1:8080`, `server` → `127.0.0.1:4000`); the single entry point to
+the outside world is the host nginx (`deploy/nginx-postacim.conf` — setup
+steps at the top of the file). The host nginx is the only place writing XFF
+(`$remote_addr` overwrite) — the server reads leftmost with
+`trustProxy:true`, so forged XFF cannot bypass rate limits.
 
 ```bash
 sudo cp deploy/nginx-postacim.conf /etc/nginx/sites-available/postacim
 sudo ln -s /etc/nginx/sites-available/postacim /etc/nginx/sites-enabled/
-# server_name'i düzenle, sonra:
+# edit server_name, then:
 sudo nginx -t && sudo systemctl reload nginx
 sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d postacim.example.com   # 443 + redirect otomatik
+sudo certbot --nginx -d postacim.example.com   # 443 + redirect automatic
 ```
 
-Host nginx'siz hızlı LAN modu: `.env`'de `WEB_HOST=0.0.0.0` — bu modda docker
-web'in nginx'i XFF'yi kendisi yazar, internete doğrudan açma.
+Quick LAN mode without host nginx: `WEB_HOST=0.0.0.0` in `.env` — here
+docker-web's own nginx writes XFF; do not expose this to the internet
+directly.
 
-**Not:** `livekit/livekit.yaml` gitignored state'tir (şablon:
-`livekit/livekit.yaml.example`; prod'da `/etc/postacim/livekit.yaml`) ve
-bind-mount'tur; livekit servisi image'dan koştuğu için `up -d --build`
-config değişince onu **yeniden başlatmaz** — livekit config'ine dokunan
-güncellemelerden (ör. `prometheus_port`) sonra ayrıca
-`docker compose restart livekit` çalıştır.
+**Note:** `livekit/livekit.yaml` is gitignored state (template:
+`livekit/livekit.yaml.example`; in prod `/etc/postacim/livekit.yaml`) and
+bind-mounted; since the livekit service runs from its image, `up -d --build`
+does **not** restart it when the config changes — after updates touching
+livekit config (e.g. `prometheus_port`), also run
+`docker compose restart livekit`.
 
-### İzleme (kapasite takibi)
+### Monitoring (capacity tracking)
 
-Üç katman; "kaç kişi kaldırdığını" bilmek için hepsi birbirini tamamlar:
+Three layers; they complement each other for "how many people are calling":
 
-1. **Uygulama sayaçları** — `GET /api/stats` (oturum gerekli, yalnız toplam
-   sayılar): kayıtlı kullanıcı, son 24 saatte açılan oturum, açık WS bağlantısı,
-   sesli peer, aktif DM araması, SFU oda + katılımcı sayısı. Kapasite merdiveni:
-   ~40 eşzamanlı görüşme → rahat; ~60 → varsayılan kaliteyi düşür; ~80+ →
-   LiveKit'i ayrı host'a taşı.
-2. **LiveKit metrikleri** — `livekit.yaml`'da `prometheus_port: 6789` açık;
-   `curl localhost:6789/metrics` (yalnız localhost — dışarıya açma). Track,
-   oda, bayt ve paket sayaçları.
-3. **Makine metrikleri (Netdata, opsiyonel)** — compose profili, grafik
-   dashboard'u: `docker compose --profile monitoring up -d` →
-   `http://localhost:19999` (**yalnız 127.0.0.1'e bağlı** — dış erişim yok).
-   2 vCPU/3 GB prod hedefinde varsayılan kapalıdır (~50-100 MB RAM). Uzaktan
-   bakmak için SSH tüneli:
-   `ssh -L 19999:localhost:19999 <sunucu>`. CPU, RAM, disk IO, ağ ve tüm
-   Docker container'ları saniye bazında; eşik alarmı Netdata ayarlarından
-   (ör. CPU %70 → Discord webhook) bağlanır. Sistem içlerini ifşa ettiği
-   için **domain'e asla açıkta oturtma** — auth'suz subdomain bile olmasın.
+1. **App counters** — `GET /api/stats` (session required, totals only):
+   registered users, sessions opened in the last 24 h, open WS connections,
+   voice peers, active DM calls, SFU rooms + participants. Capacity ladder:
+   ~40 concurrent calls → comfortable; ~60 → lower default quality; ~80+ →
+   move LiveKit to its own host.
+2. **LiveKit metrics** — `prometheus_port: 6789` enabled in
+   `livekit.yaml`; `curl localhost:6789/metrics` (localhost only — do not
+   expose). Track, room, byte and packet counters.
+3. **Machine metrics (Netdata, optional)** — compose profile, graphical
+   dashboard: `docker compose --profile monitoring up -d` →
+   `http://localhost:19999` (**bound to 127.0.0.1 only** — no outside
+   access). Off by default on the 2 vCPU/3 GB prod target (~50-100 MB RAM).
+   To inspect remotely, tunnel: `ssh -L 19999:localhost:19999 <server>`.
+   CPU, RAM, disk IO, network and every Docker container per second;
+   threshold alerts connect in the Netdata settings (e.g. CPU 70% →
+   Discord webhook). Because it exposes system internals, **never host it
+   on a public domain** — not even an unauthenticated subdomain.
 
 ### HTTPS/WSS (TLS overlay)
 
-Ağ üzerinde şifrelenmemiş bağlantı `auth_material` + oturum çerezini taşır — gizlilik
-ürününde TLS şart. Self-signed ile (kendi LAN'ında):
+An unencrypted connection on the wire carries `auth_material` + the session
+cookie — TLS is mandatory for a privacy product. Self-signed on your LAN:
 
 ```bash
-cp .env.example .env                      # anahtar çiftini üret/gir (yukarıda)
-./scripts/gen-certs.sh                    # certs/ altına localhost + makine IP'li sertifika
-# .env içinde: LIVEKIT_URL=https://<makine-adı-veya-ip>/livekit
+cp .env.example .env                      # generate/enter the key pair (above)
+./scripts/gen-certs.sh                    # certs/ with localhost + machine-IP cert
+# in .env: LIVEKIT_URL=https://<machine-name-or-ip>/livekit
 docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
 ```
 
-- 80 → 443 yönlendirme, HSTS, CSP ve diğer güvenlik başlıkları nginx'de hazır
-- Doğrulama: `curl -skI https://localhost/ | grep -i strict-transport`
-- LiveKit sinyali de (`/livekit` → WSS) aynı sertifika üzerinden proxylanır; medya
-  zaten DTLS/SRTP ile şifreli
-- Herkese açık dağıtımda self-signed yeterli değildir — Let's Encrypt gibi gerçek
-  sertifika kullan (`certs/` yerine mount et)
+- 80 → 443 redirect, HSTS, CSP and other security headers ready in nginx
+- Verify: `curl -skI https://localhost/ | grep -i strict-transport`
+- The LiveKit signal path (`/livekit` → WSS) is proxied over the same
+  certificate; media is DTLS/SRTP encrypted anyway
+- Self-signed is not enough for a public deployment — use a real
+  certificate (Let's Encrypt), mounted instead of `certs/`
 
-## Masaüstü Uygulaması
+## Desktop App
 
-Kod ayrı repoda: **[yucOx/postacim-cli](https://github.com/yucOx/postacim-cli)** — Electron sarmalayıcı, ince istemci (web uygulaması sunucudan yüklenir, Discord modeli). Tepsiye gizlenme, okunmamış sayacı, http LAN'da secure-context muafiyeti, ekran/pencere kaynak seçici, otomatik güncelleme, sistemle başlatma. Sürümler `desktop-v*` etiketinde AppImage + deb + exe + dmg olarak CI'dan yayınlanır.
+The code lives in a separate repo: yucOx/postacim-cli — an Electron
+wrapper, a thin client (the web app is loaded from the server, the Discord
+model). Hide-to-tray, unread counter, secure-context exemption on http
+LAN, screen/window source picker, auto-update, launch at system startup.
+Releases are published from CI as AppImage + deb + exe + dmg under the
+`desktop-v*` tag.
 
-## Geliştirme (konteynersiz)
+## Development (without containers)
 
-Gereksinimler: Node 22+, Docker.
+Requirements: Node 22+, Docker.
 
 ```bash
 npm install
-docker compose up -d livekit      # yalnız LiveKit (localhost:7880)
+docker compose up -d livekit      # LiveKit only (localhost:7880)
 npm -w server run dev             # API  (localhost:4000)
 npm -w web run dev                # Web  (localhost:5173)
 ```
 
-Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
+Verify: `curl localhost:4000/api/health` → `{"ok":true}`
 
-## Otomatik testler
+## Automated tests
 
 ```bash
-npm test    # 326 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 326 tests: crypto/client unit + black-box integration (temp server + temp DB)
 ```
 
-- `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
-- `web/src/crypto/fingerprint.test.ts` — safety number simetrisi, bilinen vektörler (v1 X25519 + v2 imza anahtarı katkılı), biçim
-- `web/src/crypto/signature.test.ts` — gönderen atfı: imza doğrulama, sahte gönderici reddi, ciphertext/AAD modifiye reddi, bilinmeyen imza anahtarı reddi, cutover geçiş davranışı, imza düşürme (downgrade) reddi
-- `web/src/csp.test.ts` — nginx CSP'nin WASM kripto uyumu (wasm-unsafe-eval), HSTS yalnız TLS conf'da
-- `web/src/lib/replay.test.ts` — client_id tekrar oynatma filtresi (aynı kanalda yinelenen id reddi)
-- `web/src/lib/safety.test.ts` — safety number sıra bağımsızlığı/biçim
-- `server/test/auth.test.ts` — kayıt/giriş, IP başına limitler, httpOnly çerez (+ Secure bayrağı TLS arkasında) + WS çerez auth, logout iptali, şifre değişimi oturum düşürme, BIP-39 kurtarma döngüsü
-- `server/test/messages.test.ts` — geçmiş sayfalama imleci, kullanıcı başına (IP değil) gönderim limiti, rotate kadro doğrulaması
-- `server/test/moderation.test.ts` — roller, kick→dondur→rotate, ban, kanal limiti
-- `server/test/join.test.ts` — açık/hedefli davet, süre/kullanım limiti, başvurular, katılım şifresi
-- `server/test/social.test.ts` — arkadaşlık, DM, grup DM rekey, WS canlı olay + sesli durum yayını
-- `server/test/dmvoice.test.ts` — DM arama presence (`dm:voice`): duyuru peer'a gider, bayat yanlış-kanal kapatması yok sayılır, üye olmayan yayınlayamaz, register anlık görüntüsü (F5)
-- `server/test/boot.test.ts` — zayıf secret reddi, taze DB migration zinciri
-- `web/src/crypto/ratchet.test.ts` — per-gönderici ratchet: zincir tek yönlülüğü, index/AAD reddi, stateless yeniden türetim, out-of-order
-- `web/src/crypto/dh-ratchet.test.ts` — DH ratchet (v4): KAT vektörleri (`dh-ratchet.vectors.json`), FS/PCS-lite sızıntı simülasyonu (gönderici state sızıntısı → eski adım kapalı, sonraki adım güvenli), adım içi backward secrecy, out-of-order, tarama sınırı, AAD/imza/başlık takası negatifleri, self-update doğrulama, 5c: epok DH çapası (kanal/gdm roundtrip) + rekey broadcast negatifleri (atılan üye broadcast'i yakalasa da geleceği açamaz), 5d: ses anahtarı türetimi (çapa/DM KAT, iki tarafın aynı anahtarı, epok ayrımı, mesaj zincirinden alan ayrımı)
-- `web/src/lib/dhupdate.test.ts` — self-update duyuru işleme: kanon ayrıştırma, yanlış Ed25519/bozuk kanon reddi, kanal/epok bağlama, TOFU pin, bant eşlemesi (yalnız imza red bant tetikler)
-- `server/test/dhupdate.test.ts` — WS `dh_update` opak relay: kanal/gdm/dm kitlesi, üye olmayan reddi, sığ payload sınırı, plaintext invariant (satır/tablo oluşmaz), relay→ingest uçtan uca (geçerli + bozuk imza)
-- `web/src/crypto/devicekey.test.ts` — cihaz kilidi: blob sar/çöz, yanlış KEK/AAD reddi, enroll→unlock, PRF fallback
-- `web/src/crypto/identity.test.ts` — v3 kimlik blob'u: deviceId ile seal+open, v1/v2 geriye uyumlu açılış, yanlış KEK reddi
-- `web/src/lib/dhstep-device.test.ts` — per-cihaz DH step namespace: aynı (channel, version) farklı deviceId = ayrı sayaç, pencere mantığı deviceId-bağımsız
-- `web/src/lib/keytransparency.test.ts` — anahtar defteri: zincir bütünlüğü, kopuk/çelişkili head reddi, kendi kayıt kontrolü
-- `server/test/hardening.test.ts` — log hijyeni (query/IP düşmez), WS auth zaman aşımı (4004), login kademeli bloğu
-- `server/test/keylog.test.ts` — anahtar defteri: genesis/kuyruk hash, sayfalama, silinen hesabın satırı kalır, UPDATE/DELETE yolu yok
-- `server/test/devices.test.ts` — cihaz yönetimi: GET liste, link 3-adım flow (start/approve/finish), primary iptal reddi, joinee iptal, token tek kullanımlık, başka user cihazı iptal 404
-- `server/test/delete.test.ts` — hesap silme: kimlik/mesaj/DM/grup/topluluk tek transaction, kurucu devri
-- `.github/workflows/ci.yml` — push/PR'da tip kontrolü + tüm testler
+Covering: AEAD/AAD binding, identity wrapping, BIP-39 checksum, invite link
+parsing, sender-attribution signatures (forgery/modification rejection),
+WS replay filter, per-sender ratchet chain properties, DH ratchet (v4) KAT
+vectors + FS/PCS-lite leak simulations, `dh_update` self-update handling,
+device lock, v3 identity blobs, per-device DH step namespaces, key
+transparency chain verification, keylog gossip state machines, opaque WS
+relay invariants (server never persists plaintext), registration/login rate
+limits + httpOnly cookies, pagination cursors, moderation roles/ban/kick →
+freeze → rotate, open/targeted invites + join password, friends/DM/group
+DM rekey, DM call presence (`dm:voice`): announce reaches the peer, stale
+wrong-channel close ignored, non-member cannot announce, register
+snapshot (F5), live WS events, account deletion, weak-secret rejection and
+the fresh-DB migration chain. CI runs type checks + all tests on every
+push/PR.
 
-## Elle test (iki tarayıcı profili)
+## Manual test (two browser profiles)
 
-1. Profil A: kayıt ol (ör. `alice`) → topluluk oluştur → `genel` yazı odasına mesaj yaz
-2. Profil B: kayıt ol (`bob`) → Alice üye listesinden `+` ile bob'u ekle
-3. Bob otomatik topluluğu görür; iki taraf şifreli sohbet eder
-4. Sesli odaya tıkla → mikrofon/kamera izni → iki profil aynı odada E2EE görüşür
-5. Sahip bob'u çıkarır → kanallar rekey; bob yeni mesajları göremez
-6. Kanıt: `node -e "console.log(require('better-sqlite3')('data/posta.db',{readonly:true}).prepare('SELECT nonce,ciphertext FROM messages LIMIT 3').all())"` — yalnızca opak veri
+1. Profile A: register (say `alice`) → create a community → post in the
+   `genel` text channel
+2. Profile B: register (`bob`) → Alice adds bob via `+` in the member list
+3. Bob sees the community automatically; both chat encrypted
+4. Click the voice room → mic/camera permission → both profiles talk in
+   the same E2EE room
+5. The owner kicks bob → channels rekey; bob cannot read new messages
+6. Proof: `node -e "console.log(require('better-sqlite3')('data/posta.db',{readonly:true}).prepare('SELECT nonce,ciphertext FROM messages LIMIT 3').all())"` — opaque data only
 
-## Güvenlik notları
+## Security notes
 
-- Rate limit: kayıt 3/sa, giriş 5/dk, lookup/kdf-params 20/dk, mesaj 60/dk (kullanıcı+IP kovaları ayrı); pencere içi art arda başarısız girişte IP başına kademeli blok (1→15 dk, `LOGIN_FAIL_FREE`=10 serbest kredi)
-- Oturum token'ları DB'de sha256; 7 gün TTL (env ile ayarlanabilir); süresi geçenler saatlik janitor ile temizlenir
-- WS: ilk kare auth zorunlu (aksi halde 4001 ile kapanır; frame hiç gelmezse 10 sn'de 4004 ile kesilir), maxPayload 1 MiB, ping reaper
-- Uygulama logu URL'yi query'siz yazar — nick/istemci IP'si log'a düşmez (nginx access log'u ayrı, operatör kapatabilir)
-- Dev: localhost secure context; ağ erişimi için [TLS overlay](#httpswss-tls-overlay) — repo'da hazır
-- LiveKit anahtarları `.env` üzerinden livekit (`--keys`) ve server'a aynı anda dağıtılır — tek kaynak
+- Rate limits: registration 3/h, login 5/min, lookup/kdf-params 20/min,
+  messages 60/min (separate user+IP buckets); repeated failed logins inside
+  a window trigger a graduated per-IP block (1→15 min, `LOGIN_FAIL_FREE`=10
+  free credits)
+- Session tokens stored sha256 in the DB; 7-day TTL (env-tunable); expired
+  ones cleaned by an hourly janitor
+- WS: the first frame must be auth (else close 4001; no frame at all →
+  4004 after 10 s), maxPayload 1 MiB, ping reaper
+- App logs omit the URL query — nick/client IP never land in logs (the
+  nginx access log is separate; operators can turn it off)
+- Dev: localhost is a secure context; for network access use the
+  [TLS overlay](#httpswss-tls-overlay) — ready in the repo
+- LiveKit keys flow from `.env` into both livekit (`--keys`) and the
+  server — a single source
 
-## Tehdit modeli ve bilinen sınırlar
+## Threat model and known limits
 
-> v1.0.0 için sıfırdan sınıflandırma (Faz 8). Yol haritasının 6 boşluğu
-> (Faz 1–7) bu komut dizisiyle kapatıldı; kalan sınırlar aşağıda
-> **KAPATILDI / KISMEN / AYNI / GELECEK** etiketiyle dürüstçe ayrıldı.
-> Dış audit için paket: [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md).
+The full, honestly classified threat model — actors (malicious-server,
+passive/active network, on-device attacker), the fate of the six roadmap
+gaps (sender attribution, disappearing messages, IP metadata, web JS trust,
+forward secrecy, anti-forking) with CLOSED/PARTIAL/SAME/FUTURE labels and
+the evidence for each — plus the remaining structural limits (metadata,
+censorship/ordering, rate-limit anonymization, voice sender attribution,
+WebRTC vs Tor, no formal MLS, observational key transparency, MVP device
+linking) lives in the
+[Turkish README](README.md#tehdit-modeli-ve-bilinen-sınırlar) (the
+project's primary language). An external-audit package with the full
+crypto specification:
+[docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md).
 
-### Aktörler
+## Status
 
-- **Sunucu**: kör ama kötü niyetli olabilir (malicious-server model).
-  İçeriği görmez, **görmemesi gerektiğini** kanıtlayan invariant testle
-  sabit (`server/test/hardening.test.ts`).
-- **Ağ pasif dinleyici**: TLS overlay ile kapatılır
-  ([HTTPS/WSS](#httpswss-tls-overlay) — self-host için `docker-compose.tls.yml`).
-- **Ağ aktif (MITM)**: TLS + sertifika pin (tarayıcı CA deposu); onion
-  varyantı için [deploy/tor-hidden-service.md](deploy/tor-hidden-service.md).
-- **Cihaz üzerindeki saldırgan**: çalınmış tarayıcı, malware, fiziksel
-  erişim — kapsam dışı (SECURITY.md "Kapsam dışı").
+- [x] Phase 0 — skeleton
+- [x] Phase 1 — auth + identity blob (register/login, zero-knowledge)
+- [x] Phase 2 — community/channel/member + wrapped key distribution
+- [x] Phase 3 — E2EE text chat
+- [x] Phase 4 — LiveKit voice/video rooms (E2EE)
+- [x] Phase 5 — polish (rekey, password change, screen sharing)
+- [x] Packs A-D — roles/bans, invite links, applications, join password
+- [x] Packs E-G — friends, DM, group DM (rekeyed), 1:1 calls, unread state
+- [x] Sprints 1-4 — integrity hardening, TLS/HSTS+CSP, BIP-39 ritual,
+  hardening (padding + Trusted Types + log hygiene + WS timeout + graduated
+  login block + passkey + per-sender ratchet + key log)
+- [x] Security roadmap Phases 1-8 — signed messages, disappearing
+  messages, Tor guide, signed releases, DH ratchet (PCS-lite), key
+  transparency gossip, multi-device, audit readiness (v1.0.0)
+- [x] UI/UX pass — Discord-parity call layout: focus/grid + PiP, device
+  selection, event-based sounds (15 events), consent-based member adding,
+  community profile (today: 35 files, 326 tests)
 
-### 1. Roadmap boşluklarının akıbeti
+## Contributing
 
-| # | Boşluk (orijinal ifade) | Akıbet | Kanıt |
-|---|---|---|---|
-| 1 | Gönderen atfı kriptografik değil — `sender_id` sunucu kolonu | **KAPATILDI** (Faz 1) | `web/src/crypto/signature.test.ts` — imza doğrulama, sahte gönderici reddi, ciphertext/AAD modifiye reddi; cutover sonrası imzasız mesaj reddi |
-| 2 | Kaybolan mesajlar yok (UX/gizlilik beklentisi) | **KAPATILDI** (Faz 2) | `web/src/lib/ttl.test.ts` + `crypto/ttl-aad.test.ts` + `server/test/ttl.test.ts` — TTL seçici, AAD dışı, janitor tombstone, WS süresi geçen frame reddi; PRİVACY.md'ye metadata notu |
-| 3 | IP metadata (istemci/sunucu) | **KISMEN** (Faz 3 — rehber, kapanmaz) | `deploy/tor-hidden-service.md` — v3 onion + https-onion rehberi; istemci IP'si onion arkasında gizlenir, sunucu IP'si DNS/sertifika kayıtlarından çıkar; rehber uygulanmazsa sınır AYNI |
-| 4 | Web JS trust — kötü sunucu değişmiş JS ile anahtar çalabilir | **KISMEN** (Faz 4 — azaltım, kapanmaz) | `scripts/bundle-hashes.sh` + `.github/workflows/release.yml` — her `v*` tag'inde bundle SHA-256 + SRI manifest GitHub Release asset'i; [Doğrulama](#doğrulama-js-integrity-release-manifest); sınır AYNI: kötü sunucu manifest'i değiştirebilir (karşılaştırma bant dışı kanaldan) |
-| 5 | Forward secrecy kısmi — DH ratchet/MLS bekleyen kurul | **KAPATILDI** (Faz 5, **PCS-formel değil**) | `web/src/crypto/dh-ratchet.test.ts` — KAT vektörleri, FS/PCS-lite sızıntı simülasyonu, adım içi backward secrecy, out-of-order, self-update doğrulama, epok DH çapası + rekey broadcast negatifleri, ses anahtarı türetimi; spec: `docs/faz5-dh-ratchet-design.md` + `docs/faz5-ratchet-research.md` |
-| 6 | Tam anti-forking — istemciler arası gossip gerektirir | **KAPATILDI** (Faz 6, **gözlemsel**) | `web/src/lib/keygossip.test.ts` (4 durum makinesi) + `web/src/lib/keytransparency.test.ts` + `server/test/keygossip.test.ts` (relay invariant, sığ sınır, plaintext invariant); spec: `docs/faz6-keygossip-design.md`; sınır AYNI: CONIKS/Keybase MAP kanıt ağacı yok |
-| 7 | Tek kimlik blob'u (cihaz iptali yok) | **KAPATILDI** (Faz 7) | `web/src/crypto/identity.test.ts` (v3 blob) + `web/src/lib/dhstep-device.test.ts` (per-cihaz DH step) + `server/test/devices.test.ts` (12 link/revoke flow); spec: `docs/faz7-multidevice-design.md` |
+Development setup, test flow, i18n parity rule and PR expectations:
+[CONTRIBUTING.md](CONTRIBUTING.md) (Turkish). Code of conduct:
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security disclosure (private
+channel): [SECURITY.md](SECURITY.md) — please do not open security issues
+publicly.
 
-### 2. Kalan sınırlar (kapanmış boşluk değil — yapısal/kaynak kısıtı)
+## License
 
-- **Web JS trust kalıntısı (Faz 4 azaltımı sonrası)** — AYNI.
-  Kötü sunucu manifest'i de değiştirebilir; karşılaştırma manifest'i
-  bant dışı kanaldan (GitHub Release) almalı. Derleme reproducible
-  değil: manifest tek bir release derlemesine bağlı. Tarayıcı uzantısı
-  (manifest v3, yalnız hash kontrolü) opsiyonel artı — karar kullanıcıda.
-  (KEK memory-only: reload'da şifre yeniden istenir; opsiyonel passkey
-  cihaz kilidi blob'u cihaz donanımından türeyen anahtarla saklar —
-  zararlı JS ancak aktif WebAuthn onayıyla kullanır.)
-- **Tor rehberi opsiyonel (Faz 3)** — AYNI. Sunucu operatörü rehberi
-  uygulamazsa istemci/sunucu IP'si açık. Onion varyantı düz http'de
-  `Secure=false` çerez üretir (karar rehberde yazılı).
-- **Rate-limit anonimleştirme** — AYNI (Faz 3'te keşfedilen yapısal sınır).
-  Anonim istekler IP kovasına düşer; onion arkasında tüm kullanıcılar
-  tek kova → birbirini sınırlandırır (kayıt 3/sa, giriş 5/dk).
-  `trustProxy:true` + nginx `$remote_addr` overwrite ile XFF spoof
-  kapatıldı; onion arkasında IP anonimdir ama ortak kova nedeniyle
-  bireysel hedefleme zorlaşır (yan etki: aynı çıkış düğümündeki
-  anonimler birbirini yavaşlatır). TURN açıkken TURN operatörü IP
-  eşlemesi görebilir — E2EE içerik gizli kalır, metadata görünür.
-- **Sansür/sıralama** — AYNI. Kör sunucu mesaj gizleyebilir, sıralamayı
-  ve timestamp'i manipüle edebilir. Client binding (UUID + client
-  timestamp) AAD'ye bağlı → tespit edilebilir, engellenemez.
-- **Metadata** — AYNI. Sosyal graf (kim kiminle), zamanlama, mesaj
-  boyutu (bucket padding'iyle seviyesi indirilir), presence, çağrı
-  katılım/mute durumu, topluluk/kanal/üye listesi, roller, davet
-  metadata'sı sunucuda görünür. Kaybolan mesajların `expires_at`'ı
-  içerik değil ama ömür bilgisi (PRIVACY.md'ye yazıldı).
-- **MLS-formel yok** — GELECEK tetikleyicisi. Şu an PCS-lite
-  (per-sender DH + epok rekey penceresi M=100 / T=24h + self-update
-  + cihaz iptali = rekey). Rekey/self-update frekansı toparlanma
-  penceresini sınırlar; alıcı kimlik private'ı sızarsa gözlemlenen
-  mesajlar açılır (stateless türetimin bedeli). `dh_update` duyurusu
-  Ed25519 imzalı, TOFU pin, WS opak relay. Kanal/gdm'de epok anahtarı
-  sızarsa o epoğun zinciri + çapası baştan türetilebilir; DM'de
-  (5b hotfix) sıralı (sender, peer) çiftinden türetilen DM çapası
-  + ephemeral silinmesi birlikte epok sızıntısına karşı korur.
-  Tetikleyici: openmls-wasm stabil sürüm + IndexedDB storage docs
-  + resmî npm paketi → Faz 9'da yeniden değerlendirilir.
-- **Faz 5b hotfix: v4 DM geriye dönük kırılganlık** — KISMEN. 5b
-  çıktığından bu yana gönderilen DM'ler kimlik-çifti türevi
-  (X25519(eph, peer_static_pub)) ile şifrelendi; yeni sürüm çifti
-  sorted(sender, peer) çiftinden türetilen DM çapasına
-  (X25519base(H(epoch‖'dm-anchor'‖…))) çevirdiğinden eski v4 DM'ler
-  yeni istemcide okunamaz (AEAD reddi → body null → "anahtar bu
-  epoch" mesajı). Geçiş: yeni mesajlar yeni formatla; kullanıcı
-  geçmiş DM'leri yeniden göndermeli. Kanal/gdm etkilenmedi (5c
-  çapası zaten doğruydu).
-- **Ses/görüntü gönderen atfı** — AYNI. Metin mesajları Ed25519 imzalı;
-  SFrame medya çerçeveleri üyeliği kanıtlar ama gönderen kimliğini
-  kanıtlamaz (SFU içinde per-sender imza yok). Aynı kanalda iki
-  katılımcının aynı SFrame anahtarıyla yayın yapması **teknik olarak
-  mümkün**; ses/görüntü için "kimin söylediği" kriptografik değil,
-  senkronizasyon + DM arama (1:1, statik DH) ile dolaylı.
-- **WebRTC medya Tor'dan geçmez** — AYNI (Faz 3). Sesli/görüntülü
-  arama ve ekran paylaşımı UDP (LiveKit ICE) taşır; Tor SOCKS
-  üzerinden akmaz. Mesajlaşma onion'da tam çalışır; aramada medya
-  doğrudan gider (tarafların IP'si çağrı esnasında açılır) ya da
-  kapalı moda alınır: `SCREEN_SHARE=off` + medya portları kapalı.
-- **Key transparency gossip gözlemsel (Faz 6)** — AYNI. Tam CONIKS
-  kanıt ağacı yok; iki online istemci aynı toplulukta etkileşirken
-  çelişkiyi görür, çevrimdışı çatışma çözümü bant dışı damga
-  karşılaştırmasıdır (profildeki 16 hex). Tek online istemci hiçbir
-  çelişki yakalayamaz.
-- **Çoklu cihaz linking MVP (Faz 7)** — GELECEK. WS tabanlı onay iki
-  cihazın aynı anda online olmasını gerektirir; async QR/off-band
-  linking roadmap'te. Primary cihazın tam kaybı hesap erişimini
-  kilitler (kurtarma ifadesi tek çıkış).
-- **Şifre + kurtarma ifadesi ikisi birden kaybolursa** — AYNI.
-  Hesap kurtarılamaz (ifade kimlik gibi uçtan uca sarılı — sunucu
-  açamaz). Yapısal sınır; e2e şifreleme bunu gerektirir.
-- **DB at-rest şifreleme (SQLCipher)** — GELECEK. Bilinçli ertelendi:
-  E2EE içeriği zaten koruyor, metadata katkısı marjinal, better-sqlite3
-  derlemesi imajı kırılganlaştırır. Operatör isterse LUKS/dm-crypt
-  ile volumes-layer koruma uygulayabilir.
-- **Nick enumeration** — AYNI. Login/kurtarma pseudo-salt ile kapalı;
-  kalan kanal kayıt sırasındaki "nick alınmış" (rate-limited).
-- **DM anahtarları** — AYNI. Arkadaşlık bitse de taraflarda kalır
-  (geçmiş okunabilir, gelecek okunamaz — grup/DM anahtarı yenilenmediği
-  sürece).
-- **Session TTL** — AYNI. 7 gün (env ile ayarlanabilir); şifre değişimi
-  tüm oturumları düşürür.
-
-## Durum
-
-- [x] Faz 0 — iskelet
-- [x] Faz 1 — auth + kimlik blob (kayıt/giriş, zero-knowledge)
-- [x] Faz 2 — topluluk/kanal/üye + sarılı anahtar dağıtımı
-- [x] Faz 3 — E2EE yazı sohbeti
-- [x] Faz 4 — LiveKit sesli/görüntülü odalar (E2EE)
-- [x] Faz 5 — cilalama (rekey, şifre değiştirme, ekran paylaşımı)
-- [x] Paket A-D — roller/ban, davet linkleri, başvurular, katılım şifresi
-- [x] Paket E-G — arkadaşlık, DM, grup DM (rekey'li), 1:1 arama, okunmadı
-- [x] Sprint 1 — bütünlük: per-user limitler, pending rekey, LiveKit eviction, oturum düşürme
-- [x] Sprint 2 — TLS/HSTS + CSP + httpOnly çerez + WS dayanıklılık
-- [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
-- [x] Test turu — otomatik test + CI (bugün: 33 dosya, 315 test)
-- [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
-- [x] UI/UX turu — Discord-parite arama düzeni: odak/ızgara + PiP, cihaz seçimi, olay bazlı ses sistemi (15 olay), onaylı üye ekleme, topluluk profili (bugün: 35 dosya, 326 test)
-
-**Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):
-kripto/gizlilikte Signal paritesine 8 fazlı program.
-
-- [x] Faz 1 — Ed25519 imzalı mesajlar (gönderen atfı kriptografik)
-- [x] Faz 2 — kaybolan mesajlar (disappearing messages)
-- [x] Faz 3 — Tor hidden service rehberi (IP metadata)
-- [x] Faz 4 — signed release / reproducible build (JS trust azaltma)
-- [x] Faz 5 — DH ratchet (kendi implementasyon: per-sender DH + epok rekey penceresi + self-update; DM/kanal/gdm/ses; PCS-formel değil — dürüst sınırlar tehdit modelinde; araştırma: docs/faz5-ratchet-research.md, spec: docs/faz5-dh-ratchet-design.md)
-- [x] Faz 6 — key transparency gossip (anti-forking, gözlemsel — 5dk periyodik WS + JIT; spec: docs/faz6-keygossip-design.md)
-- [x] Faz 7 — çoklu cihaz (per-cihaz X25519 + Ed25519, v3 blob, WS tabanlı linking, per-cihaz DH step + fingerprint, cihaz iptali = rekey; spec: docs/faz7-multidevice-design.md)
-- [x] Faz 8 — threat model sıfırdan + dış audit hazırlığı (v1.0.0 — tag kararı kullanıcıda; paket: docs/SECURITY-REVIEW.md + docs/AUDIT-FUNDING.md)
-
-## Katkıda bulunma
-
-Geliştirme kurulumu, test akışı, i18n parite kuralı ve PR beklentileri:
-[CONTRIBUTING.md](CONTRIBUTING.md). Topluluk davranış kuralları:
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Güvenlik açığı bildirimi (özel kanal):
-[SECURITY.md](SECURITY.md) — lütfen güvenlik sorunlarını public issue
-olarak açmayın.
-
-## Lisans
-
-[AGPL-3.0-or-later](LICENSE) — GPLv3'ün ağ kullanımına kapalı türevi:
-bu sunucunun değiştirilmiş bir sürümünü hizmet olarak işletirseniz,
-kaynak kodunu kullanıcılarına sunmak zorundasınız. Gizlilik aracının
-sunucu varyantının kapanmaması bilinçli bir tercihtir (Signal'in izlediği
-yol). © 2026 yuxor.ltd
+[AGPL-3.0-or-later](LICENSE) — the network-use variant of GPLv3: if you
+operate a modified version of this server as a service, you must offer its
+source to your users. Keeping the server variant of a privacy tool closed
+is a deliberate choice (the route Signal takes). © 2026 yuxor.ltd
