@@ -607,6 +607,7 @@ npm test    # 339 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Test turu — otomatik test + CI (bugün: 33 dosya, 315 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
 - [x] UI/UX turu — Discord-parite arama düzeni: odak/ızgara + PiP, cihaz seçimi, olay bazlı ses sistemi (15 olay), onaylı üye ekleme, topluluk profili (bugün: 38 dosya, 339 test)
+- [x] Sertleştirme turu 2 — sunucu-ele-geçme savunması: anahtar defteri bant dışı checkpoint'i (fork en geç 1 günde kanıtlanır), Ed25519 medya gönderen imzası (doğrulanmış yayıncı rozeti), dummy trafik (zamanlama gizlemesi), masaüstü pinned web bundle (postacim-cli v0.5.0 — sunucu JS basamaz)
 
 **Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):
 kripto/gizlilikte Signal paritesine 8 fazlı program.

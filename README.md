@@ -592,6 +592,11 @@ crypto specification:
 - [x] UI/UX pass — Discord-parity call layout: focus/grid + PiP, device
   selection, event-based sounds (15 events), consent-based member adding,
   community profile (today: 38 files, 339 tests)
+- [x] Hardening tour 2 — server-compromise defenses: out-of-band key ledger
+  checkpoint (a forked ledger is proven within a day), Ed25519 media sender
+  attestation (verified-publisher badge), dummy traffic (timing cover),
+  desktop pinned web bundle (postacim-cli v0.5.0 — a compromised server
+  cannot serve tampered JS)
 
 ## Contributing
 
