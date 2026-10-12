@@ -392,11 +392,7 @@ docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
 
 ## Masaüstü Uygulaması
 
-- Electron sarmalayıcı — ince istemci, web uygulaması sunucudan yüklenir (Discord modeli)
-- Tepsiye gizlenme, okunmamış sayacı (rozet + tepsi), http LAN'da secure-context muafiyeti, ekran paylaşımında yerel kaynak seçimi, sunucu başına kalıcı partition
-- Çalıştırma: `cd desktop && npm install && npm start` — sunucu adresi ilk açılışta sorulur ya da `POSTACIM_URL=https://sunucu npm start`
-- Paketleme: `npm run dist` → `desktop/dist/` altında AppImage + deb (x64, Linux)
-- Ayrıntılı doküman: [desktop/README.md](desktop/README.md)
+Kod ayrı repoda: **[yucOx/postacim-cli](https://github.com/yucOx/postacim-cli)** — Electron sarmalayıcı, ince istemci (web uygulaması sunucudan yüklenir, Discord modeli). Tepsiye gizlenme, okunmamış sayacı, http LAN'da secure-context muafiyeti, ekran/pencere kaynak seçici, otomatik güncelleme, sistemle başlatma. Sürümler `desktop-v*` etiketinde AppImage + deb + exe + dmg olarak CI'dan yayınlanır.
 
 ## Geliştirme (konteynersiz)
 
