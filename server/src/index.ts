@@ -28,6 +28,7 @@ import { gdmRoutes } from './routes/gdms.js';
 import { userRoutes } from './routes/users.js';
 import { keyRoutes, backfillKeyLog } from './routes/keys.js';
 import { deviceRoutes } from './routes/devices.js';
+import { noiseRoutes } from './routes/noise.js';
 import { attachWs } from './ws/index.js';
 import { expireExpiredMessages } from './lib/expire.js';
 
@@ -76,6 +77,7 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/recover/unlock',
   '/api/auth/recover/finish',
   '/api/keys/log',
+  '/api/keys/log/head',
 ]);
 
 app.addHook('onRequest', async (req, reply) => {
@@ -100,6 +102,7 @@ app.addHook('onRequest', async (req, reply) => {
 app.get('/api/health', async () => ({ ok: true }));
 
 await app.register(authRoutes, { prefix: '/api' });
+await app.register(noiseRoutes, { prefix: '/api' });
 await app.register(bootstrapRoutes, { prefix: '/api' });
 await app.register(communityRoutes, { prefix: '/api' });
 await app.register(channelRoutes, { prefix: '/api' });

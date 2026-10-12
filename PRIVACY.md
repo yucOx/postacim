@@ -54,6 +54,8 @@ Bu sunucunun ne saktığını ve neyi **saktığını** anlatıyor. Kod her iddi
 - hesabınızın açılış tarihi, son etkinlik zamanı
 - bu verilerden sosyal grafınız ve davranış alışkanlıklarınız çıkarılabilir — bunu dürüstçe söylüyoruz
 
+**Dummy trafik:** giriş yapmış istemci 1–10 dk rastgele aralıklarla 32 B–4 KiB boyutunda anlamsız bir blob POST eder (`/api/noise`); sunucu bunu saklamaz, yalnızca 204 döner — amacı mesaj gönderim zamanlamanızın tek başına ayırt edilmesini engellemektir.
+
 **Güvenlik numarası:** her kullanıcının anahtar parmak izi profilden karşılaştırılabilir. Sunucu bir anahtarı değiştirmeye kalkarsa (hesap ele geçirme), karşınızda **kırmızı uyarı** çıkar. Kendi güvenlik numaranızı karşı tarafla sesli/yüz yüze doğrulamanız önerilir.
 
 **Web'den gelen sınırlar:** istemci kodu bu sunucudan dağıtılır; sunucu sahibi teorik olarak değiştirilmiş istemci kodu servis edebilir (her web tabanlı E2EE uygulamanın ortak sınırı). Anahtarlarınızı doğrulamak için güvenlik numarası özelliği tam bu riski azaltır.

@@ -129,6 +129,47 @@ export function headFingerprint(head: KeyLogHead): string {
   return head.entry_hash.slice(0, 16).replace(/(.{4})(?=.)/g, '$1 ');
 }
 
+/** Bant dışı denetim noktası: CI günlük repoya yazar (keylog-checkpoint.yml),
+ *  istemci açılışta karşılaştırır. Geri dönüş null = kanal yok (offline /
+ *  erişilemedi) — sessiz atlanır, mevcut zincir doğrulaması aynen sürer. */
+const CHECKPOINT_URL = 'https://raw.githubusercontent.com/yucOx/postacim/main/keylog-checkpoint.json';
+
+export interface CheckpointFile {
+  head: { id: number; entry_hash: string } | null;
+  count: number;
+  checked_at: number;
+}
+
+export type CheckpointResult = { ok: true } | { ok: false; warning: string } | null;
+
+export async function verifyAgainstCheckpoint(entries: KeyLogEntry[]): Promise<CheckpointResult> {
+  let cp: CheckpointFile;
+  try {
+    const r = await fetch(`${CHECKPOINT_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    cp = (await r.json()) as CheckpointFile;
+  } catch {
+    return null;
+  }
+  if (!cp || !cp.head || typeof cp.count !== 'number' || cp.count <= 0) return null;
+  // istemci checkpoint'ten az satır görüyorsa sunucu satır gizliyor olabilir;
+  // (fetchFullLog sona kadar çeker — meşru 'geride kalma' durumu yok)
+  if (entries.length < cp.count) {
+    return {
+      ok: false,
+      warning: 'anahtar defteri bant dışı denetim noktasından geride — sunucu kayıt gizliyor olabilir',
+    };
+  }
+  const at = entries[cp.count - 1];
+  if (!at || at.entry_hash !== cp.head.entry_hash) {
+    return {
+      ok: false,
+      warning: 'anahtar defteri bant dışı denetim noktasıyla çelişiyor — sunucu size başka bir defter gösteriyor olabilir',
+    };
+  }
+  return { ok: true };
+}
+
 export function loadHead(): KeyLogHead | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -163,6 +204,10 @@ export async function syncKeyLog(opts: {
   const { entries, head: serverHead } = await fetchFullLog();
   const v = await verifyChain(entries, stored);
   if (!v.ok) return { ok: false, warning: v.error };
+  // bant dışı checkpoint (repo'ya CI'nin yazdığı defter ucu) — view-splitting
+  // kanıtı: kanal yoksa (offline) sessiz atlanır
+  const cp = await verifyAgainstCheckpoint(entries);
+  if (cp && !cp.ok) return { ok: false, warning: cp.warning };
   // doğrulanmış zincirdeki imza anahtarları gönderen doğrulamasına beslenir —
   // yalnız zincir bütünlüğü kanıtlanmış kayıtlar güven kaynağıdır
   ingestSignKeys(entries);

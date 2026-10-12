@@ -3,7 +3,7 @@ import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsMuted } f
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
 import type { TrackReference } from '@livekit/components-react';
-import { MicOff, Volume2, VolumeX } from 'lucide-react';
+import { MicOff, ShieldCheck, Volume2, VolumeX } from 'lucide-react';
 import { nickFor } from '../lib/nick';
 import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
@@ -122,12 +122,20 @@ function NamePlate({
   silentStream?: boolean;
 }): React.ReactNode {
   const { t } = useT();
+  // medya gönderen atfı: Ed25519 imzalı duyuru doğrulanmış mı (kötü sunucunun
+  // hayalet identity'si imzalıyamaz → rozet çıkmaz)
+  const attested = useVoiceStore((s) => !!s.attested[identity]);
   return (
     <span className="pointer-events-none absolute bottom-2 left-2 z-10 flex max-w-[calc(100%-3rem)] items-center gap-1.5 rounded-sm border border-brass-700/60 bg-night-950/85 px-2 py-0.5">
       <span className="truncate font-display text-xs font-semibold uppercase tracking-[0.1em] text-paper-50">
         {nickFor(identity)}
         {isLocal && ` (${t('call.nameSelf')})`}
       </span>
+      {attested && !isLocal && (
+        <span className="flex shrink-0 text-emerald-400" title={t('call.verifiedSender')}>
+          <ShieldCheck size={11} aria-hidden />
+        </span>
+      )}
       {isScreen && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameScreen')}</span>}
       {isFocus && <span className="shrink-0 font-mono text-[9px] text-lamp-400">{t('call.nameFocus')}</span>}
       {silentStream && (

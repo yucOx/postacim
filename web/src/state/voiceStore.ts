@@ -7,7 +7,9 @@ import { useAppStore } from './appStore';
 import { useAuthStore } from './authStore';
 import { unwrapMyKey } from '../crypto/identity';
 import { dhVoiceKeyAnchor, dhVoiceKeyDm } from '../crypto/dhratchet';
-import { unb64 } from '../crypto/bytes';
+import { unb64, toHex, fromHex } from '../crypto/bytes';
+import { sodium } from '../crypto/sodium';
+import { getSignKeys } from '../lib/signkeys';
 import { onServerEvent, onWsStatus, wsSend } from '../ws/socket';
 import { startRing, stopRing, playSound } from '../lib/sound';
 import { toast } from '../components/Toast';
@@ -72,6 +74,11 @@ interface VoiceState {
   /** DM'de karşı taraf LiveKit odasında mı — "X aramada — katıl" göstergesi
    *  (WS dm:voice; Discord green-ring mantığı) */
   dmPeerInCall: Record<string, boolean>;
+  /** Medya gönderen atfı doğrulanmış katılımcılar (LiveKit identity → true).
+   *  Duyuru: Ed25519 imzalı voice:attest relay'i; doğrulama anahtar defteri
+   *  imza anahtarıyla. İmzasız/yanlış imzalı katılımcı (kötü sunucunun hayalet
+   *  identity'si) buraya hiç girmez → UI'da rozet çıkmaz. */
+  attested: Record<string, true>;
   /** 1:1 DM call state; shares `room` (one call at a time) */
   callState: CallState | null;
   isDmCall: boolean;
@@ -267,6 +274,60 @@ function withSpeakerDevice(): { deviceId: string } | undefined {
   return speakerSupported() && id ? { deviceId: id } : undefined;
 }
 
+// ---------- medya gönderen atfı (Ed25519 imzalı duyuru) ----------
+// LiveKit identity = user_id (mintVoiceToken). Odaya girince (ve yeni katılan
+// olunca — geç katılan eski duyuruyu kaçırır) identity'mizi imzalayıp
+// duyururuz; sunucu opak relay yapar (server/src/routes/voice.ts). Alıcı
+// tarafı verifyVoiceAttestation.
+
+async function sendVoiceAttestation(): Promise<void> {
+  try {
+    const s = useVoiceStore.getState();
+    const channelId = s.isDmCall ? s.callState?.channelId : s.joinedChannelId;
+    const identity = s.room?.localParticipant.identity;
+    const sign = useAuthStore.getState().signPrivateKey;
+    if (!channelId || !identity || !sign) return;
+    const payload = JSON.stringify({ room: channelId, identity, ts: Date.now() });
+    const signature = toHex(sodium.crypto_sign_detached(payload, sign));
+    await api('/voice/attest', {
+      method: 'POST',
+      body: { channel_id: channelId, identity, payload, signature },
+    });
+  } catch {
+    // ağ hatası — rozet çıkmaz, arama etkilenmez
+  }
+}
+
+async function verifyVoiceAttestation(e: Record<string, unknown>): Promise<void> {
+  try {
+    const st = useVoiceStore.getState();
+    const channelId = st.isDmCall ? st.callState?.channelId : st.joinedChannelId;
+    const room = st.room;
+    const userId = e.user_id as string;
+    const identity = e.identity as string;
+    const payload = e.payload as string;
+    const sigHex = e.signature as string;
+    if (!room || !channelId || e.channel_id !== channelId) return;
+    if (!userId || !identity || !payload || !sigHex) return;
+    const p = JSON.parse(payload) as { room?: string; identity?: string; ts?: number };
+    // duyuru bu odaya ve bu identity'ye ait mi + taze mi (2 dk pencere:
+    // eski duyuruyla oda/kişi taklidi — replay kapalı)
+    if (p.room !== channelId || p.identity !== identity) return;
+    if (!p.ts || Math.abs(Date.now() - p.ts) > 120_000) return;
+    // imza, defterdeki (zincir doğrulanmış) Ed25519 anahtarlarından biriyle
+    const keys = getSignKeys(userId);
+    if (!keys) return;
+    const sig = fromHex(sigHex);
+    if (!sig || sig.length !== 64) return;
+    if (!keys.some((k) => sodium.crypto_sign_verify_detached(sig, payload, k))) return;
+    // identity gerçekten bu odada bağlı mı — hayalet duyuru reddi
+    if (!room.remoteParticipants.has(identity)) return;
+    useVoiceStore.setState((s) => ({ attested: { ...s.attested, [identity]: true } }));
+  } catch {
+    // bozuk duyuru — sessiz
+  }
+}
+
 // Faz 5d — SFrame anahtarı artık v4 DH zincirinden türetilir (spec §7):
 // kanal sesi epok DH çapasına, DM araması iki tarafın statik kimlik DH'ine
 // bağlı. Epok başına sabit (arama başında pin); epok rekey'inde channel:rotated
@@ -426,6 +487,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   error: null,
   presence: {},
   dmPeerInCall: {},
+  attested: {},
   callState: null,
   isDmCall: false,
   pip: false,
@@ -528,6 +590,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
             // sesi çalmaz.
             room.on(RoomEvent.ParticipantConnected, () => playSound('join'));
             room.on(RoomEvent.ParticipantDisconnected, () => playSound('leave'));
+            // geç katılan eski duyuruyu kaçırır → yeni katılan olunca yeniden imzala
+            room.on(RoomEvent.ParticipantConnected, () => void sendVoiceAttestation());
             let micOpened = false;
             try {
               await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true, withMicDevice());
@@ -893,6 +957,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
         // karşı taraf DM arama odasına girdi/çıktı — banner state'i
         const channelId = e.channel_id as string;
         set((s) => ({ dmPeerInCall: { ...s.dmPeerInCall, [channelId]: !!e.in } }));
+      } else if (e.type === 'voice:attest') {
+        void verifyVoiceAttestation(e as unknown as Record<string, unknown>);
       } else if (e.type === 'channel:rotated') {
         // live rekey: refresh epochs, then hand the new key to SFrame.
         // Faz 5d: SFrame anahtarı DH zincirinden türetildiği için rekey zincir
@@ -1103,10 +1169,13 @@ if (typeof document !== 'undefined') {
   // keepalive'i room yaşam döngüsüne bağla: join / startDmCall / acceptIncoming
   // ve tüm teardown yolları (leave, cancel, disconnect) tek noktadan kapsanır
   useVoiceStore.subscribe((s, prev) => {
-    if (s.room && !prev.room) startKeepalive();
-    else if (!s.room && prev.room) {
+    if (s.room && !prev.room) {
+      startKeepalive();
+      // medya gönderen atfı: odaya girer girmez imzala + duyur
+      void sendVoiceAttestation();
+    } else if (!s.room && prev.room) {
       stopKeepalive();
-      useVoiceStore.setState({ camPausedByHide: false });
+      useVoiceStore.setState({ camPausedByHide: false, attested: {} });
     }
   });
   // DM arama presence ("X aramada"): oda canlıyken duyuru tek noktadan —

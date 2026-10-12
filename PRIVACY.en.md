@@ -54,6 +54,8 @@ This explains what we store — and what we **cannot** see. The code is open and
 - your account creation date, last activity time
 - from this, your social graph and behavioral patterns can be inferred — we say this plainly
 
+**Dummy traffic:** a logged-in client POSTs a meaningless 32 B–4 KiB blob at random 1–10 minute intervals (/api/noise); the server does not store it and only returns 204 — the purpose is to keep your message-send timing from being distinguishable on its own.
+
 **Safety number:** every user's key fingerprint can be compared from their profile. If the server tries to substitute a key (account takeover), a **red warning** appears. We recommend verifying safety numbers out-of-band.
 
 **The web limitation:** the client code is served by this server; the operator could in theory serve modified client code (a limitation shared by every web-based E2EE app). The safety-number feature exists precisely to mitigate that risk.

@@ -78,6 +78,23 @@ export async function keyRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Bant dışı denetim noktası (checkpoint): CI günlük olarak bu ucu çekip
+  // repoya yazar (keylog-checkpoint.json); istemci açılışta kendi doğruladığı
+  // zincirle karşılaştırır (keytransparency.ts verifyAgainstCheckpoint).
+  // View-splitting savunması — kötü sunucu tek-online kurgana farklı defter
+  // gösterse bile repodaki checkpoint'le çelişir. Public: yalnız hash/sayı.
+  app.get(
+    '/keys/log/head',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async () => {
+      const row = db
+        .prepare('SELECT id, entry_hash FROM key_log ORDER BY id DESC LIMIT 1')
+        .get() as { id: number; entry_hash: string } | undefined;
+      const count = (db.prepare('SELECT COUNT(*) AS n FROM key_log').get() as { n: number }).n;
+      return { head: row ? { id: row.id, entry_hash: row.entry_hash } : null, count };
+    },
+  );
+
   // Bu özellikten önce kaydolmuş hesaplar imza anahtarını buradan yayınlar:
   // Ed25519 public key deftere yazılır; KEK hâlâ RAM'deyken key_blob da v2'ye
   // yeniden sarılır. auth_material her durumda doğrulanır — yalnız çerez

@@ -1,0 +1,58 @@
+# Anahtar defteri bant dışı denetim noktası: günlük olarak canlı sunucunun
+# defter ucunu (head + kayıt sayısı) çekip bu repoya yazar. İstemciler açılışta
+# kendi doğruladıkları zincirle karşılaştırır — kötü sunucu tek bir kurgana
+# farklı (fork) defter gösterse bile repodaki checkpoint'le çelişir.
+#
+# Not: bu kanal da aynı GitHub hesabının altında — hesabın kendisi düşerse
+# checkpoint güvenilirliğini yitirir. Tehdit modelinde "bant dışı" = postacim
+# sunucusu DIŞI her kanal; pratik en iyi ayrılık bu.
+name: keylog-checkpoint
+on:
+  schedule:
+    - cron: '23 4 * * *' # günlük (yoğun saat dışı)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  checkpoint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: canlı defter ucunu çek
+        id: fetch
+        run: |
+          set -u
+          if ! curl -fsS --max-time 20 https://postacim.dev/api/keys/log/head -o /tmp/head.json; then
+            echo "sunucu erişilemedi — checkpoint atlanır"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 - <<'EOF'
+import json, time, os
+live = json.load(open('/tmp/head.json'))
+new = {'head': live.get('head'), 'count': live.get('count'), 'checked_at': int(time.time() * 1000)}
+old = None
+try:
+    old = json.load(open('keylog-checkpoint.json'))
+except Exception:
+    pass
+changed = not (old and old.get('head') == new['head'] and old.get('count') == new['count'])
+if changed:
+    with open('keylog-checkpoint.json', 'w') as f:
+        json.dump(new, f, indent=2)
+        f.write('\n')
+with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+    f.write(f'changed={"true" if changed else "false"}\n')
+EOF
+
+      - name: değiştiyse commit'le
+        if: steps.fetch.outputs.changed == 'true'
+        run: |
+          git config user.name 'postacim-checkpoint-bot'
+          git config user.email 'actions@github.com'
+          git add keylog-checkpoint.json
+          git commit -m 'checkpoint: anahtar defteri ucu güncellendi [skip ci]'
+          git push

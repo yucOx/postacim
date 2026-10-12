@@ -1,5 +1,6 @@
 export default {
   call: {
+    verifiedSender: 'identité de l émetteur vérifiée (Ed25519)',
     micOn: 'couper le micro',
     micOff: 'activer le micro',
     camOn: 'éteindre la caméra',

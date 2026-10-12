@@ -1,7 +1,7 @@
 # postacim 🕊️
 
 [![CI](https://github.com/yucOx/postacim/actions/workflows/ci.yml/badge.svg)](https://github.com/yucOx/postacim/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-326%20passed-brightgreen)](#otomatik-testler)
+[![tests](https://img.shields.io/badge/tests-339%20passed-brightgreen)](#otomatik-testler)
 
 Türkçe · **[English](README.md)**
 
@@ -27,7 +27,7 @@ Canlı örnek: **https://postacim.dev** · Masaüstü uygulaması: [postacim-cli
 - **Şifre değiştirme** — kimlik blob yeniden sarılır, kanal anahtarları etkilenmez; değişince **tüm oturumlar düşer** (çalınan token da dahil)
 - **Çoklu cihaz** (Faz 7) — her cihaz bağımsız X25519+Ed25519 keypair (kimlik blob'u v3, `device_id`); Ayarlar → Cihazlar sekmesinden cihaz listesi, WS tabanlı linking (primary onayı), cihaz iptali = zorunlu rekey. Per-cihaz DH step: aynı kullanıcının farklı cihazları farklı adım sayacı tutar (F5 per-sender modelinin doğal uzantısı) — bir cihazdaki state sızıntısı diğerini etkilemez
 - **Ekran paylaşımı** — aynı E2EE hattı üzerinden; **Go Live diyaloğu**: çözünürlük × fps × kaynak tipi (ekran/pencere/sekme) × sekme/sistem sesi seçimi, Discord'un bitrat hedeflerine eşlenen tablo. Tarayıcı sınırı: pencere paylaşımı hiçbir platformda ses taşımaz; Linux'ta ekran da taşımaz (yalnız sekme + "sekme sesini de paylaş" kutusu) — ses track'i olmayan yayınlar izleyicide "sessiz yayın" rozetiyle görünür, Go Live diyaloğu Linux'ta önceden uyarır
-- **Arama deneyimi** (Discord düzeni) — odak/ızgara sahne geçişi, konuşmacı parlaması, arama içi yan sohbet (split-view), köşeye küçültme (PiP — sürükle + her şeyin üstünde pin), **her şeyin üstünde arama penceresi** (Document PiP — tarayıcıda ve masaüstü uygulamasında OS seviyesinde always-on-top), **sağ tık menüsü**: kişi başına ses seviyesi/susturma ve yayın sesi kontrolü, kontrol çubuğunda ping göstergesi
+- **Arama deneyimi** (Discord düzeni) — odak/ızgara sahne geçişi, konuşmacı parlaması, arama içi yan sohbet (split-view), köşeye küçültme (PiP — sürükle + her şeyin üstünde pin), **her şeyin üstünde arama penceresi** (Document PiP — tarayıcıda ve masaüstü uygulamasında OS seviyesinde always-on-top), **sağ tık menüsü**: kişi başına ses seviyesi/susturma ve yayın sesi kontrolü, kontrol çubuğunda ping göstergesi, **doğrulanmış yayıncı rozeti** (Ed25519 imzalı kimlik duyurusu)
 - **Mobilde arka plan** — arama sürerken sekme arka plana alınınca ses hattı sessiz bir keepalive + MediaSession ile canlı tutulur (Android mikrofonu kesmez, Chrome otomatik PiP tetikleyebilir); kamera açık + PiP yoksa yayın dürüstçe "kamera kapalı"na döner — karşı taraf donuk kare yerine temiz sinyal görür —, ön plana dönünce otomatik geri açılır. Presence da korunur: mobil OS presence WS'ini kapatsa bile sunucu 120 sn grace ile kullanıcıyı odada tutar, istemci yeniden bağlanınca durumu yeniden duyurur. **iOS dürüst sınırı:** Safari arka planda kamerayı hiçbir web uygulamasına akıttırmaz (native uygulama gerekir); mikrofon keepalive ile çoğu zaman sürer
 - **Cihaz seçimi** — mikrofon/kamera/hoparlör; arama içi menüden veya Ayarlar → Ses ve Video'dan, seçim kalıcı (hoparlör tercihi aramalar arasında saklanır ve sonradan katılanlara da uygulanır), arama sırasında değişince anında uygulanır
 - **Bildirim sesleri** (Discord paritesi) — 15 olay: mesaj, mention, gelen arama, davet, arkadaşlık isteği, oda giriş/çıkış, mikrofon aç/kapa, yayın aç/kapa, kamera aç/kapa, tüm sesi kıs/aç. Her biri Ayarlar → Bildirimler'den **tek tek kapatılabilir** ve Dinle düğmesiyle önizlenir; melik olanlar MP3, kısa tık desenleri WebAudio ile sentezlenir
@@ -158,7 +158,8 @@ gördüğü: bayt. Ne söylendiğini, ne paylaşıldığını göremez.
 | Mesaj padding | plaintext boyut bucket'larına (256 B / 1 KiB / 4 KiB / 4 KiB-adım) yuvarlanır — sunucu mesaj uzunluğundan içerik çıkarımı yapamaz |
 | Cihaz kilidi (ops.) | WebAuthn PRF'ten türeyen cihaz KEK'i ile blob IndexedDB'de — F5'te parmak izi, şifre fallback akışı korunur |
 | Cihaz başına kimlik (Faz 7) | Her cihaz bağımsız X25519 + Ed25519 keypair (kimlik blob'u v3 = X25519 priv + Ed25519 priv + 16B device_id); kullanıcı kimliği `users` + `users_devices` (v17) — primary kayıt anında, linked cihazlar primary tarafından onaylanır. Sunucu private key/identity blob saklamaz; yalnız public key + cihaz adı + linking durumu. Cihaz iptali = rekey zorunlu: iptal edilen cihaz yeni mesajları açamaz (eski private'ı yeni DH çıktısını üretemez), eski mesajlar eski anahtarla okunabilir kalır. Per-cihaz DH step: aynı kullanıcının farklı cihazları farklı adım sayacı tutar (F5 per-sender modelinin doğal uzantısı), farklı ephemeral, farklı DH pub başlığı — alıcı için ayrı gönderici. Per-cihaz fingerprint: peer'ın `users_devices.public_key + sign_public_key`'i ile çalışır; primary ve linked cihazlar farklı sayılar üretir |
-| Anahtar defteri | public key'ler append-only hash zincirinde (`key_log`); istemci boot'ta zinciri doğrular, head damgası profilde bant dışı karşılaştırma için. İmza anahtarları da defterden dağıtılır — yalnız zincir bütünlüğü kanıtlanmış kayıtlar imza doğrulamasına beslenir |
+| Anahtar defteri | public key'ler append-only hash zincirinde (`key_log`); istemci boot'ta zinciri doğrular, head damgası profilde bant dışı karşılaştırma için. İmza anahtarları da defterden dağıtılır — yalnız zincir bütünlüğü kanıtlanmış kayıtlar imza doğrulamasına beslenir. **Bant dışı checkpoint:** CI günlük defter ucunu repoya yazar (`keylog-checkpoint.json`); istemci açılışta kendi zinciriyle karşılaştırır — kötü sunucu tek-online kurgana fork defter gösterse bile en geç bir gün içinde çelişki yakalanır |
+| Medya gönderen atfı | Odadaki her katılımcı LiveKit identity'sini Ed25519 ile imzalayıp duyurur (`voice:attest` — sunucu opak relay); alıcı imzayı defterden doğrular, identity'nin odaya gerçekten bağlı olmasını şart koşar. Doğrulanmış yayıncının plakasında kalkan rozeti; kötü sunucunun bastığı hayalet identity imzasız kalır → rozet çıkmaz |
 | Kendi mesajımızı kendimiz açar (Faz 1 hotfix) | `chatStore`/`dmChatStore` `toDisplay`, gönderen biz isek RAM'deki `authStore.signPublicKey`'i kısayol olarak kullanır (`resolveSignKeys`) — keytransparency sync beklenmeden kendi mesajımız decode olur. Başkaları için yalnız zincir kanıtı geçerli; model bozulmaz. |
 | Keylog gossip | her istemci doğrulanmış head'ini 5dk'da bir üyesi olduğu topluluklara WS ile yayınlar; aynı id farklı hash = fork kanıtı → kırmızı bant. Sunucu opak relay (saklama/yorum yok) — invariant korunur. Tam CONIKS kanıt zinciri yok: gözlemsel, bant dışı damga karşılaştırması hâlâ en güçlü kanıt |
 
@@ -416,7 +417,7 @@ Doğrulama: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Otomatik testler
 
 ```bash
-npm test    # 326 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
+npm test    # 339 test: kripto/istemci birim + kara kutu entegrasyon (geçici sunucu + geçici DB)
 ```
 
 - `web/src/crypto/crypto.test.ts` — AEAD/AAD bağlama (kanal/sürüm/kapsam değişince reddetme), kimlik sarma, BIP-39 checksum, davet linki ayrıştırma, şifre güç heuristiği, kurtarma quiz konumları, WS reconnect backoff sınırları, okunmadı sayacı
@@ -431,6 +432,9 @@ npm test    # 326 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - `server/test/join.test.ts` — açık/hedefli davet, süre/kullanım limiti, başvurular, katılım şifresi
 - `server/test/social.test.ts` — arkadaşlık, DM, grup DM rekey, WS canlı olay + sesli durum yayını
 - `server/test/dmvoice.test.ts` — DM arama presence (`dm:voice`): duyuru peer'a gider, bayat yanlış-kanal kapatması yok sayılır, üye olmayan yayınlayamaz, register anlık görüntüsü (F5)
+- `server/test/keyloghead.test.ts` — checkpoint ucu: oturumsuz erişim, head/count defterle tutarlı
+- `server/test/attest.test.ts` — voice:attest relay: oturum/boyut/kanal-tip doğrulaması, topluluk broadcast + DM peer iletimi, üye olmayan 404
+- `server/test/noise.test.ts` — dummy trafik: oturum zorunlu, boyut sınırı, rate limit, saklama yok
 - `server/test/boot.test.ts` — zayıf secret reddi, taze DB migration zinciri
 - `web/src/crypto/ratchet.test.ts` — per-gönderici ratchet: zincir tek yönlülüğü, index/AAD reddi, stateless yeniden türetim, out-of-order
 - `web/src/crypto/dh-ratchet.test.ts` — DH ratchet (v4): KAT vektörleri (`dh-ratchet.vectors.json`), FS/PCS-lite sızıntı simülasyonu (gönderici state sızıntısı → eski adım kapalı, sonraki adım güvenli), adım içi backward secrecy, out-of-order, tarama sınırı, AAD/imza/başlık takası negatifleri, self-update doğrulama, 5c: epok DH çapası (kanal/gdm roundtrip) + rekey broadcast negatifleri (atılan üye broadcast'i yakalasa da geleceği açamaz), 5d: ses anahtarı türetimi (çapa/DM KAT, iki tarafın aynı anahtarı, epok ayrımı, mesaj zincirinden alan ayrımı)
@@ -523,7 +527,10 @@ npm test    # 326 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
   boyutu (bucket padding'iyle seviyesi indirilir), presence, çağrı
   katılım/mute durumu, topluluk/kanal/üye listesi, roller, davet
   metadata'sı sunucuda görünür. Kaybolan mesajların `expires_at`'ı
-  içerik değil ama ömür bilgisi (PRIVACY.md'ye yazıldı).
+  içerik değil ama ömür bilgisi (PRIVACY.md'ye yazıldı). Dummy trafik:
+  giriş yapmış istemci 1–10 dk rastgele aralıklarla 32 B–4 KiB
+  anlamsız blob POST eder (`/api/noise`, saklanmaz) — mesaj gönderim
+  zamanlaması tek başına ayırt edilemez.
 - **MLS-formel yok** — GELECEK tetikleyicisi. Şu an PCS-lite
   (per-sender DH + epok rekey penceresi M=100 / T=24h + self-update
   + cihaz iptali = rekey). Rekey/self-update frekansı toparlanma
@@ -544,22 +551,27 @@ npm test    # 326 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
   epoch" mesajı). Geçiş: yeni mesajlar yeni formatla; kullanıcı
   geçmiş DM'leri yeniden göndermeli. Kanal/gdm etkilenmedi (5c
   çapası zaten doğruydu).
-- **Ses/görüntü gönderen atfı** — AYNI. Metin mesajları Ed25519 imzalı;
-  SFrame medya çerçeveleri üyeliği kanıtlar ama gönderen kimliğini
-  kanıtlamaz (SFU içinde per-sender imza yok). Aynı kanalda iki
-  katılımcının aynı SFrame anahtarıyla yayın yapması **teknik olarak
-  mümkün**; ses/görüntü için "kimin söylediği" kriptografik değil,
-  senkronizasyon + DM arama (1:1, statik DH) ile dolaylı.
+- **Ses/görüntü gönderen atfı** — KAPATILDI (bağlantı kimliği düzeyinde).
+  Odadaki katılımcı LiveKit identity'sini Ed25519 ile imzalayıp duyurur
+  (`voice:attest` opak relay); alıcı imzayı anahtar defterinden doğrular +
+  identity'nin odaya bağlı olduğunu şart koşar. Kötü sunucu hayalet
+  identity basabilir ama onun adına imza üretemez → plakada kalkan rozeti
+  çıkmaz. Kalan dürüst sınır: rozet kullanıcı dikkatine dayanır (doğrulan
+  madış yayıncıya kör güvenilmez); SFrame çerçeve içine gömülü imza yok —
+  çerçeve düzeyinde ayrım yoktur.
 - **WebRTC medya Tor'dan geçmez** — AYNI (Faz 3). Sesli/görüntülü
   arama ve ekran paylaşımı UDP (LiveKit ICE) taşır; Tor SOCKS
   üzerinden akmaz. Mesajlaşma onion'da tam çalışır; aramada medya
   doğrudan gider (tarafların IP'si çağrı esnasında açılır) ya da
   kapalı moda alınır: `SCREEN_SHARE=off` + medya portları kapalı.
-- **Key transparency gossip gözlemsel (Faz 6)** — AYNI. Tam CONIKS
+- **Key transparency gossip gözlemsel (Faz 6)** — KISMEN. Tam CONIKS
   kanıt ağacı yok; iki online istemci aynı toplulukta etkileşirken
   çelişkiyi görür, çevrimdışı çatışma çözümü bant dışı damga
-  karşılaştırmasıdır (profildeki 16 hex). Tek online istemci hiçbir
-  çelişki yakalayamaz.
+  karşılaştırmasıdır (profildeki 16 hex). Tek online kurgan için ek savunma:
+  **günlük bant dışı checkpoint** — CI defter ucunu bu repoya yazar
+  (`keylog-checkpoint.json`), istemci açılışta karşılaştırır; fork en geç
+  bir gün içinde kanıtlanır. Kalan pencere: checkpoint anı ile açılış
+  arasında fork edilib geri toplanan kısa süreli saldırılar.
 - **Çoklu cihaz linking MVP (Faz 7)** — GELECEK. WS tabanlı onay iki
   cihazın aynı anda online olmasını gerektirir; async QR/off-band
   linking roadmap'te. Primary cihazın tam kaybı hesap erişimini
@@ -594,7 +606,7 @@ npm test    # 326 test: kripto/istemci birim + kara kutu entegrasyon (geçici su
 - [x] Sprint 3 — BIP-39 kurtarma ritüeli + şifre UI + branded dialoglar
 - [x] Test turu — otomatik test + CI (bugün: 33 dosya, 315 test)
 - [x] Sprint 4 — sertleştirme: mesaj padding + Trusted Types + bundle hash betiği, log hijyeni, WS auth timeout, login kademeli bloğu, passkey cihaz kilidi, per-gönderici ratchet, anahtar defteri (key transparency)
-- [x] UI/UX turu — Discord-parite arama düzeni: odak/ızgara + PiP, cihaz seçimi, olay bazlı ses sistemi (15 olay), onaylı üye ekleme, topluluk profili (bugün: 35 dosya, 326 test)
+- [x] UI/UX turu — Discord-parite arama düzeni: odak/ızgara + PiP, cihaz seçimi, olay bazlı ses sistemi (15 olay), onaylı üye ekleme, topluluk profili (bugün: 38 dosya, 339 test)
 
 **Sıradaki — güvenlik yol haritası** ([SECURITY-ROADMAP.md](SECURITY-ROADMAP.md)):
 kripto/gizlilikte Signal paritesine 8 fazlı program.

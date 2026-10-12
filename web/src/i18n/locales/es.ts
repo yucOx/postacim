@@ -1,5 +1,6 @@
 export default {
   call: {
+    verifiedSender: 'identidad del emisor verificada (Ed25519)',
     micOn: 'silenciar micrófono',
     micOff: 'activar micrófono',
     camOn: 'apagar cámara',

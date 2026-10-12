@@ -1,7 +1,7 @@
 # postacim 🕊️
 
 [![CI](https://github.com/yucOx/postacim/actions/workflows/ci.yml/badge.svg)](https://github.com/yucOx/postacim/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-326%20passed-brightgreen)](#automated-tests)
+[![tests](https://img.shields.io/badge/tests-339%20passed-brightgreen)](#automated-tests)
 
 English · **[Türkçe](README.tr.md)**
 
@@ -51,7 +51,8 @@ Hosted instance: **https://postacim.dev** · Desktop app: [postacim-cli](#deskto
 - **Call experience** (Discord layout) — focus/grid stage switching,
   speaking glow, in-call side chat (split view), minimize-to-corner (PiP —
   draggable + pin above everything), **right-click menu**: per-participant
-  volume/mute and stream-audio control, ping indicator in the control bar;
+  volume/mute and stream-audio control, ping indicator in the control bar,
+  **verified-publisher badge** (Ed25519-signed identity attestation);
   **always-on-top call window** (browser Document Picture-in-Picture —
   floats above every other app, also in the desktop app)
 - **Mobile background behavior** — while a call is live, a silent keepalive
@@ -227,9 +228,11 @@ can". What the SFU sees: bytes. Not what is said, not what is shared.
 | Per-sender ratchet | `msg_key_i` chain rooted at `H(epoch key ‖ 'ratchet' ‖ sender_id)`; leaking the current chain root leaves the past protected (no backward derivation). All scopes merge this root with the v4 DH step (row above) |
 | DH-rekey broadcast + self-update | On membership change, rotate wraps the new epoch to remaining members — a removed member cannot derive future message keys even holding the old epoch (key + anchor + all headers). A victim replacing a compromised device publishes a new DH public as an Ed25519-signed `dh_update` announcement (WS relay — the server passes it through opaquely, never stores it); receivers verify against the key log and TOFU-pin the valid one. One-click announcement in Settings → Security (5d); announcements failing signature verification trigger a red security banner — junk frames (malformed/unknown sender) are silently dropped |
 | Message padding | plaintext is rounded into size buckets (256 B / 1 KiB / 4 KiB / 4 KiB-steps) — the server cannot infer content from message length |
+| Dummy traffic | a logged-in client POSTs a meaningless 32 B–4 KiB blob at random 1–10 min intervals (/api/noise, not stored) — message-send timing alone is not distinguishable |
 | Device lock (opt.) | Device KEK derived from the WebAuthn PRF keeps the blob in IndexedDB — Phase 5 keeps the fingerprint/password fallback flow |
 | Per-device identity (Phase 7) | Each device holds an independent X25519 + Ed25519 keypair (identity blob v3); user identity = `users` + `users_devices` (v17) — primary at registration, linked devices approved by the primary. The server stores no private keys; only public keys, device names and linking state. Revoking a device = mandatory rekey: it cannot decrypt new messages (its old private key cannot produce the new DH output) while old messages stay readable with old keys. Per-device DH step counters, distinct ephemerals and DH pub headers — a separate sender to receivers. Per-device fingerprints derive from `users_devices.public_key + sign_public_key` |
-| Key log | public keys in an append-only hash chain (`key_log`); clients verify the chain at boot, the head stamp goes into the profile for out-of-band comparison. Signing keys are distributed from the log too — only chain-proven records feed signature verification |
+| Key log | public keys in an append-only hash chain (`key_log`); clients verify the chain at boot, the head stamp goes into the profile for out-of-band comparison. Signing keys are distributed from the log too — only chain-proven records feed signature verification | Daily out-of-band checkpoint: CI writes the ledger head to this repo (`keylog-checkpoint.json`); clients compare at boot — a forked ledger shown to a lone online victim contradicts the checkpoint within a day. |
+| Media sender attribution | each participant signs its LiveKit identity with Ed25519 (`voice:attest`, opaque server relay); receivers verify against the key ledger and require the identity to be actually connected. Verified publishers get a shield badge; a malicious server's phantom identity cannot be signed |
 | Own-message shortcut (Phase 1 hotfix) | `chatStore`/`dmChatStore` `toDisplay` uses the in-RAM `authStore.signPublicKey` for our own messages (`resolveSignKeys`) — own messages decode without waiting for key-transparency sync. Others still require chain proof; the model is intact. |
 | Keylog gossip | every client publishes its verified head to its communities over WS every 5 min; same id with a different hash = fork proof → red banner. The server is an opaque relay (no storage/interpretation) — the invariant holds. No full CONIKS proof tree: observational; out-of-band stamp comparison remains the strongest proof |
 
@@ -506,7 +509,7 @@ Verify: `curl localhost:4000/api/health` → `{"ok":true}`
 ## Automated tests
 
 ```bash
-npm test    # 326 tests: crypto/client unit + black-box integration (temp server + temp DB)
+npm test    # 339 tests: crypto/client unit + black-box integration (temp server + temp DB)
 ```
 
 Covering: AEAD/AAD binding, identity wrapping, BIP-39 checksum, invite link
@@ -520,7 +523,10 @@ limits + httpOnly cookies, pagination cursors, moderation roles/ban/kick →
 freeze → rotate, open/targeted invites + join password, friends/DM/group
 DM rekey, DM call presence (`dm:voice`): announce reaches the peer, stale
 wrong-channel close ignored, non-member cannot announce, register
-snapshot (F5), live WS events, account deletion, weak-secret rejection and
+snapshot (F5), key ledger checkpoint endpoint, voice attestation relay
+(broadcast + DM delivery, size/channel-type validation), dummy traffic
+(auth-only, size cap, rate limit, no storage), live WS events, account
+deletion, weak-secret rejection and
 the fresh-DB migration chain. CI runs type checks + all tests on every
 push/PR.
 
@@ -562,7 +568,7 @@ the evidence for each — plus the remaining structural limits (metadata,
 censorship/ordering, rate-limit anonymization, voice sender attribution,
 WebRTC vs Tor, no formal MLS, observational key transparency, MVP device
 linking) lives in the
-[Turkish README](README.md#tehdit-modeli-ve-bilinen-sınırlar) (the
+[Turkish README](README.tr.md#tehdit-modeli-ve-bilinen-sınırlar) (the
 project's primary language). An external-audit package with the full
 crypto specification:
 [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md).
@@ -585,7 +591,7 @@ crypto specification:
   transparency gossip, multi-device, audit readiness (v1.0.0)
 - [x] UI/UX pass — Discord-parity call layout: focus/grid + PiP, device
   selection, event-based sounds (15 events), consent-based member adding,
-  community profile (today: 35 files, 326 tests)
+  community profile (today: 38 files, 339 tests)
 
 ## Contributing
 

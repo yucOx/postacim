@@ -3,6 +3,7 @@
 export default {
   // CallControls (araç çubuğu + yayın diyaloğu)
   call: {
+    verifiedSender: 'yayıncı kimliği doğrulandı (Ed25519)',
     micOn: 'mikrofonu kapat',
     micOff: 'mikrofonu aç',
     camOn: 'kamerayı kapat',

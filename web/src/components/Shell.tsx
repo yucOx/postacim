@@ -25,6 +25,7 @@ import ProfileModal from './ProfileModal';
 import DeviceLockModal from './DeviceLockModal';
 import InvitePrompt from './InvitePrompt';
 import { deviceOfferDeclined, deviceUnlockSupported, hasDeviceUnlock } from '../crypto/devicekey';
+import { startNoise } from '../lib/noise';
 import { useChatStore } from '../state/chatStore';
 import { useDmChatStore } from '../state/dmChatStore';
 import { useTypingStore } from '../state/typingStore';
@@ -122,6 +123,7 @@ export default function Shell() {
   }, []);
 
   useEffect(() => {
+    const stopNoise = startNoise();
     wireEvents();
     useChatStore.getState().wire();
     useDmChatStore.getState().wire();
@@ -129,7 +131,10 @@ export default function Shell() {
     useVoiceStore.getState().wire();
     wsConnect();
     void loadBootstrap();
-    return () => wsDisconnect();
+    return () => {
+      stopNoise();
+      wsDisconnect();
+    };
   }, [wireEvents, loadBootstrap]);
 
   // anahtar defteri doğrulaması — Shell mount'unda bir kez (giriş/kayıt
