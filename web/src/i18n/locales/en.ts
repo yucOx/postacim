@@ -409,6 +409,8 @@ export default {
     voiceCallActive: 'call in progress',
     videoCall: 'encrypted video call',
     videoCallActive: 'call in progress',
+    peerInCall: '{nick} is in a call — waiting in the room',
+    joinCall: 'join call',
     safety: 'safety number',
     safetyLabel: 'safety',
     emptyDm: 'drop the first sealed envelope with {name}',

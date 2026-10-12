@@ -39,6 +39,10 @@ class Hub {
   // active 1:1 DM calls keyed by dm channel id; mirrors voice above but for DMs.
   // needed so a peer dropping their socket cleanly notifies the other side.
   private dmCalls = new Map<string, DmCallRow>();
+  // DM call PRESENCE (Discord green-ring): LiveKit odasına bağlı kullanıcı
+  // kendini duyurur; peer "X aramada — katıl" göstergesi için. dmCalls'tan
+  // farkı: bir taraf cancel etse de odada kalan duyuruyu sürdürür.
+  private dmVoice = new Map<string, { channelId: string; peerId: string }>(); // userId ->
   // outgoing frame queues: ws → frames pending this tick. Set keeps insertion
   // order and drops true duplicates (same payload twice) WITHOUT losing
   // distinct events — a Map<ws, string> would let the last event overwrite
@@ -65,6 +69,9 @@ class Hub {
       clearTimeout(grace);
       this.leaveGraces.delete(user.id);
     }
+    // F5 / yeni oturum: peers'ın şu anki DM arama presence'ını gönder ki
+    // "X aramada" göstergesi kaybolmasın
+    this.sendDmVoiceSnapshotTo(user.id);
   }
 
   unregister(ws: WebSocket): void {
@@ -87,6 +94,8 @@ class Hub {
       this.dropVoiceFor(userId);
       // a DM-call peer never came back — end the call for the other side too
       this.endDmCallFor(userId, 'peer_disconnected');
+      // DM presence de bitti — peer'daki "X aramada" göstergesi insin
+      this.dropDmVoiceFor(userId);
     }, VOICE_GRACE_MS);
     // never keep the process alive just for a grace timer (tests, shutdown)
     t.unref?.();
@@ -191,6 +200,36 @@ class Hub {
       const peer = call.userA === userId ? call.userB : call.userA;
       this.sendToUser(peer, { type: 'call:ended', channel_id: channelId, reason });
       this.dmCalls.delete(channelId);
+    }
+  }
+
+  /** DM arama presence duyurusu (odadayım / odadan çıktım). Bayat "kapama"
+   *  mesajları (sonraki bir aramadan kalan) yok sayılır. */
+  setDmVoice(userId: string, channelId: string, peerId: string, on: boolean): void {
+    const cur = this.dmVoice.get(userId);
+    if (on) {
+      this.dmVoice.set(userId, { channelId, peerId });
+    } else {
+      if (!cur || cur.channelId !== channelId) return;
+      this.dmVoice.delete(userId);
+    }
+    this.sendToUser(peerId, { type: 'dm:voice', channel_id: channelId, user_id: userId, in: on });
+  }
+
+  /** soket düştü + grace doldu — presence'ı kaldır, peer'a haber ver */
+  private dropDmVoiceFor(userId: string): void {
+    const cur = this.dmVoice.get(userId);
+    if (!cur) return;
+    this.dmVoice.delete(userId);
+    this.sendToUser(cur.peerId, { type: 'dm:voice', channel_id: cur.channelId, user_id: userId, in: false });
+  }
+
+  /** register anlık görüntüsü: benim DM'lerimde hâlen aramada olan peers */
+  private sendDmVoiceSnapshotTo(userId: string): void {
+    for (const [uid, v] of this.dmVoice) {
+      if (v.peerId === userId) {
+        this.sendToUser(userId, { type: 'dm:voice', channel_id: v.channelId, user_id: uid, in: true });
+      }
     }
   }
 

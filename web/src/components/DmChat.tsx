@@ -84,6 +84,8 @@ export default function DmChat({ dmId }: { dmId: string }) {
   const startDmCall = useVoiceStore((s) => s.startDmCall);
   const callPhase = useVoiceStore((s) => s.callState?.phase ?? null);
   const callChannelId = useVoiceStore((s) => s.callState?.channelId ?? null);
+  // karşı taraf bu DM'nin arama odasında mı (Discord "aramada" bandı)
+  const peerInCall = useVoiceStore((s) => s.dmPeerInCall[dmId] === true);
   // only lock the buttons while a call is actually live; "ended" or absent is
   // re-callable immediately, no 3s grace.
   const callLocked = callPhase === 'active' || callPhase === 'ringing' || callPhase === 'incoming';
@@ -217,6 +219,26 @@ export default function DmChat({ dmId }: { dmId: string }) {
         </div>
       </div>
       {sub && <div className="truncate border-b border-night-700/60 px-4 py-1 text-[11px] text-paper-500">{sub}</div>}
+      {dm && peerInCall && !callLocked && (
+        // Discord green-ring: karşı taraf odada bekliyor — tek tuşla katıl
+        <div className="flex items-center gap-2 border-b border-emerald-700/40 bg-emerald-500/10 px-4 py-1.5">
+          <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-xs font-semibold text-emerald-300">
+            {t('dm.peerInCall', { nick: dm.peer.nick })}
+          </span>
+          <button
+            onClick={() => void startDmCall(dmId, true).catch(() => {})}
+            className="btn-lamp !py-1 !text-xs"
+            title={t('dm.joinCall')}
+          >
+            <Phone size={12} className="inline" />
+            <span className="ml-1">{t('dm.joinCall')}</span>
+          </button>
+        </div>
+      )}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto py-2">
         {hasMore && (
           <div className="flex justify-center py-2">

@@ -404,6 +404,8 @@ export default {
     voiceCallActive: 'appel en cours',
     videoCall: 'appel vidéo chiffré',
     videoCallActive: 'appel en cours',
+    peerInCall: '{nick} est en appel — attend dans le salon',
+    joinCall: 'rejoindre l appel',
     safety: 'numéro de sécurité',
     safetyLabel: 'sécurité',
     emptyDm: 'dépose la première enveloppe scellée avec {name}',

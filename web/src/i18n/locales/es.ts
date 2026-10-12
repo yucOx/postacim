@@ -404,6 +404,8 @@ export default {
     voiceCallActive: 'llamada en curso',
     videoCall: 'llamada de vídeo cifrada',
     videoCallActive: 'llamada en curso',
+    peerInCall: '{nick} está en una llamada — esperando en la sala',
+    joinCall: 'unirse a la llamada',
     safety: 'número de seguridad',
     safetyLabel: 'seguridad',
     emptyDm: 'deja el primer sobre sellado con {name}',

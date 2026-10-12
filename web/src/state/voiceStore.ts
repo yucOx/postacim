@@ -69,6 +69,9 @@ interface VoiceState {
   error: string | null;
   /** channelId -> participants (sidebar presence, from WS voice:update) */
   presence: Record<string, VoiceParticipant[]>;
+  /** DM'de karşı taraf LiveKit odasında mı — "X aramada — katıl" göstergesi
+   *  (WS dm:voice; Discord green-ring mantığı) */
+  dmPeerInCall: Record<string, boolean>;
   /** 1:1 DM call state; shares `room` (one call at a time) */
   callState: CallState | null;
   isDmCall: boolean;
@@ -422,6 +425,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   screenQuality: null,
   error: null,
   presence: {},
+  dmPeerInCall: {},
   callState: null,
   isDmCall: false,
   pip: false,
@@ -885,6 +889,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
         const channelId = e.channel_id as string;
         const participants = (e.participants as VoiceParticipant[]) ?? [];
         set((s) => ({ presence: { ...s.presence, [channelId]: participants } }));
+      } else if (e.type === 'dm:voice') {
+        // karşı taraf DM arama odasına girdi/çıktı — banner state'i
+        const channelId = e.channel_id as string;
+        set((s) => ({ dmPeerInCall: { ...s.dmPeerInCall, [channelId]: !!e.in } }));
       } else if (e.type === 'channel:rotated') {
         // live rekey: refresh epochs, then hand the new key to SFrame.
         // Faz 5d: SFrame anahtarı DH zincirinden türetildiği için rekey zincir
@@ -1101,6 +1109,17 @@ if (typeof document !== 'undefined') {
       useVoiceStore.setState({ camPausedByHide: false });
     }
   });
+  // DM arama presence ("X aramada"): oda canlıyken duyuru tek noktadan —
+  // join/accept/recall/leave/teardown hepsi state değişimiyle yakalanır.
+  // 'ended' fazında oda yaşadığı sürece duyuru sürer: ayrılan taraf geri
+  // geldiğinde karşı tarafın odada beklediğini görür (Discord green-ring).
+  useVoiceStore.subscribe((s, prev) => {
+    const now = s.isDmCall && s.room ? s.callState?.channelId ?? '' : '';
+    const before = prev.isDmCall && prev.room ? prev.callState?.channelId ?? '' : '';
+    if (now === before) return;
+    if (before) wsSend({ type: 'dm:voice', channel_id: before, in: false });
+    if (now) wsSend({ type: 'dm:voice', channel_id: now, in: true });
+  });
   // presence WS'i mobil arka planda ölür (LiveKit hattı yaşamaya devam eder);
   // yeniden bağlanınca oda hâlâ canlıysa voice_state'i yeniden duyur ki
   // sidebar (sunucu grace'i) beklemeksizin doğru görünsün
@@ -1109,6 +1128,10 @@ if (typeof document !== 'undefined') {
     const s = useVoiceStore.getState();
     if (s.room && s.joinedChannelId && !s.isDmCall) {
       wsSend({ type: 'voice_state', channel_id: s.joinedChannelId, state: 'joined' });
+    }
+    // DM duyurusu da yeniden (sunucu grace'i dolduysa presence silinmiş olabilir)
+    if (s.room && s.isDmCall && s.callState?.channelId) {
+      wsSend({ type: 'dm:voice', channel_id: s.callState.channelId, in: true });
     }
   });
 }

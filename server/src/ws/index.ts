@@ -187,6 +187,20 @@ export function attachWs(app: FastifyInstance): void {
         return;
       }
 
+      // --- DM arama presence (Discord green-ring): odadaki taraf duyurur ---
+      if (
+        msg?.type === 'dm:voice' &&
+        typeof msg.channel_id === 'string' &&
+        typeof msg.in === 'boolean'
+      ) {
+        const dm = getDm(msg.channel_id, userId);
+        if (dm) {
+          const peerId = dm.user_a === userId ? dm.user_b : dm.user_a;
+          hub.setDmVoice(userId, msg.channel_id, peerId, msg.in);
+        }
+        return;
+      }
+
       // --- 1:1 DM call signaling (caller/relayed; media goes through LiveKit) ---
       const CALL_MSGS = ['call:ring', 'call:accept', 'call:decline', 'call:cancel'] as const;
       if (

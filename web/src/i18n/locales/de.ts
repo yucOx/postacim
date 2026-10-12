@@ -404,6 +404,8 @@ export default {
     voiceCallActive: 'anruf läuft',
     videoCall: 'verschlüsselter videoanruf',
     videoCallActive: 'anruf läuft',
+    peerInCall: '{nick} ist in einem anruf — wartet im raum',
+    joinCall: 'anruf beitreten',
     safety: 'Sicherheitsnummer',
     safetyLabel: 'sicherheit',
     emptyDm: 'wirf den ersten versiegelten Umschlag mit {name}',

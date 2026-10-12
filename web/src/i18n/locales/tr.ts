@@ -430,6 +430,8 @@ export default {
     voiceCallActive: 'arama sürüyor',
     videoCall: 'şifreli görüntülü ara',
     videoCallActive: 'arama sürüyor',
+    peerInCall: '{nick} aramada — odada bekliyor',
+    joinCall: 'aramaya katıl',
     safety: 'güvenlik numarası',
     safetyLabel: 'güvenlik',
     emptyDm: '{name} ile ilk mühürlü zarfı sen bırak',
