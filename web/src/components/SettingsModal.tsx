@@ -24,6 +24,7 @@ import CallQualityPicker from './CallQualityPicker';
 import { DeviceSettingsBlock } from './DeviceMenu';
 import { playSound } from '../lib/sound';
 import { useSettingsStore, type SoundKey } from '../state/settingsStore';
+import { useVoiceStore } from '../state/voiceStore';
 import { useI18nStore } from '../i18n/store';
 import { LOCALES, LOCALE_LABEL, LOCALE_FLAG, type Locale } from '../i18n/types';
 import { useT } from '../i18n/I18nProvider';
@@ -999,9 +1000,26 @@ function SoundKeyList(): React.ReactNode {
  *  menüyle aynı veriyi gösterir; buradan seçim kalıcıdır. */
 function MediaTab(): React.ReactNode {
   const { t } = useT();
+  const noiseFilter = useVoiceStore((s) => s.noiseFilter);
+  const toggleNoiseFilter = useVoiceStore((s) => s.toggleNoiseFilter);
   return (
     <div className="flex flex-col gap-3">
       <DeviceSettingsBlock />
+      <hr className="border-night-700" />
+      <div className="flex flex-col gap-1">
+        <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">
+          {t('call.noiseFilter')}
+        </span>
+        <span className="text-xs text-paper-500">{t('call.noiseFilterHint')}</span>
+        <button
+          type="button"
+          onClick={() => void toggleNoiseFilter()}
+          aria-pressed={noiseFilter}
+          className={`btn-ghost mt-1 self-start !text-xs ${noiseFilter ? '!border-lamp-500/70 !text-lamp-300' : ''}`}
+        >
+          {noiseFilter ? t('call.noiseFilterOn') : t('call.noiseFilterOff')}
+        </button>
+      </div>
       <hr className="border-night-700" />
       <div className="flex flex-col gap-1">
         <span className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-500">

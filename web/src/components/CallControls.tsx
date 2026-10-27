@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronUp, Maximize, Mic, MicOff, Minimize, MonitorUp, PhoneOff, PictureInPicture2, Signal, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
+import { AudioWaveform, ChevronUp, Maximize, Mic, MicOff, Minimize, MonitorUp, PhoneOff, PictureInPicture2, Signal, Video, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { useLocalParticipant } from '@livekit/components-react';
 import { useVoiceStore, type CallQuality, type ShareOpts } from '../state/voiceStore';
 import DeviceMenu from './DeviceMenu';
@@ -48,6 +48,8 @@ export default function CallControls({
   const quality = useVoiceStore((s) => s.quality);
   const toggleMic = useVoiceStore((s) => s.toggleMic);
   const toggleCam = useVoiceStore((s) => s.toggleCam);
+  const noiseFilter = useVoiceStore((s) => s.noiseFilter);
+  const toggleNoiseFilter = useVoiceStore((s) => s.toggleNoiseFilter);
   const startScreen = useVoiceStore((s) => s.startScreen);
   const toggleScreen = useVoiceStore((s) => s.toggleScreen);
   const volume = useVoiceStore((s) => s.volume);
@@ -197,6 +199,16 @@ export default function CallControls({
           </div>
         )}
       </div>
+      <button
+        type="button"
+        onClick={() => void toggleNoiseFilter()}
+        className={`${round(true)} ${noiseFilter ? '!border-lamp-500/70 !bg-lamp-100/60 !text-lamp-300' : ''}`}
+        title={noiseFilter ? t('call.noiseFilterOn') : t('call.noiseFilterOff')}
+        aria-label={noiseFilter ? t('call.noiseFilterOn') : t('call.noiseFilterOff')}
+        aria-pressed={noiseFilter}
+      >
+        <AudioWaveform size={18} />
+      </button>
       <button
         type="button"
         onClick={() => void toggleFullscreen()}

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Room, RoomEvent, Track, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets, DisconnectReason, AudioPresets } from 'livekit-client';
+import { Room, RoomEvent, Track, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets, DisconnectReason, AudioPresets, LocalAudioTrack } from 'livekit-client';
 import type { LocalParticipant, LocalTrackPublication, TrackPublishOptions, VideoCaptureOptions, AudioCaptureOptions } from 'livekit-client';
 import { api } from '../api/client';
 import type { VoiceTokenResponse } from '../api/types';
@@ -15,6 +15,7 @@ import { startRing, stopRing, playSound } from '../lib/sound';
 import { toast } from '../components/Toast';
 import { translate as t } from '../lib/translate';
 import { useMediaStore, systemDefaultId, speakerSupported, type DeviceKind } from './mediaStore';
+import { createRnnoiseProcessor } from '../lib/noiseFilter';
 // official subpath export; ?worker&inline bundles the SFrame worker into the app
 import E2EEWorker from 'livekit-client/e2ee-worker?worker&inline';
 
@@ -82,6 +83,11 @@ interface VoiceState {
   /** 1:1 DM call state; shares `room` (one call at a time) */
   callState: CallState | null;
   isDmCall: boolean;
+  /** RNNoise gürültü engelleyici (tarayıcı tabanlı track processor) —
+   *  açılınca mikrofon yayınına işlenmiş track bağlanır; yerel monitor
+   *  ham mikrofonu duymaya devam eder. Persisted. */
+  noiseFilter: boolean;
+  toggleNoiseFilter: () => Promise<void>;
   /** call window minimized to the corner — chat stays fully usable underneath */
   pip: boolean;
   setPip: (v: boolean) => void;
@@ -178,6 +184,16 @@ function loadQuality(): CallQuality {
     // ignore — fall through to default
   }
   return 'dengeli';
+}
+
+const NOISE_KEY = 'postacim.noiseFilter';
+
+function loadNoiseFilter(): boolean {
+  try {
+    return localStorage.getItem(NOISE_KEY) !== '0';
+  } catch {
+    return true;
+  }
 }
 
 /** Publish presets per quality tier. Simulcast is on by default; combined with
@@ -432,6 +448,33 @@ function warnNoShareAudio(room: Room, requested: boolean): void {
   if (requested && !pub?.track) toast.info(t('call.audioNoTrack'));
 }
 
+// ---------- RNNoise gürültü engelleyici ----------
+// Mikrofon track'i canlıya çıkar çıkmaz (ve her yeniden yakalanışında)
+// uygulanır. Processor yalnız yayına giden track'i değiştirir; yerel monitor
+// ham mikrofonu duyar. Yayın kapalıyken açılıp kapanırsa applyNoiseFilter
+// no-op olur ve bir sonraki mic enable'da doğru hâliyle kurulur.
+function micTrack(room: Room): LocalAudioTrack | null {
+  const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+  const track = pub?.track;
+  return track && track instanceof LocalAudioTrack ? track : null;
+}
+
+async function applyNoiseFilter(room: Room, enabled: boolean): Promise<void> {
+  const track = micTrack(room);
+  if (!track) return;
+  try {
+    if (enabled && !track.getProcessor()) {
+      await track.setProcessor(createRnnoiseProcessor());
+    } else if (!enabled && track.getProcessor()) {
+      await track.stopProcessor();
+    }
+  } catch (err) {
+    // filtre kurulamazsa yayın sessiz kalmasın — hatayı yut, konsola yaz
+    console.warn('[noise-filter] uygulanamadı:', err);
+    toast.info(t('call.noiseFilterFail'));
+  }
+}
+
 // Linux'ta Chromium getDisplayMedia ile ekran sesi hiç vermez (yalnız Windows/
 // ChromeOS'ta "sistem sesi" kutusu çıkar) — çıkış aygıtını izleyen PulseAudio/
 // PipeWire "Monitor" girişinden sistem sesini yakalayıp ayrı bir
@@ -576,6 +619,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   attested: {},
   callState: null,
   isDmCall: false,
+  noiseFilter: loadNoiseFilter(),
   pip: false,
   pipPos: loadPipPos(),
   pipPinned: loadPipPinned(),
@@ -682,6 +726,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
             try {
               await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true, withMicDevice());
               micOpened = true;
+              await applyNoiseFilter(room, get().noiseFilter);
             } catch {
               // mic permission denied or no mic
             }
@@ -748,9 +793,23 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     if (!room) return;
     const next = !get().micOn;
     await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(next, next ? withMicDevice() : undefined);
+    // mikrofon yeniden yakalandı (unmute) → filtreyi (yeniden) uygula
+    if (next) await applyNoiseFilter(room, get().noiseFilter);
     set({ micOn: next });
     // yerel geri bildirim (Discord): kapatınca alçak, açınca tiz tık
     playSound(next ? 'unmute' : 'mute');
+  },
+
+  toggleNoiseFilter: async () => {
+    const next = !get().noiseFilter;
+    try {
+      localStorage.setItem(NOISE_KEY, next ? '1' : '0');
+    } catch {
+      // private mode — session-only
+    }
+    set({ noiseFilter: next });
+    const room = get().room;
+    if (room) await applyNoiseFilter(room, next);
   },
 
   toggleCam: async () => {
@@ -786,6 +845,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       // element-gezen setSinkId bunu yapmıyordu: her yeni katılımcı
       // varsayılan hoparlöre düşüyordu.
       await room.switchActiveDevice(kind, target);
+      // mikrofon cihazı değişince track yeniden yakalanır → RNNoise
+      // processor'ı yeni track'e bağlanmalı
+      if (kind === 'audioinput') await applyNoiseFilter(room, get().noiseFilter);
     } catch (err) {
       set({ error: err instanceof Error ? `cihaz değiştirilemedi: ${err.message}` : 'cihaz değiştirilemedi' });
     }
@@ -901,6 +963,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       try {
         await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true, withMicDevice());
         micOpened = true;
+        await applyNoiseFilter(room, get().noiseFilter);
       } catch {
         // mic permission denied or no mic
       }
@@ -944,6 +1007,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       set({ callState: { phase: 'active', channelId: call.channelId } });
       try {
         await existing.localParticipant.setMicrophoneEnabled(true, withMicDevice());
+        await applyNoiseFilter(existing, get().noiseFilter);
         set({ micOn: true });
       } catch {
         // mic yok/izin yok — görüntülü arama olarak sürebilir
@@ -984,6 +1048,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       try {
         await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(true, withMicDevice());
         micOpened = true;
+        await applyNoiseFilter(room, get().noiseFilter);
       } catch {
         // mic error / permission denied
       }
@@ -1015,6 +1080,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
         true,
         withMicDevice(),
       );
+      await applyNoiseFilter(room, get().noiseFilter);
       set({ micOn: true });
     } catch {
       // mic yok/izin yok — yine de zil çalsın, kabul eden taraf görecek
