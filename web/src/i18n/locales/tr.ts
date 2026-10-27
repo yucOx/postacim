@@ -36,7 +36,7 @@ export default {
     audioOff: 'sessiz yayın',
     audioNoTrack: 'tarayıcı ses vermedi — ses için sekmeyi paylaş ve "sekme sesini de paylaş" kutusunu işaretle (pencere paylaşımında ses olmaz)',
     audioWindowHint: 'pencere paylaşımında tarayıcı ses vermez — ses için sekme veya ekran paylaş',
-    audioLinuxHint: 'Linux tarayıcıları ekran ve pencere sesini hiç vermez — ses için sekmeyi paylaş ve "sekme sesini de paylaş" kutusunu işaretle',
+    audioLinuxHint: 'Linux tarayıcıları ekran sesi vermez — sistem sesi çıkış aygıtının "Monitor" girişinden otomatik yakalanır. Dikkat: sistemdeki TÜM sesler (diğer katılımcıların sesi dahil) gider; kulaklık önerilir. Ses gelmezse sekmeyi paylaş ve "sekme sesini de paylaş" kutusunu işaretle',
     cancel: 'vazgeç',
     goLive: 'yayını başlat',
     screenPromptTitle: 'Yayın başlat',

@@ -8,6 +8,14 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ### Eklenen
 
+- **Linux'ta ekran paylaşımı sistem sesi**: Chromium Linux'ta
+  getDisplayMedia hiç ekran sesi vermezdi (yalnız Windows/ChromeOS) —
+  ses istenip gelmezse çıkış aygıtının PulseAudio/PipeWire "Monitor"
+  girişinden sistem sesi yakalanıp ayrı ScreenShareAudio track'i olarak
+  yayınlanır; izleyici tarafı aynı kaynaktan dinlediği için fark etmez.
+  Pencere paylaşımı tarayıcı kısıtı yüzünden çözülemez (ses kaynağı yok);
+  izleyiciye yankı riskine karşı yayın diyaloğunda uyarı güncellendi
+
 - **Mobilde arka plan arama davranışı**: arama sürerken sessiz audio
   keepalive + MediaSession ses hattını canlı tutar (Android mikrofonu
   kesmez, Chrome otomatik PiP tetikleyebilir); mobilde sekme arka plana

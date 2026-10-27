@@ -28,7 +28,7 @@ export default {
     audioOff: 'silent stream',
     audioNoTrack: 'the browser shared no audio — share a tab and tick "also share tab audio" (window shares have no audio)',
     audioWindowHint: 'window shares carry no audio — share a tab or screen for sound',
-    audioLinuxHint: "Linux browsers never share screen or window audio — share a tab and tick the 'also share tab audio' box for sound",
+    audioLinuxHint: "Linux browsers never share screen audio natively — system sound is auto-captured from your output device's 'Monitor' input instead. Note: ALL system audio goes out (including other participants) — headphones recommended. If no audio arrives, share a tab and tick the 'also share tab audio' box",
     cancel: 'cancel',
     goLive: 'start stream',
     screenPromptTitle: 'Start stream',

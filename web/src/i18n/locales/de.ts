@@ -32,7 +32,7 @@ export default {
     audioOff: 'stummer stream',
     audioNoTrack: 'der browser hat keinen ton geteilt — tab teilen und „tab-audio ebenfalls teilen" anhaken (fenster-freigabe hat keinen ton)',
     audioWindowHint: 'fenster-freigabe überträgt keinen ton — für ton tab oder bildschirm teilen',
-    audioLinuxHint: "linux-browser übertragen bildschirm- und fenster-ton gar nicht — für ton einen tab teilen und das kästchen 'tab-audio mitteilen' ankreuzen",
+    audioLinuxHint: "linux-browser übertragen bildschirm-ton nicht nativ — der systemton wird stattdessen automatisch über den 'monitor'-eingang deines ausgabegeräts erfasst. achte: ALLE systemgeräusche gehen raus (auch andere teilnehmer) — kopfhörer empfohlen. kommt kein ton an, teile einen tab und hake 'tab-audio ebenfalls teilen' an",
     cancel: 'abbrechen',
     goLive: 'stream starten',
     screenPromptTitle: 'Stream starten',

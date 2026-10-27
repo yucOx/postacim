@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { Room, RoomEvent, Track, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets, DisconnectReason } from 'livekit-client';
-import type { LocalParticipant, TrackPublishOptions, VideoCaptureOptions, AudioCaptureOptions } from 'livekit-client';
+import { Room, RoomEvent, Track, ExternalE2EEKeyProvider, ScreenSharePresets, VideoPresets, DisconnectReason, AudioPresets } from 'livekit-client';
+import type { LocalParticipant, LocalTrackPublication, TrackPublishOptions, VideoCaptureOptions, AudioCaptureOptions } from 'livekit-client';
 import { api } from '../api/client';
 import type { VoiceTokenResponse } from '../api/types';
 import { useAppStore } from './appStore';
@@ -244,6 +244,7 @@ function hintTrack(src: Track.Source): void {
 }
 
 const cleanup = (room: Room | null): void => {
+  stopSystemAudioTrack(room);
   if (!room) return;
   try {
     room.disconnect();
@@ -429,6 +430,91 @@ function warnNoShareAudio(room: Room, requested: boolean): void {
     '| readyState =', pub?.track?.mediaStreamTrack?.readyState,
   );
   if (requested && !pub?.track) toast.info(t('call.audioNoTrack'));
+}
+
+// Linux'ta Chromium getDisplayMedia ile ekran sesi hiç vermez (yalnız Windows/
+// ChromeOS'ta "sistem sesi" kutusu çıkar) — çıkış aygıtını izleyen PulseAudio/
+// PipeWire "Monitor" girişinden sistem sesini yakalayıp ayrı bir
+// ScreenShareAudio track'i olarak yayınlarız. İzleyici tarafı (ShareAudio) aynı
+// kaynaktan dinlediği için uzakta fark görünmez. Pencere paylaşımı yine
+// çözülemez: ses kaynağı yok (tarayıcı kısıtı, kullanıcı tarafında da).
+const IS_LINUX = /linux/i.test(navigator.userAgent) && !/android/i.test(navigator.userAgent);
+let systemAudioTrack: MediaStreamTrack | null = null;
+let systemAudioUnsub: ((pub: LocalTrackPublication) => void) | null = null;
+
+function stopSystemAudioTrack(room?: Room | null): void {
+  const track = systemAudioTrack;
+  if (!track) return;
+  systemAudioTrack = null;
+  const r = room ?? useVoiceStore.getState().room;
+  if (r && systemAudioUnsub) r.off(RoomEvent.LocalTrackUnpublished, systemAudioUnsub);
+  systemAudioUnsub = null;
+  try {
+    r?.localParticipant.unpublishTrack(track);
+  } catch {
+    // room zaten kapalı — track.stop() yeterli
+  }
+  track.stop();
+}
+
+async function captureSystemAudioFallback(room: Room): Promise<boolean> {
+  // Monitor girişleri adlarında "Monitor of …" taşır; bazı dağıtımlarda
+  // yerelleştirilir ("İzleme"). İzin verilmediyse etiketler boştur —
+  // eşleşme olmaz ve mevcut uyarı akışına düşer.
+  const monitors = (await navigator.mediaDevices.enumerateDevices()).filter(
+    (d) => d.kind === 'audioinput' && /monitor|izleme/i.test(d.label),
+  );
+  if (!monitors.length) return false;
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: { exact: monitors[0].deviceId },
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: { ideal: 2 },
+      },
+    });
+  } catch {
+    return false;
+  }
+  const track = stream.getAudioTracks()[0];
+  if (!track) {
+    stream.getTracks().forEach((tr) => tr.stop());
+    return false;
+  }
+  try {
+    await room.localParticipant.publishTrack(track, {
+      source: Track.Source.ScreenShareAudio,
+      audioPreset: AudioPresets.music,
+    });
+  } catch {
+    track.stop();
+    return false;
+  }
+  systemAudioTrack = track;
+  // ekran paylaşımı herhangi bir yoldan biterse (tarayıcı çubuğu, LiveKit'in
+  // kendi unpublish'i) ses track'ini de bırak
+  systemAudioUnsub = (pub) => {
+    const src = pub.track?.source;
+    if (src === Track.Source.ScreenShare || src === Track.Source.ScreenShareAudio) stopSystemAudioTrack(room);
+  };
+  room.on(RoomEvent.LocalTrackUnpublished, systemAudioUnsub);
+  return true;
+}
+
+async function ensureShareAudio(room: Room, requested: boolean): Promise<void> {
+  const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+  console.debug(
+    '[share-audio] gönderim: istenmiş =', requested,
+    '| track var mı =', !!pub?.track,
+    '| muted =', pub?.isMuted,
+    '| readyState =', pub?.track?.mediaStreamTrack?.readyState,
+  );
+  if (!requested || pub?.track) return;
+  if (IS_LINUX && (await captureSystemAudioFallback(room))) return;
+  toast.info(t('call.audioNoTrack'));
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardown: disconnect any live room and clear every call flag so the
@@ -718,7 +804,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     );
     if (next) {
       hintTrack(Track.Source.ScreenShare);
-      warnNoShareAudio(room, true);
+      await ensureShareAudio(room, true);
+    } else {
+      stopSystemAudioTrack(room);
     }
     set({ screenOn: next, screenQuality: next ? q : null });
     // Discord Go Live geri bildirimi: başlayınca yükselen, bitince düşen desen
@@ -732,6 +820,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     const room = get().room;
     if (!room) return;
     const bitrate = SHARE_BITRATES[opts.h]?.[opts.fps] ?? 2_500_000;
+    stopSystemAudioTrack(room); // mevcut paylaşımın değişmesi: eski monitor track'i bırak
     try {
       await room.localParticipant.setScreenShareEnabled(
         true,
@@ -749,7 +838,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
         },
       );
       hintTrack(Track.Source.ScreenShare);
-      warnNoShareAudio(room, opts.audio);
+      await ensureShareAudio(room, opts.audio);
       set({ screenOn: true, screenQuality: null });
       playSound('streamOn');
     } catch (err) {

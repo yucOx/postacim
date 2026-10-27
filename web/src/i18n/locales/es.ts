@@ -32,7 +32,7 @@ export default {
     audioOff: 'transmisión silenciosa',
     audioNoTrack: 'el navegador no compartió audio — comparte una pestaña y marca «compartir también el audio de la pestaña» (las ventanas no tienen audio)',
     audioWindowHint: 'compartir una ventana no lleva audio — para sonido comparte pestaña o pantalla',
-    audioLinuxHint: 'los navegadores en Linux nunca comparten audio de pantalla o ventana — para sonido comparte una pestaña y marca la casilla «compartir también el audio de la pestaña»',
+    audioLinuxHint: 'los navegadores en Linux no comparten audio de pantalla nativamente — el sonido del sistema se captura automáticamente desde la entrada «monitor» de tu dispositivo de salida. ojo: sale TODO el audio del sistema (incluidos otros participantes) — se recomiendan auriculares. si no llega audio, comparte una pestaña y marca «compartir también el audio de la pestaña»',
     cancel: 'cancelar',
     goLive: 'iniciar transmisión',
     screenPromptTitle: 'Iniciar transmisión',

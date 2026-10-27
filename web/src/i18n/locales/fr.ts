@@ -32,7 +32,7 @@ export default {
     audioOff: 'stream silencieux',
     audioNoTrack: 'le navigateur n a pas partagé le son — partage un onglet et coche « partager aussi l audio de l onglet » (les fenêtres n ont pas de son)',
     audioWindowHint: 'le partage de fenêtre ne transporte pas de son — pour du son, partage un onglet ou l écran',
-    audioLinuxHint: "les navigateurs Linux ne partagent jamais l'audio d'écran ou de fenêtre — pour du son, partage un onglet et coche la case « partager aussi l'audio de l'onglet »",
+    audioLinuxHint: "les navigateurs Linux ne partagent pas nativement l'audio d'écran — le son système est capté automatiquement via l'entrée « monitor » de ton périphérique de sortie. attention : TOUT l'audio système part (y compris les autres participants) — casque recommandé. si aucun son n'arrive, partage un onglet et coche « partager aussi l'audio de l'onglet »",
     cancel: 'annuler',
     goLive: 'démarrer le stream',
     screenPromptTitle: 'Démarrer le stream',
