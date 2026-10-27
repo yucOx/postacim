@@ -8,6 +8,16 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
 
 ### Eklenen
 
+- **Gürültü engelleyici (RNNoise, tarayıcı tabanlı)**: mikrofon track'ine
+  wasm AudioWorklet olarak RNNoise bağlanır — ses istemcide işlenir,
+  sunucuya işlenmiş ve SFrame şifreli gider. Yalnız yayın track'i
+  değişir; kendi kulağın ham mikrofonu duymaya devam eder. Çağrı
+  kontrol çubuğunda ve ayarlar > medya sekmesinde açılıp kapatılabilir
+  (tercih kalıcı). Gerçek Chrome'da A/B ölçüldü: gürültülü+ton girdide
+  SNR +17.6 dB (gürültü tabanı 18.4 dB düştü, ton korundu). Tarayıcının
+  kendi gürültü engelleyicisi çift işlemeye girmemesi için kapatılır,
+  yankı engelleme (echoCancellation) korunur
+
 - **Linux'ta ekran paylaşımı sistem sesi**: Chromium Linux'ta
   getDisplayMedia hiç ekran sesi vermezdi (yalnız Windows/ChromeOS) —
   ses istenip gelmezse çıkış aygıtının PulseAudio/PipeWire "Monitor"
@@ -36,6 +46,21 @@ manifest'i üretilir (bkz. README "Doğrulama"); sürüm kesme kararı sahipte.
   diyagramlar mmdc ile render doğrulandı)
 
 ### Düzeltilen
+
+- **Odak (spotlight) alanında birikmiş buglar**:
+  - "Odaktan çık" bazen etkisiz kalıyordu — `suppressAutoFocus` bir ref'ti
+    ama render sırasında okunuyordu; mutasyon render tetiklemiyordu
+    (çıkış yapıldı ama kendi yayınınız yine büyük görünüyordu). State'e
+    çevrildi, elle odaklanınca baskı kalkıyor
+  - Odaya yeni katılımcı girince odak sıfırlanıyordu — izlenen yayın
+    kendiliğinden kapanıyordu. Yeni katılan zaten odak şeridinde yerini
+    alıyor, efekt kaldırıldı
+  - İki kişi aynı anda yayın yapınca ikisinin sesi de (birbirine karışık)
+    duyuluyordu — yorum "yalnız izlenen yayın" diyordu ama kod tüm uzak
+    yayınları bağlıyordu. Odak modunda yalnız izlenen, yan yana modda
+    hepsi (görüntüyle eşleşmesi için)
+  - Odaklanılan kamerayı kapatan katılımcıda odak boş avatar'a kilitleniyor
+    ve çıkılamıyordu — kamerası kapanınca odak bırakılıyor
 
 - **Aramada ses bozulması (pat pat + boğuk)**: mobil keepalive için üretilen
   sessiz WAV'ta örnekler 0 bırakılmıştı — 8-bit PCM'de unsigned olduğundan
