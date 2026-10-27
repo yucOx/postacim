@@ -73,11 +73,17 @@ export function createRnnoiseProcessor(): NoiseFilterProcessor {
         ctx = new AudioContext({ sampleRate: 48000 });
         ownCtx = true;
       }
+      // autoplay politikası: bağlam 'suspended' kalmışsa işlenmiş ses
+      // akmaz (sessiz yayın). Mikrofon açma bir kullanıcı hareketidir,
+      // yine de açıkça devam ettiriyoruz.
+      if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
       await ctx.audioWorklet.addModule(rnnoiseWorkletUrl);
       source = ctx.createMediaStreamSource(new MediaStream([track]));
       node = new RnnoiseWorkletNode(ctx, {
         wasmBinary: await rnnoiseBinary(),
-        maxChannels: 1,
+        // mono mikrofon 1 kanal verir; stereo cihaz seçilirse ikinci kanal
+        // da işlenmeli (tek kanal işlenip diğeri boş kalırsa "bottle" sesi)
+        maxChannels: 2,
       });
       dest = ctx.createMediaStreamDestination();
       source.connect(node);
