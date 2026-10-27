@@ -449,6 +449,11 @@ export default function CallStage({
   const shareByIdentity = new Map(
     screens.filter((t) => !t.participant.isLocal).map((t) => [t.participant.identity, t]),
   );
+  // YAYIN SESİ yalnız İZLENEN yayına bağlanır. Yorum "yalnız izlenen
+  // yayının sahibi bağlanır" diyordu ama activeIds tüm uzak yayınları
+  // listeliyordu: iki kişi aynı anda yayın yapınca ikisinin sesi de
+  // (birbirine karışarak) duyuluyordu. İzlenen yayın yoksa sessiz.
+  const watchedScreenId = spotlight?.startsWith('screen:') ? spotlight.split(':')[1] : null;
   // canlı yayın rozeti — tıklayınca doğrudan spotlight almak yerine küçük
   // bir onay penceresi açılır: "katıl" / "vazgeç" (Discord Go Live mantığı;
   // istemeden spot alıp çağrı akışını bozmamak için)
@@ -515,15 +520,6 @@ export default function CallStage({
     setShareLayout('focus');
   };
 
-  // yeni katılan olunca odağı bırak — sonradan bağlanan şeritte küçük kalmasın,
-  // herkes eşit büyüklükte başlasın
-  const prevCount = useRef(participants.length);
-  useEffect(() => {
-    if (participants.length > prevCount.current) {
-      setSpotlight(null);
-    }
-    prevCount.current = participants.length;
-  }, [participants.length]);
   // prompt açıkken peer paylaşımı durdurursa havada kalmasın
   useEffect(() => {
     if (joinPrompt && !shareByIdentity.has(joinPrompt)) setJoinPrompt(null);
@@ -729,7 +725,7 @@ export default function CallStage({
         <ShareAudio
           volume={shareVolume}
           muted={shareMuted}
-          activeIds={screens.filter((t) => !t.participant.isLocal).map((t) => t.participant.identity)}
+          activeIds={watchedScreenId ? [watchedScreenId] : []}
         />
         <div className="flex min-h-0 flex-1 gap-2 p-1.5" style={{ paddingBottom: dockH + 6 }}>
           {allVideos.map(paneFor)}
@@ -843,8 +839,8 @@ export default function CallStage({
           muted={shareMuted}
           // odak kamerada olsa bile YAYIN sesi duyulur (Discord): ses kaynağı
           // ayrı bir track, hangi kutuya baktığımızla ilgisi yok. Yalnız
-          // izlenen yayının sahibi bağlanır.
-          activeIds={screens.filter((t) => !t.participant.isLocal).map((t) => t.participant.identity)}
+          // İZLENEN yayının sahibi bağlanır.
+          activeIds={watchedScreenId ? [watchedScreenId] : []}
         />
         <div className="flex min-h-0 flex-1 flex-col gap-2 p-1.5" style={{ paddingBottom: dockH + 6 }}>
           <div className="flex min-h-0 min-w-0 flex-1">
