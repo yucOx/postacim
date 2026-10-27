@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ParticipantTile, useParticipants, useTracks, AudioTrack, useIsMuted } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import type { Participant } from 'livekit-client';
@@ -353,10 +353,10 @@ export default function CallStage({
   // audio alamadıysa (pencere her yerde; Linux'ta ekran da) ScreenShareAudio
   // publication'ı hiç oluşmaz — izleyici "sessiz yayın" rozetiyle ayırt eder
   const shareAudioRefs = useTracks([Track.Source.ScreenShareAudio], { onlySubscribed: false });
-  const shareAudioIds = new Set(
+  const shareAudioTrackIds = new Set(
     shareAudioRefs.filter((r) => r.publication).map((r) => r.participant.identity),
   );
-  const streamSilent = (identity: string): boolean => !shareAudioIds.has(identity);
+  const streamSilent = (identity: string): boolean => !shareAudioTrackIds.has(identity);
   const camByIdentity = new Map<string, TrackReference>();
   for (const t of tracks) {
     if (t.source === Track.Source.Camera && live(t) && !camByIdentity.has(t.participant.identity)) {
@@ -449,11 +449,22 @@ export default function CallStage({
   const shareByIdentity = new Map(
     screens.filter((t) => !t.participant.isLocal).map((t) => [t.participant.identity, t]),
   );
-  // YAYIN SESİ yalnız İZLENEN yayına bağlanır. Yorum "yalnız izlenen
-  // yayının sahibi bağlanır" diyordu ama activeIds tüm uzak yayınları
-  // listeliyordu: iki kişi aynı anda yayın yapınca ikisinin sesi de
-  // (birbirine karışarak) duyuluyordu. İzlenen yayın yoksa sessiz.
+  // YAYIN SESİ: odak modunda YALNIZ İZLENEN yayın bağlanır. Yorum
+  // "yalnız izlenen yayının sahibi bağlanır" diyordu ama activeIds tüm
+  // uzak yayınları listeliyordu: iki kişi aynı anda yayın yapınca ikisinin
+  // sesi de (birbirine karışarak) duyuluyordu.
+  // 'side' (yan yana) modunda ise TÜM yayınlar ekranda görünür — hepsinin
+  // sesi de duyulmalı (görüntüyle eşleşmesi gerekir).
   const watchedScreenId = spotlight?.startsWith('screen:') ? spotlight.split(':')[1] : null;
+  const attachedShareAudioIds = useMemo(
+    () =>
+      shareLayout === 'side'
+        ? screens.filter((t) => !t.participant.isLocal).map((t) => t.participant.identity)
+        : watchedScreenId
+          ? [watchedScreenId]
+          : [],
+    [shareLayout, screens, watchedScreenId],
+  );
   // canlı yayın rozeti — tıklayınca doğrudan spotlight almak yerine küçük
   // bir onay penceresi açılır: "katıl" / "vazgeç" (Discord Go Live mantığı;
   // istemeden spot alıp çağrı akışını bozmamak için)
@@ -725,7 +736,7 @@ export default function CallStage({
         <ShareAudio
           volume={shareVolume}
           muted={shareMuted}
-          activeIds={watchedScreenId ? [watchedScreenId] : []}
+          activeIds={attachedShareAudioIds}
         />
         <div className="flex min-h-0 flex-1 gap-2 p-1.5" style={{ paddingBottom: dockH + 6 }}>
           {allVideos.map(paneFor)}
@@ -839,8 +850,8 @@ export default function CallStage({
           muted={shareMuted}
           // odak kamerada olsa bile YAYIN sesi duyulur (Discord): ses kaynağı
           // ayrı bir track, hangi kutuya baktığımızla ilgisi yok. Yalnız
-          // İZLENEN yayının sahibi bağlanır.
-          activeIds={watchedScreenId ? [watchedScreenId] : []}
+          // İZLENEN yayının sahibi bağlanır (side modunda hepsi).
+          activeIds={attachedShareAudioIds}
         />
         <div className="flex min-h-0 flex-1 flex-col gap-2 p-1.5" style={{ paddingBottom: dockH + 6 }}>
           <div className="flex min-h-0 min-w-0 flex-1">
