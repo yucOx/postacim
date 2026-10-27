@@ -398,7 +398,7 @@ export default function CallStage({
   const toggleSpotlight = (kind: 'screen' | 'cam', identity: string): void => {
     const key = `${kind}:${identity}`;
     if (spotlight === key) {
-      suppressAutoFocus.current = true;
+      setSuppressAutoFocus(true);
       setSpotlight(null);
       return;
     }
@@ -414,15 +414,22 @@ export default function CallStage({
   // kullanıcı odaktan açıkça ÇIKTI: kendi yayını canlı olsa bile oto-odak
   // (kendi yayınını büyütme) bir sonraki paylaşım başlayana kadar kapalı —
   // yoksa odaktan çıkmak tek tıkla olmuyordu (çıkınca kendi yayını büyüyordu)
-  const suppressAutoFocus = useRef(false);
+  //
+  // REF DEĞİL STATE: bu bayrak render sırasında okunuyor; ref mutasyonu
+  // render tetiklemediği için "odaktan çık" bazen etkisiz kalıyordu (çıkış
+  // yapıldı ama kendi yayınınız yine büyük görünüyordu).
+  const [suppressAutoFocus, setSuppressAutoFocus] = useState(false);
   const spotCam = (identity: string): void => {
     returnLayout.current = shareLayout;
+    // elle odaklanınca oto-büyütme baskısı kalkar — yoksa odaktan çıkınca
+    // bir sonraki render'da kendi yayınınız yine büyük çıkıyordu
+    setSuppressAutoFocus(false);
     setSpotlight(`cam:${identity}`);
   };
   // tek tıkta tam çıkış — izlenen yayına geri ZIPLAMA yok; çıkış = çıkış.
   // Yayın canlı kalırsa canlı rozetinden tekrar izlenir
   const releaseSpot = (): void => {
-    suppressAutoFocus.current = true;
+    setSuppressAutoFocus(true);
     setSpotlight(null);
     setShareLayout(returnLayout.current);
   };
@@ -431,13 +438,14 @@ export default function CallStage({
   // hep düz kamera düzenine dönmek için yerleşimi odak'a sabitleriz
   const watchScreen = (identity: string): void => {
     returnLayout.current = 'focus';
+    setSuppressAutoFocus(false);
     setSpotlight(`screen:${identity}`);
     setShareLayout('focus');
   };
   // izlemeyi bırak: spotlight'ı bırak + kamera düzenine dön — returnLayout'a
   // güvenme, eski 'side' tercihi yayını tekrar büyük gösterebilir
   const unwatch = (): void => {
-    suppressAutoFocus.current = true;
+    setSuppressAutoFocus(true);
     setSpotlight(null);
     setShareLayout('focus');
   };
@@ -546,7 +554,7 @@ export default function CallStage({
   const prevOwnScreens = useRef(0);
   useEffect(() => {
     if (ownScreenCount > prevOwnScreens.current) {
-      suppressAutoFocus.current = false;
+      setSuppressAutoFocus(false);
       setSpotlight(null);
       setShareLayout('focus');
     }
@@ -566,6 +574,18 @@ export default function CallStage({
       setShareLayout('focus');
     }
   }, [screens, spotlight]);
+  // odaklanılan KAMERA kapanırsa da spotlight'ı bırak — yoksa odak boş
+  // avatar'a kilitlenir ve odaktan çıkamazsın (büyük alanda tıklama
+  // releaseSpot'ı çağırır ama odak hiç değişmiyordu)
+  useEffect(() => {
+    if (spotlight?.startsWith('cam:')) {
+      const id = spotlight.split(':')[1];
+      if (!camByIdentity.has(id)) {
+        setSpotlight(null);
+        setShareLayout('focus');
+      }
+    }
+  }, [spotlight, camByIdentity]);
 
   // Discord tarzı sağ tık menüsü (her düzende ortak)
   const ctxMenu = ctxTarget && (
@@ -683,7 +703,7 @@ export default function CallStage({
   // Kullanıcı odaktan açıkça çıktıysa (suppressAutoFocus) kendi yayını bile
   // yeniden büyütülmez — yoksa çıkış tek tıkla olmaz
   const autoFocusVideo =
-    spotlight || suppressAutoFocus.current
+    spotlight || suppressAutoFocus
       ? null
       : (allVideos.find((v) => v.isScreen && v.trackRef.participant.isLocal) ?? null);
   const focusedKey = spotlight ?? (autoFocusVideo?.key ?? null);
