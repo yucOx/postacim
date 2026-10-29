@@ -462,26 +462,26 @@ export default function CallStage({
   const shareByIdentity = new Map(
     screens.filter((t) => !t.participant.isLocal).map((t) => [t.participant.identity, t]),
   );
-  // YAYIN SESİ: odak modunda YALNIZ İZLENEN yayın bağlanır. Yorum
-  // "yalnız izlenen yayının sahibi bağlanır" diyordu ama activeIds tüm
-  // uzak yayınları listeliyordu: iki kişi aynı anda yayın yapınca ikisinin
-  // sesi de (birbirine karışarak) duyuluyordu.
-  // 'side' (yan yana) modunda ise TÜM yayınlar ekranda görünür — hepsinin
-  // sesi de duyulmalı (görüntüyle eşleşmesi gerekir).
-  const watchedScreenId = spotlight?.startsWith('screen:') ? spotlight.split(':')[1] : null;
+  // YAYIN SESİ — DISCORD KURALI: "bir anda yalnız bir yayın dinlenir".
+  // Discord resmi dokümanı: "You can only view one stream, within one voice
+  // channel at a time" — sesler karıştırılmaz, hangi yayına tıklarsan onun
+  // sesi gelir. Önceden 3 ayrı kural vardı (side=hepsi, focus=izlenen,
+  // pencere=pencere+izlenen) ve iki yayın aynı anda seslendiğinde
+  // karışıyordu.
+  //
+  // Tek kural: DAİMA en fazla bir yayın dinlenir. Öncelik:
+  //  1. ayrı yayın penceresi açıksa → penceredeki yayın
+  //  2. yoksa izlenen yayın (spotlight) → o yayın
+  // Hiçbir şey izlenmiyorsa ses yok — Discord'da da öyle (yayına tıklayıp
+  // "izle" demeden yayın sesi gelmez).
+  const watchedScreenId = spotlight?.startsWith('screen:') ? spotlight.split(':')[1] ?? null : null;
   // AYRI YAYIN PENCERESİ (Discord mantığı): yayın sahneyi değiştirmeden
   // üstte açılır; ses de bu yayına bağlanır (pencere açıkken duyulur).
   const [streamWindowId, setStreamWindowId] = useState<string | null>(null);
   const attachedShareAudioIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (shareLayout === 'side') {
-      for (const t of screens) if (!t.participant.isLocal) ids.add(t.participant.identity);
-    } else if (watchedScreenId) {
-      ids.add(watchedScreenId);
-    }
-    if (streamWindowId) ids.add(streamWindowId);
-    return [...ids];
-  }, [shareLayout, screens, watchedScreenId, streamWindowId]);
+    const id = streamWindowId ?? watchedScreenId;
+    return id ? [id] : [];
+  }, [watchedScreenId, streamWindowId]);
   // Yayıncı yayınını durdurursa açık pencere havada kalmasın
   useEffect(() => {
     if (streamWindowId && !screens.some((t) => t.participant.identity === streamWindowId)) {
@@ -642,7 +642,6 @@ export default function CallStage({
       <>
         {ctxMenu}
       {streamWindow}
-        {streamWindow}
         <RemoteAudio />
         {emptyLabel ? (
           <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{emptyLabel}</div>
@@ -755,6 +754,14 @@ export default function CallStage({
     const paneFor = (v: { key: string; trackRef: TrackReference; isScreen: boolean; identity: string }): React.ReactNode => {
       const own = v.trackRef.participant.isLocal && v.isScreen;
       const silent = v.isScreen && !v.trackRef.participant.isLocal && streamSilent(v.identity);
+      // Discord mantığı: yan yana modda yayına TIKLAYINCA görüntü yan yana
+      // kalır ama O YAYININ SESİ bağlanır (ses her zaman tek yayında).
+      // Daha önce tıklama odak moduna geçiriyordu — "sesi dinle" ile
+      // "büyüt" aynı tıklamada karışıyordu.
+      const listenTo = (identity: string): void => {
+        setSuppressAutoFocus(false);
+        setSpotlight(`screen:${identity}`);
+      };
       return (
         <SpeakingTile
           key={v.key}
@@ -772,7 +779,7 @@ export default function CallStage({
           />
           <VideoFit
             aspect={trackAspect(v.trackRef)}
-            onClick={() => (v.isScreen ? watchScreen(v.identity) : focusFromSide(v.identity))}
+            onClick={() => (v.isScreen ? listenTo(v.identity) : focusFromSide(v.identity))}
           >
             <NamePlate
               participant={v.trackRef.participant}
@@ -792,7 +799,6 @@ export default function CallStage({
       <>
         {ctxMenu}
       {streamWindow}
-        {streamWindow}
         <RemoteAudio />
         <ShareAudio
           volume={shareVolume}
@@ -906,14 +912,13 @@ export default function CallStage({
       <>
         {ctxMenu}
       {streamWindow}
-        {streamWindow}
         <RemoteAudio />
         <ShareAudio
           volume={shareVolume}
           muted={shareMuted}
           // odak kamerada olsa bile YAYIN sesi duyulur (Discord): ses kaynağı
-          // ayrı bir track, hangi kutuya baktığımızla ilgisi yok. Yalnız
-          // İZLENEN yayının sahibi bağlanır (side modunda hepsi).
+          // ayrı bir track, hangi kutuya baktığımızla ilgisi yok. Her zaman
+          // EN FAZLA bir yayın (pencere > izlenen) — Discord kuralı.
           activeIds={attachedShareAudioIds}
         />
         <div className="flex min-h-0 flex-1 flex-col gap-2 p-1.5" style={{ paddingBottom: dockH + 6 }}>
@@ -1022,7 +1027,6 @@ export default function CallStage({
       <>
         {ctxMenu}
       {streamWindow}
-        {streamWindow}
         <RemoteAudio />
         {/* Dış çerçeve tüm alanı kaplar (koyu). 1-2 video YAN YANA eşit
             kutular halinde alanı DOLDURUR (flex-1, ortak yükseklik);
