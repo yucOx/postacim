@@ -98,6 +98,8 @@ export default {
     unmute: 'yayın sesini aç',
     mute: 'yayın sesini kapat',
     volLabel: 'yayın sesi seviyesi',
+    windowTitle: 'yayın — {name}',
+    windowClose: 'yayın penceresini kapat',
   },
   // PiP pencere
   // mikrofon / kamera / hoparlör seçimi

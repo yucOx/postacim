@@ -92,6 +92,8 @@ export default {
     unmute: 'réactiver le son du stream',
     mute: 'couper le son du stream',
     volLabel: 'volume du stream',
+    windowTitle: 'stream — {name}',
+    windowClose: 'fermer la fenêtre de stream',
   },
   // micro / caméra / haut-parleur
   devices: {

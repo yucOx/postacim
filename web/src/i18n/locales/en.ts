@@ -92,6 +92,8 @@ export default {
     unmute: 'unmute stream',
     mute: 'mute stream',
     volLabel: 'stream volume',
+    windowTitle: 'stream — {name}',
+    windowClose: 'close stream window',
   },
   // microphone / camera / speaker selection
   devices: {

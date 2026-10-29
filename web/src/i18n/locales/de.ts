@@ -92,6 +92,8 @@ export default {
     unmute: 'stream-ton einschalten',
     mute: 'stream-ton stummschalten',
     volLabel: 'stream-lautstärke',
+    windowTitle: 'stream — {name}',
+    windowClose: 'stream-fenster schließen',
   },
   // Mikrofon / Kamera / Lautsprecher
   devices: {

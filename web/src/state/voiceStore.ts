@@ -389,6 +389,14 @@ async function connectRoom(
     dynacast: true,
     encryption: { keyProvider, worker },
     audioOutput: withSpeakerDevice(),
+    // ODA SEVİYESİ gürültü engelleyici: mikrofon YAKALANIRKEN RNNoise
+    // işlemcisi otomatik bağlanır (LiveKit createLocalTracks ->
+    // track.setProcessor). Elle setProcessor çağırmakla çakışır — tek
+    // kaynak bu. Toggle kapatıldığında bu alan temizlenir ve yeniden
+    // bağlanan mikrofon filtresiz yayınlanır.
+    ...(roomNoiseFilterEnabled()
+      ? { audioCaptureDefaults: { processor: createRnnoiseProcessor() } }
+      : {}),
     // 2 vCPU/3 GB VPS için uplink sınırı (docs/NETWORKING.md §10). Server
     // tarafı v1.x bu alanları kabul etmiyor; client-side cap uyguluyoruz
     // (manipüle edilebilir ama gizlilik için sorun değil — SFrame zaten
@@ -457,6 +465,17 @@ function micTrack(room: Room): LocalAudioTrack | null {
   const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
   const track = pub?.track;
   return track && track instanceof LocalAudioTrack ? track : null;
+}
+
+// ODA SEVİYESİ: mikrofon her yakalandığında (track restart, cihaz değişimi,
+// mute/unmute) filtre otomatik uygulanır. LiveKit'in
+// audioCaptureDefaults.processor alanı createLocalTracks() içinde
+// track.setProcessor() çağrısına dönüşür — yani elle müdahale gerekmez.
+// Not: aynı anda elle de setProcessor çağırmak çakışır; bu yüzden tek
+// kaynak bu yol (oda options) — applyNoiseFilter yalnız AÇIK/KAPALI
+// değişiminde (yeniden bağlama) kullanılır.
+function roomNoiseFilterEnabled(): boolean {
+  return useVoiceStore.getState().noiseFilter;
 }
 
 async function applyNoiseFilter(room: Room, enabled: boolean): Promise<void> {
@@ -809,7 +828,20 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     }
     set({ noiseFilter: next });
     const room = get().room;
-    if (room) await applyNoiseFilter(room, next);
+    if (!room) return;
+    // Oda options'ı yeni mikrofon yakalamaları için güncellenir —
+    // LiveKit track'i yeniden yakalamadığında options.processor
+    // otomatik uygulanmaz (yalnız createLocalTracks sırasında).
+    if (room.options.audioCaptureDefaults) {
+      room.options.audioCaptureDefaults.processor = next
+        ? createRnnoiseProcessor()
+        : undefined;
+    } else if (next) {
+      room.options.audioCaptureDefaults = { processor: createRnnoiseProcessor() };
+    }
+    // canlı track'e hemen uygula (mute/unmute veya cihaz değişiminde
+    // yeniden yakalama beklemiyoruz)
+    await applyNoiseFilter(room, next);
   },
 
   toggleCam: async () => {

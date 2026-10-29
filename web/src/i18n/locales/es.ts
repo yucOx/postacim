@@ -92,6 +92,8 @@ export default {
     unmute: 'activar audio de la transmisión',
     mute: 'silenciar audio de la transmisión',
     volLabel: 'volumen de la transmisión',
+    windowTitle: 'transmisión — {name}',
+    windowClose: 'cerrar ventana de transmisión',
   },
   // micrófono / cámara / altavoz
   devices: {

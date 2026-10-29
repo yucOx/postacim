@@ -10,6 +10,7 @@ import { useVoiceStore } from '../state/voiceStore';
 import { useAuthStore } from '../state/authStore';
 import { useSafeIsSpeaking } from '../lib/speaking';
 import Avatar from './Avatar';
+import StreamWindow from './StreamWindow';
 import ParticipantMenu from './ParticipantMenu';
 
 /** Remote mic audio — invisible <audio> elements. Without this nothing in the
@@ -50,6 +51,10 @@ function RemoteAudio(): React.ReactNode {
  *  attached (unwatched live tiles stay silent). Local share audio is never
  *  attached (echo). */
 function ShareAudio({ volume, muted, activeIds }: { volume: number; muted: boolean; activeIds: string[] }): React.ReactNode {
+  // onlySubscribed: true — izlenmeyen yayınların sesi subscribe edilmez
+  // (bandwidth/CPU israfı). Pencere açıldığında ParticipantTile yayın
+  // videosunu render eder → LiveKit o kaynağa abone olur; ScreenShareAudio
+  // da aynı yayıncının track'i olduğu için aynı anda abone olur.
   const tracks = useTracks([Track.Source.ScreenShareAudio], { onlySubscribed: true });
   const masterVol = useVoiceStore((s) => s.volume);
   const deafened = useVoiceStore((s) => s.deafened);
@@ -464,21 +469,32 @@ export default function CallStage({
   // 'side' (yan yana) modunda ise TÜM yayınlar ekranda görünür — hepsinin
   // sesi de duyulmalı (görüntüyle eşleşmesi gerekir).
   const watchedScreenId = spotlight?.startsWith('screen:') ? spotlight.split(':')[1] : null;
-  const attachedShareAudioIds = useMemo(
-    () =>
-      shareLayout === 'side'
-        ? screens.filter((t) => !t.participant.isLocal).map((t) => t.participant.identity)
-        : watchedScreenId
-          ? [watchedScreenId]
-          : [],
-    [shareLayout, screens, watchedScreenId],
-  );
+  // AYRI YAYIN PENCERESİ (Discord mantığı): yayın sahneyi değiştirmeden
+  // üstte açılır; ses de bu yayına bağlanır (pencere açıkken duyulur).
+  const [streamWindowId, setStreamWindowId] = useState<string | null>(null);
+  const attachedShareAudioIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (shareLayout === 'side') {
+      for (const t of screens) if (!t.participant.isLocal) ids.add(t.participant.identity);
+    } else if (watchedScreenId) {
+      ids.add(watchedScreenId);
+    }
+    if (streamWindowId) ids.add(streamWindowId);
+    return [...ids];
+  }, [shareLayout, screens, watchedScreenId, streamWindowId]);
+  // Yayıncı yayınını durdurursa açık pencere havada kalmasın
+  useEffect(() => {
+    if (streamWindowId && !screens.some((t) => t.participant.identity === streamWindowId)) {
+      setStreamWindowId(null);
+    }
+  }, [screens, streamWindowId]);
   // canlı yayın rozeti — tıklayınca doğrudan spotlight almak yerine küçük
   // bir onay penceresi açılır: "katıl" / "vazgeç" (Discord Go Live mantığı;
   // istemeden spot alıp çağrı akışını bozmamak için)
   const [joinPrompt, setJoinPrompt] = useState<string | null>(null);
   const liveBadgeBtn = (identity: string): React.ReactNode => {
     const open = joinPrompt === identity;
+    const windowOpen = streamWindowId === identity;
     return (
       <div
         onClick={(e) => e.stopPropagation()}
@@ -495,7 +511,7 @@ export default function CallStage({
                 type="button"
                 onClick={() => {
                   setJoinPrompt(null);
-                  watchScreen(identity);
+                  setStreamWindowId(identity);
                 }}
                 className="flex-1 rounded border border-lamp-500/70 bg-lamp-100/60 px-2 py-1 text-[11px] font-semibold text-lamp-300 transition-colors hover:bg-lamp-500 hover:text-night-950"
                 title={t('stream.badgeTitle')}
@@ -513,18 +529,26 @@ export default function CallStage({
             </div>
           </div>
         ) : (
+          // BELİRGİN buton: kameranın üstünde "CANLI — İZLE" — Discord'daki
+          // Go Live rozeti gibi gözüksün, tek tıkla AYRI pencere açsın
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setJoinPrompt(identity);
+              // zaten açıksa kapat (aç/kapa), değilse aç
+              setStreamWindowId((cur) => (cur === identity ? null : identity));
             }}
-            className="flex items-center gap-1 rounded-sm border border-stamp-500/70 bg-night-950/85 px-1.5 py-0.5 font-display text-[9px] font-semibold uppercase tracking-[0.1em] text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
+            aria-pressed={windowOpen}
+            className={`flex items-center gap-1.5 rounded-md border px-2 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.12em] shadow-[0_4px_14px_-4px_rgba(0,0,0,0.75)] transition-colors ${
+              windowOpen
+                ? 'border-lamp-500 bg-lamp-500 text-night-950'
+                : 'border-stamp-500 bg-stamp-500 text-white hover:bg-stamp-400'
+            }`}
             title={streamSilent(identity) ? `${t('stream.badgeTitle')} — ${t('stream.silent')}` : t('stream.badgeTitle')}
           >
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-stamp-500" aria-hidden />
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
             {t('stream.badgeWatch')}
-            {streamSilent(identity) && <VolumeX size={10} aria-label={t('stream.silent')} />}
+            {streamSilent(identity) && <VolumeX size={11} aria-label={t('stream.silent')} />}
           </button>
         )}
       </div>
@@ -588,6 +612,19 @@ export default function CallStage({
   }, [spotlight, camByIdentity]);
 
   // Discord tarzı sağ tık menüsü (her düzende ortak)
+  // AYRI YAYIN PENCERESİ (Discord mantığı): sahne değişmez, yayın üstte
+  // ayrı pencerede açılır/kapanır. Pencerede yayın sesi de duyulur.
+  const streamWindowTrack = streamWindowId
+    ? (screens.find((t) => t.participant.identity === streamWindowId) ?? null)
+    : null;
+  const streamWindow = streamWindowTrack ? (
+    <StreamWindow
+      key={streamWindowTrack.participant.identity}
+      trackRef={streamWindowTrack}
+      onClose={() => setStreamWindowId(null)}
+    />
+  ) : null;
+
   const ctxMenu = ctxTarget && (
     <ParticipantMenu
       x={ctxTarget.x}
@@ -604,6 +641,8 @@ export default function CallStage({
     return (
       <>
         {ctxMenu}
+      {streamWindow}
+        {streamWindow}
         <RemoteAudio />
         {emptyLabel ? (
           <div className="flex flex-1 items-center justify-center text-sm text-paper-500">{emptyLabel}</div>
@@ -752,6 +791,8 @@ export default function CallStage({
     return (
       <>
         {ctxMenu}
+      {streamWindow}
+        {streamWindow}
         <RemoteAudio />
         <ShareAudio
           volume={shareVolume}
@@ -864,6 +905,8 @@ export default function CallStage({
     return (
       <>
         {ctxMenu}
+      {streamWindow}
+        {streamWindow}
         <RemoteAudio />
         <ShareAudio
           volume={shareVolume}
@@ -978,6 +1021,8 @@ export default function CallStage({
     return (
       <>
         {ctxMenu}
+      {streamWindow}
+        {streamWindow}
         <RemoteAudio />
         {/* Dış çerçeve tüm alanı kaplar (koyu). 1-2 video YAN YANA eşit
             kutular halinde alanı DOLDURUR (flex-1, ortak yükseklik);
@@ -1034,6 +1079,7 @@ export default function CallStage({
   return (
     <>
       {ctxMenu}
+      {streamWindow}
       <RemoteAudio />
       <div
         className="grid flex-1 auto-rows-fr content-center gap-3 overflow-y-auto p-1.5"
