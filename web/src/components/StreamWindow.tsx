@@ -54,7 +54,11 @@ export default function StreamWindow({
         role="dialog"
         aria-modal="true"
         aria-label={t('stream.windowTitle', { name: nickFor(trackRef.participant.identity) })}
-        className="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-brass-700/70 bg-night-900 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)]"
+        // sabit yükseklik ŞART: üst kapsayıcı items-center olduğu için
+        // yükseklik auto kalır, flex-1 video alanı (içi absolute) 0px'e
+        // çöker → yayın hiç görünmez. h-[85vh] verince flex-1 gerçek
+        // alan kaplar, video contain ile sığar.
+        className="relative flex h-[85vh] max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-brass-700/70 bg-night-900 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* başlık: yayıncı adı + kapatma */}
