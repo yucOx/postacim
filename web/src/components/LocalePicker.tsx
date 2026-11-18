@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Check, Globe } from 'lucide-react';
 import { useI18nStore } from '../i18n/store';
+import { useT } from '../i18n/I18nProvider';
 import { LOCALES, LOCALE_LABEL, LOCALE_FLAG, type Locale } from '../i18n/types';
 
 /** Compact language switcher. Two visual variants:
@@ -10,6 +11,7 @@ import { LOCALES, LOCALE_LABEL, LOCALE_FLAG, type Locale } from '../i18n/types';
  * next to the active one. Selection writes the i18n store + localStorage
  * (handled in the store) and is reflected on the next render. */
 export default function LocalePicker({ variant = 'icon' }: { variant?: 'icon' | 'full' }): React.ReactNode {
+  const { t } = useT();
   const locale = useI18nStore((s) => s.locale);
   const setLocale = useI18nStore((s) => s.setLocale);
   const [open, setOpen] = useState(false);
@@ -32,7 +34,7 @@ export default function LocalePicker({ variant = 'icon' }: { variant?: 'icon' | 
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title="dil"
+        title={t('settings.language')}
         className={`flex items-center gap-1.5 rounded-sm border border-night-700 text-paper-300 transition-colors hover:border-brass-600 hover:text-paper-100 ${
           variant === 'full' ? 'px-2 py-1 text-xs' : '!px-2 !py-1 !text-xs btn-ghost border-night-700'
         }`}

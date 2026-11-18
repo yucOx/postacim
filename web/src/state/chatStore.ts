@@ -12,6 +12,7 @@ import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/re
 import { refreshSignKeys, resolveSignKeys } from '../lib/signkeys';
 import { ttlSeconds } from './ttlStore';
 import { onServerEvent } from '../ws/socket';
+import { serverMsg } from '../lib/serverMsg';
 
 // server replay sightings for this session; channel ids never collide with dmChatStore's
 const replays = new ReplayFilter();
@@ -243,7 +244,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   send: async (channelId, body, replyTo) => {
     const app = useAppStore.getState();
     const ch = app.communities.flatMap((c) => c.channels).find((c) => c.id === channelId);
-    if (!ch) throw new Error('kanal bulunamadı');
+    if (!ch) throw new Error(serverMsg('kanal bulunamadı'));
     let key = app.currentKey(channelId);
     let version = ch.key_version;
     if (!key) {
@@ -255,14 +256,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ sending: true });
     try {
       const senderId = useAuthStore.getState().user?.id;
-      if (!senderId) throw new Error('oturum yok');
+      if (!senderId) throw new Error(serverMsg('oturum yok'));
       // gönderen atfı: imza anahtarı yoksa üretip yayınla (eski hesap ilk mesajda)
       let signPrivateKey = useAuthStore.getState().signPrivateKey;
       if (!signPrivateKey) {
         await useAuthStore.getState().ensureSignIdentity();
         signPrivateKey = useAuthStore.getState().signPrivateKey;
       }
-      if (!signPrivateKey) throw new Error('imza anahtarı yok');
+      if (!signPrivateKey) throw new Error(serverMsg('imza anahtarı yok'));
       // replay hardening: one client id per logical message, reused across the
       // retry loop (a 409 means the server never stored the earlier attempt)
       const clientId = crypto.randomUUID();

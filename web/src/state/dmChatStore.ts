@@ -12,6 +12,7 @@ import { applyRemote, toggleMine, withReactions, type Reaction } from '../lib/re
 import { resolveSignKeys } from '../lib/signkeys';
 import { ttlSeconds } from './ttlStore';
 import { onServerEvent } from '../ws/socket';
+import { serverMsg } from '../lib/serverMsg';
 
 // dm_/gdm_ ids never collide with chatStore's channel ids — separate filter is safe
 const replays = new ReplayFilter();
@@ -266,17 +267,17 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
       // refetch bootstrap (peer may have opened/rekeyed first) then retry once
       await useAppStore.getState().loadBootstrap();
       keyInfo = keyFor(dmId);
-      if (!keyInfo) throw new Error('DM anahtarı yok');
+      if (!keyInfo) throw new Error(serverMsg('DM anahtarı yok'));
     }
     const senderId = useAuthStore.getState().user?.id;
-    if (!senderId) throw new Error('oturum yok');
+    if (!senderId) throw new Error(serverMsg('oturum yok'));
     // gönderen atfı: imza anahtarı yoksa üretip yayınla (eski hesap ilk mesajda)
     let signPrivateKey = useAuthStore.getState().signPrivateKey;
     if (!signPrivateKey) {
       await useAuthStore.getState().ensureSignIdentity();
       signPrivateKey = useAuthStore.getState().signPrivateKey;
     }
-    if (!signPrivateKey) throw new Error('imza anahtarı yok');
+    if (!signPrivateKey) throw new Error(serverMsg('imza anahtarı yok'));
     // replay hardening: client id rides the AAD and the body as one logical message
     const clientId = crypto.randomUUID();
     const clientSentAt = Date.now();
@@ -362,7 +363,7 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
         const title =
           app.dms.find((d) => d.id === raw.channel_id)?.peer.nick ??
           app.gdms.find((g) => g.id === raw.channel_id)?.name ??
-          'özel mesaj';
+          serverMsg('özel mesaj');
         // mention flag: decrypted body names us (case-insensitive) — louder chime
         const myNick = useAuthStore.getState().user?.nick;
         const mention =

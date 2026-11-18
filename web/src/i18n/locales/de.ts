@@ -32,6 +32,8 @@ export default {
     audioOff: 'stummer stream',
     audioNoTrack: 'der browser hat keinen ton geteilt — tab teilen und „tab-audio ebenfalls teilen" anhaken (fenster-freigabe hat keinen ton)',
     toggleFail: 'gerät konnte nicht aktualisiert werden — angeschlossen und erlaubt?',
+    lagHint: 'server-latenz',
+    micOffBadge: 'Mikrofon aus',
     noiseFilter: 'geräuschunterdrückung',
     noiseFilterHint: 'RNNoise (läuft im browser; nur gefilterter ton erreicht den server). Nur die gegenstelle hört gefilterten ton — dein eigenes mikrofon klingt weiter roh.',
     noiseFilterOn: 'geräuschunterdrückung an',
@@ -521,6 +523,8 @@ export default {
   },
   // ServerRail, ChannelSidebar, DmSidebar nav strings
   nav: {
+    hideFromList: 'aus der liste ausblenden',
+    hideHint: '{nick} (rechtsklick: aus der liste ausblenden)',
     dmHome: 'direktnachrichten / freunde',
     createCommunity: 'community erstellen',
     joinWithInvite: 'mit einladungslink beitreten',

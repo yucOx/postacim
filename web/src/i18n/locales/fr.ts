@@ -32,6 +32,8 @@ export default {
     audioOff: 'stream silencieux',
     audioNoTrack: 'le navigateur n a pas partagé le son — partage un onglet et coche « partager aussi l audio de l onglet » (les fenêtres n ont pas de son)',
     toggleFail: 'impossible de mettre à jour le périphérique — est-il branché et autorisé ?',
+    lagHint: 'latence du serveur',
+    micOffBadge: 'Micro coupé',
     noiseFilter: 'suppression du bruit',
     noiseFilterHint: "RNNoise (s'exécute dans le navigateur ; seul le son filtré part vers le serveur). Seule l'autre partie entend le son filtré — ton propre micro reste brut.",
     noiseFilterOn: 'suppression du bruit activée',
@@ -521,6 +523,8 @@ export default {
   },
   // ServerRail, ChannelSidebar, DmSidebar nav strings
   nav: {
+    hideFromList: 'Masquer de la liste',
+    hideHint: '{nick} (clic droit : masquer de la liste)',
     dmHome: 'messages directs / amis',
     createCommunity: 'créer une communauté',
     joinWithInvite: 'rejoindre avec un lien d invitation',

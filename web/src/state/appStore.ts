@@ -23,6 +23,7 @@ import { useDeviceStore } from './deviceStore';
 import { playSound } from '../lib/sound';
 import { toast } from '../components/Toast';
 import { translate as t } from '../lib/translate';
+import { serverMsg } from '../lib/serverMsg';
 
 export interface Channel {
   id: string;
@@ -145,7 +146,7 @@ function unwrapBootstrap(
   existingKeys: KeyEpochs,
 ): { communities: Community[]; keys: KeyEpochs } {
   const { publicKey, privateKey } = useAuthStore.getState();
-  if (!publicKey || !privateKey) throw new Error('kimlik yok');
+  if (!publicKey || !privateKey) throw new Error(serverMsg('kimlik yok'));
   // merge: existing epochs survive, latest version (re)unwrapped — rotated history stays readable
   const keys: KeyEpochs = { ...existingKeys };
   const out: Community[] = communities.map((c) => ({
@@ -215,7 +216,7 @@ export const useAppStore = create<AppState>((set, get) => {
     const { communities, keys } = unwrapBootstrap(data.communities, get().channelKeys);
     // DM/GDM keys: unwrap into a separate epoch map (ids never collide: dm_/gdm_ prefixes)
     const { publicKey, privateKey } = useAuthStore.getState();
-    if (!publicKey || !privateKey) throw new Error('kimlik yok');
+    if (!publicKey || !privateKey) throw new Error(serverMsg('kimlik yok'));
     const dmKeys: KeyEpochs = { ...get().dmChannelKeys };
     const dms: DmInfo[] = (data.dms ?? []).map((d) => {
       if (d.my_wrapped_key) {
@@ -307,7 +308,7 @@ export const useAppStore = create<AppState>((set, get) => {
       `/channels/${channelId}/my-key`,
     );
     const { publicKey, privateKey } = useAuthStore.getState();
-    if (!publicKey || !privateKey) throw new Error('kimlik yok');
+    if (!publicKey || !privateKey) throw new Error(serverMsg('kimlik yok'));
     const key = unwrapMyKey(res.wrapped_key, publicKey, privateKey);
     set({ channelKeys: setKeyEpoch(get().channelKeys, channelId, res.key_version, key) });
     return key;
@@ -337,7 +338,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   createCommunity: async (name) => {
     const { publicKey } = useAuthStore.getState();
-    if (!publicKey) throw new Error('kimlik yok');
+    if (!publicKey) throw new Error(serverMsg('kimlik yok'));
     const defaults: { name: string; type: 'text' | 'voice' }[] = [
       { name: 'genel', type: 'text' },
       { name: 'Genel Ses', type: 'voice' },
@@ -385,7 +386,7 @@ export const useAppStore = create<AppState>((set, get) => {
   createChannel: async (communityId, name, type) => {
     const { publicKeys } = get();
     const com = get().communities.find((c) => c.id === communityId);
-    if (!com) throw new Error('topluluk bulunamadı');
+    if (!com) throw new Error(serverMsg('topluluk bulunamadı'));
     const key = randomBytes(32);
     const wrappedKeys = com.members.map((m) => {
       const pk = publicKeys[m.id];
@@ -406,7 +407,7 @@ export const useAppStore = create<AppState>((set, get) => {
       `/users/lookup?nick=${encodeURIComponent(nick)}`,
     );
     const com = get().communities.find((c) => c.id === communityId);
-    if (!com) throw new Error('topluluk bulunamadı');
+    if (!com) throw new Error(serverMsg('topluluk bulunamadı'));
     const wrapped = [];
     for (const ch of com.channels) {
       const key = await get().ensureChannelKey(ch.id);
@@ -466,7 +467,7 @@ export const useAppStore = create<AppState>((set, get) => {
   // Targeted invite: sealed straight to the target's identity key.
   createInvite: async (communityId, opts) => {
     const com = get().communities.find((c) => c.id === communityId);
-    if (!com) throw new Error('topluluk bulunamadı');
+    if (!com) throw new Error(serverMsg('topluluk bulunamadı'));
     let target: { id: string; public_key: string } | null = null;
     if (opts.targetNick) {
       target = await api<{ id: string; public_key: string }>(
@@ -504,7 +505,7 @@ export const useAppStore = create<AppState>((set, get) => {
   // channel keys leave sealed under JW — the password itself never leaves.
   setJoinPassword: async (communityId, password) => {
     const com = get().communities.find((c) => c.id === communityId);
-    if (!com) throw new Error('topluluk bulunamadı');
+    if (!com) throw new Error(serverMsg('topluluk bulunamadı'));
     const kdfSalt = newKdfSaltHex();
     const { authMaterial, kek } = await deriveKeys(password, kdfSalt);
     const wrappedKeys = [];
@@ -570,7 +571,7 @@ export const useAppStore = create<AppState>((set, get) => {
     }
     const { publicKey } = useAuthStore.getState();
     const friend = get().friends.find((f) => f.id === userId);
-    if (!publicKey || !friend) throw new Error('arkadaş bulunamadı');
+    if (!publicKey || !friend) throw new Error(serverMsg('arkadaş bulunamadı'));
     const key = randomBytes(32);
     const res = await api<{ channel: { id: string; existing: boolean } }>('/dms', {
       method: 'POST',
@@ -594,7 +595,7 @@ export const useAppStore = create<AppState>((set, get) => {
     const { publicKey } = useAuthStore.getState();
     const me = useAuthStore.getState().user?.id;
     const friends = get().friends.filter((f) => memberIds.includes(f.id));
-    if (!publicKey || !me || friends.length !== memberIds.length) throw new Error('arkadaşlar bulunamadı');
+    if (!publicKey || !me || friends.length !== memberIds.length) throw new Error(serverMsg('arkadaşlar bulunamadı'));
     const key = randomBytes(32);
     const wrappedKeys = friends.map((f) => ({ user_id: f.id, wrapped_key: wrapKeyFor(key, f.public_key) }));
     wrappedKeys.push({ user_id: me, wrapped_key: wrapKeyFor(key, b64(publicKey)) });
@@ -611,9 +612,9 @@ export const useAppStore = create<AppState>((set, get) => {
   addGdmMember: async (gdmId, userId) => {
     const gdm = get().gdms.find((g) => g.id === gdmId);
     const friend = get().friends.find((f) => f.id === userId);
-    if (!gdm || !friend) throw new Error('grup/arkadaş bulunamadı');
+    if (!gdm || !friend) throw new Error(serverMsg('grup/arkadaş bulunamadı'));
     const oldKey = get().dmChannelKeys[gdmId]?.[gdm.key_version];
-    if (!oldKey) throw new Error('grup anahtarı yok');
+    if (!oldKey) throw new Error(serverMsg('grup anahtarı yok'));
     const newKey = randomBytes(32);
     const nextVersion = gdm.key_version + 1;
     const all = [...gdm.members.map((m) => ({ id: m.id, pub: m.public_key })), { id: friend.id, pub: friend.public_key }];

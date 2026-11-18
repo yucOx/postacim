@@ -18,6 +18,7 @@ import { useMediaStore, systemDefaultId, speakerSupported, type DeviceKind } fro
 import { createRnnoiseProcessor } from '../lib/noiseFilter';
 // official subpath export; ?worker&inline bundles the SFrame worker into the app
 import E2EEWorker from 'livekit-client/e2ee-worker?worker&inline';
+import { serverMsg } from '../lib/serverMsg';
 
 export interface VoiceParticipant {
   user_id: string;
@@ -990,11 +991,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
             method: 'POST',
           });
           const { publicKey, privateKey } = useAuthStore.getState();
-          if (!publicKey || !privateKey) throw new Error('kimlik yok');
+          if (!publicKey || !privateKey) throw new Error(serverMsg('kimlik yok'));
           key = unwrapMyKey(res.wrapped_key, publicKey, privateKey);
         }
       }
-      if (!key) throw new Error('DM anahtarı yok');
+      if (!key) throw new Error(serverMsg('DM anahtarı yok'));
       // bekleyen gelen arama varsa red gönder — modal yok olur ama arayan
       // taraf cevap gelmesini sonsuza dek beklemesin
       const pending = get().callState;
@@ -1090,9 +1091,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
         const fresh = useAppStore.getState();
         const dm = fresh.dms.find((d) => d.id === call.channelId);
         key = dm ? fresh.dmChannelKeys[call.channelId]?.[dm.key_version] : undefined;
-        if (!key) throw new Error('DM anahtarı yok');
+        if (!key) throw new Error(serverMsg('DM anahtarı yok'));
       }
-      if (!key) throw new Error('DM anahtarı yok');
+      if (!key) throw new Error(serverMsg('DM anahtarı yok'));
       const peerId = app.dms.find((d) => d.id === call.channelId)?.peer.id;
       const voiceKey = await sframeKey(key, 'dm', peerId);
       // tear down any previous room (community channel etc.) but keep callState

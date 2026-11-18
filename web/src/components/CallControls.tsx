@@ -233,7 +233,7 @@ export default function CallControls({
           className={`hidden items-center gap-1 font-mono text-[11px] sm:flex ${
             ping < 80 ? 'text-emerald-400' : ping < 200 ? 'text-lamp-400' : 'text-stamp-400'
           }`}
-          title="sunucu gecikmesi"
+          title={t('call.lagHint')}
           aria-label={`gecikme ${ping} milisaniye`}
         >
           <Signal size={13} aria-hidden />

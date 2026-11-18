@@ -28,6 +28,8 @@ export default {
     audioOff: 'silent stream',
     audioNoTrack: 'the browser shared no audio — share a tab and tick "also share tab audio" (window shares have no audio)',
     toggleFail: 'could not update the device — is it connected and permitted?',
+    lagHint: 'server latency',
+    micOffBadge: 'Microphone off',
     noiseFilter: 'noise suppression',
     noiseFilterHint: 'RNNoise (runs in your browser; only processed audio reaches the server). Only the other side hears the filtered audio — your own microphone still plays raw.',
     noiseFilterOn: 'noise suppression on',
@@ -526,6 +528,8 @@ export default {
   },
   // ServerRail, ChannelSidebar, DmSidebar nav strings
   nav: {
+    hideFromList: 'Hide from list',
+    hideHint: '{nick} (right-click: hide from list)',
     dmHome: 'direct messages / friends',
     createCommunity: 'create community',
     joinWithInvite: 'join with invite link',

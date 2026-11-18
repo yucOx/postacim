@@ -92,12 +92,13 @@ function ShareAudio({ volume, muted, activeIds }: { volume: number; muted: boole
 }
 
 function MuteBadgeInner({ participant }: { participant: Participant }): React.ReactNode {
+  const { t } = useT();
   const isMuted = useIsMuted({ participant, source: Track.Source.Microphone });
   if (!isMuted) return null;
   return (
     <div
       className="pointer-events-none absolute bottom-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-stamp-500/70 bg-night-950/90 text-stamp-400 shadow-md"
-      title="Mikrofon kapalı"
+      title={t('call.micOffBadge')}
     >
       <MicOff size={13} />
     </div>

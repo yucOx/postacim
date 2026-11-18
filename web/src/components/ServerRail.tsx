@@ -221,7 +221,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
                 onNavigate?.();
               }}
               onContextMenu={(e) => hideDm(d.id, e)}
-              title={`${d.peer.nick} (sağ tık: listeden gizle)`}
+              title={t('nav.hideHint', { nick: d.peer.nick })}
               className={`relative flex h-11 w-11 items-center justify-center transition-all ${
                 active
                   ? 'rounded-2xl ring-2 ring-lamp-500 bg-night-800'
@@ -243,8 +243,8 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
             <button
               type="button"
               onClick={(e) => hideDm(d.id, e)}
-              title="Listeden gizle"
-              aria-label="Listeden gizle"
+              title={t('nav.hideFromList')}
+              aria-label={t('nav.hideFromList')}
               className="absolute -right-1 -top-1 z-20 hidden h-4 w-4 items-center justify-center rounded-full border border-night-700 bg-night-950/95 text-paper-400 opacity-0 shadow transition-all hover:border-stamp-500 hover:text-stamp-400 group-hover:flex group-hover:opacity-100"
             >
               <X size={10} />

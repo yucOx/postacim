@@ -36,6 +36,8 @@ export default {
     audioOff: 'sessiz yayın',
     audioNoTrack: 'tarayıcı ses vermedi — ses için sekmeyi paylaş ve "sekme sesini de paylaş" kutusunu işaretle (pencere paylaşımında ses olmaz)',
     toggleFail: 'cihaz güncellenemedi — cihaz bağlı mı ve izin var mı?',
+    lagHint: 'sunucu gecikmesi',
+    micOffBadge: 'Mikrofon kapalı',
     noiseFilter: 'gürültü engelleyici',
     noiseFilterHint: 'RNNoise (tarayıcıda çalışır, ses sunucuya işlenmiş gider). Yalnız karşı taraf duyar; kendi mikrofonunu duymaya devam edersin.',
     noiseFilterOn: 'gürültü engelleyici açık',
@@ -557,6 +559,8 @@ export default {
   },
   // ServerRail, ChannelSidebar, DmSidebar nav strings
   nav: {
+    hideFromList: 'Listeden gizle',
+    hideHint: '{nick} (sağ tık: listeden gizle)',
     dmHome: 'özel mesajlar / arkadaşlar',
     createCommunity: 'topluluk oluştur',
     joinWithInvite: 'davet linkiyle katıl',

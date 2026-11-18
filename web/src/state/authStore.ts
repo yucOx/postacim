@@ -22,6 +22,7 @@ import {
   type DeviceUnlock,
 } from '../crypto/devicekey';
 import { sodiumReady } from '../crypto/sodium';
+import { serverMsg } from '../lib/serverMsg';
 
 // shared tail of login / reauthenticate / restore: unwrap key_blob under the
 // fresh KEK. A wrong password throws here, before any authed state is set.
@@ -253,7 +254,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   enrollDeviceUnlock: async () => {
     await sodiumReady;
     const { user, privateKey, signPrivateKey, deviceId, authMaterial } = get();
-    if (!user || !privateKey || !authMaterial) throw new Error('giriş yapılmamış');
+    if (!user || !privateKey || !authMaterial) throw new Error(serverMsg('giriş yapılmamış'));
     await enrollDeviceUnlockRecord(
       browserWebAuthn,
       user,
@@ -276,7 +277,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   reauthenticate: async (password) => {
     await sodiumReady;
     const nick = get().user?.nick;
-    if (!nick) throw new Error('giriş yapılmamış');
+    if (!nick) throw new Error(serverMsg('giriş yapılmamış'));
     const params = await api<{ kdf_salt: string }>(
       `/auth/kdf-params?nick=${encodeURIComponent(nick)}`,
     );
@@ -292,7 +293,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await sodiumReady;
     const nick = get().user?.nick;
     const { publicKey, privateKey, signPrivateKey, deviceId } = get();
-    if (!nick || !publicKey || !privateKey) throw new Error('giriş yapılmamış');
+    if (!nick || !publicKey || !privateKey) throw new Error(serverMsg('giriş yapılmamış'));
     const params = await api<{ kdf_salt: string }>(
       `/auth/kdf-params?nick=${encodeURIComponent(nick)}`,
     );
@@ -322,8 +323,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setupRecovery: async (recoveryWords) => {
     await sodiumReady;
     const { privateKey, signPrivateKey, deviceId } = get();
-    if (!privateKey) throw new Error('giriş yapılmamış');
-    if (recoveryWords.length !== 12) throw new Error('ifade 12 kelime olmalı');
+    if (!privateKey) throw new Error(serverMsg('giriş yapılmamış'));
+    if (recoveryWords.length !== 12) throw new Error(serverMsg('ifade 12 kelime olmalı'));
     const recSalt = newKdfSaltHex();
     const rec = await deriveRecoveryKeys(recoveryWords, recSalt);
     await api('/auth/recovery', {
@@ -344,7 +345,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // "forgot password": phrase proves ownership; identity survives, password resets
   recoverLogin: async (nick, recoveryWords, newPassword) => {
     await sodiumReady;
-    if (recoveryWords.length !== 12) throw new Error('ifade 12 kelime olmalı');
+    if (recoveryWords.length !== 12) throw new Error(serverMsg('ifade 12 kelime olmalı'));
     // no local 404 branch: the server hands a pseudo-salt to unknown nicks and
     // fails at verify, so wrong nick / no phrase / wrong phrase are identical
     const params = await api<{ recovery_salt: string }>(

@@ -1,6 +1,7 @@
 // Client-side avatar pipeline. Goal: any reasonable input → tiny data URL so
 // the server never stores anything close to a real photo (3-8KB target).
 
+import { serverMsg } from '../lib/serverMsg';
 const MAX_SIDE = 64;
 const QUALITY = 0.5;
 const MAX_BYTES = 14_000; // server hard cap is 16KB; leave headroom for base64
@@ -12,7 +13,7 @@ export interface ProcessedAvatar {
 
 export async function processAvatarFile(file: File | Blob): Promise<ProcessedAvatar> {
   if (!file.type.startsWith('image/')) {
-    throw new Error('sadece resim dosyaları');
+    throw new Error(serverMsg('sadece resim dosyaları'));
   }
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
