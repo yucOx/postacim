@@ -157,6 +157,16 @@ function NamePlate({
 
 // livekit's ParticipantTile renders its own (unstyled) nameplate + mute badges
 // which overlap ours — hide them wherever we draw our own plate
+// CallStage'in sökülüp yeniden monte edilmesi arasında yaşayan sahne belleği:
+// minimize/kanal değişimi bileşeni söker, açık yayın penceresi + spotlight +
+// yerleşim tercihi kayboluyordu. Ölü kimlikler bileşen içindeki temizlik
+// effect'leriyle düşer — yeni aramaya bayat state taşınmaz.
+const stageMemory: {
+  spotlight: string | null;
+  shareLayout: 'focus' | 'side';
+  streamWindowId: string | null;
+} = { spotlight: null, shareLayout: 'focus', streamWindowId: null };
+
 const TILE_HIDE =
   ' [&_.lk-participant-name]:hidden [&_.lk-track-muted-indicator-microphone]:hidden [&_.lk-track-muted-indicator-camera]:hidden';
 
@@ -371,7 +381,16 @@ export default function CallStage({
   // manual spotlight — tracks the exact video clicked ("screen:<id>" /
   // "cam:<id>"), Discord-style: clicking a camera focuses the camera even if
   // that person also shares their screen
-  const [spotlight, setSpotlight] = useState<string | null>(null);
+  //
+  // CallStage minimize/kanal değişiminde SÖKÜLÜR (Shell koşullu mount) —
+  // açık yayın penceresi + spotlight + yerleşim kayboluyordu. Modül belleği
+  // remount'ta geri yükler; ölü kimlikleri aşağıdaki temizlik effect'leri
+  // düşürür (yeni aramada bayat state taşınmaz).
+  const [spotlight, setSpotlightRaw] = useState(stageMemory.spotlight);
+  const setSpotlight = (v: string | null): void => {
+    stageMemory.spotlight = v;
+    setSpotlightRaw(v);
+  };
   const spotId = spotlight?.split(':')[1] ?? null;
 
   // Discord tarzı sağ tık: kutuya sağ tık → kişi/yayın ses menüsü
@@ -391,7 +410,11 @@ export default function CallStage({
 
   const toggleScreen = useVoiceStore((s) => s.toggleScreen);
   // paylaşım görünümü yerleşimi: odak (büyük + sağ şerit) / yan yana eşit bölmeler
-  const [shareLayout, setShareLayout] = useState<'focus' | 'side'>('focus');
+  const [shareLayout, setShareLayoutRaw] = useState<'focus' | 'side'>(stageMemory.shareLayout);
+  const setShareLayout = (v: 'focus' | 'side'): void => {
+    stageMemory.shareLayout = v;
+    setShareLayoutRaw(v);
+  };
   // izleyici yayın sesi: 0-1 + sessize alma (ekran paylaşımı sesi)
   // yayın sesi seviyesi/kesme store'da — sağ tık menüsü ve sahne kontrolü
   // aynı değeri paylaşsın (iki ayrı gerçek olmasın)
@@ -477,7 +500,12 @@ export default function CallStage({
   const watchedScreenId = spotlight?.startsWith('screen:') ? spotlight.split(':')[1] ?? null : null;
   // AYRI YAYIN PENCERESİ (Discord mantığı): yayın sahneyi değiştirmeden
   // üstte açılır; ses de bu yayına bağlanır (pencere açıkken duyulur).
-  const [streamWindowId, setStreamWindowId] = useState<string | null>(null);
+  // Modül belleği — minimize/kanal değişiminde pencere kapanmasın.
+  const [streamWindowId, setStreamWindowIdRaw] = useState(stageMemory.streamWindowId);
+  const setStreamWindowId = (v: string | null): void => {
+    stageMemory.streamWindowId = v;
+    setStreamWindowIdRaw(v);
+  };
   const attachedShareAudioIds = useMemo(() => {
     const id = streamWindowId ?? watchedScreenId;
     return id ? [id] : [];
@@ -536,7 +564,7 @@ export default function CallStage({
             onClick={(e) => {
               e.stopPropagation();
               // zaten açıksa kapat (aç/kapa), değilse aç
-              setStreamWindowId((cur) => (cur === identity ? null : identity));
+              setStreamWindowId(streamWindowId === identity ? null : identity);
             }}
             aria-pressed={windowOpen}
             className={`flex items-center gap-1.5 rounded-md border px-2 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.12em] shadow-[0_4px_14px_-4px_rgba(0,0,0,0.75)] transition-colors ${
@@ -931,7 +959,7 @@ export default function CallStage({
                 isFocus={!!spotlight}
                 silent={focusedVideo.isScreen && !focusedVideo.trackRef.participant.isLocal && streamSilent(focusedVideo.identity)}
                 onVideoClick={() => {
-                  if (focusedVideo.isScreen) setShareLayout((l) => (l === 'side' ? 'focus' : 'side'));
+                  if (focusedVideo.isScreen) setShareLayout(shareLayout === 'side' ? 'focus' : 'side');
                   else releaseSpot();
                 }}
                 onContextMenu={openCtx(

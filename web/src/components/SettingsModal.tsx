@@ -528,7 +528,14 @@ function PasswordInline({ onBack }: { onBack: () => void }): React.ReactNode {
           </button>
         </>
       ) : (
-        <>
+        // form: parola alanında Enter göndersin (form elemanı yoktu, Enter ölüydü)
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!busy && oldPw && newPw.length >= 6) void submit();
+          }}
+        >
           <input
             type="password"
             autoFocus
@@ -555,13 +562,13 @@ function PasswordInline({ onBack }: { onBack: () => void }): React.ReactNode {
           />
           {error && <p className="text-sm text-stamp-400">{error}</p>}
           <button
-            onClick={() => void submit()}
+            type="submit"
             disabled={busy || !oldPw || newPw.length < 6}
             className="btn-lamp"
           >
             {busy ? t('settings.security.passwordBusy') : t('settings.security.passwordSubmit')}
           </button>
-        </>
+        </form>
       )}
     </div>
   );

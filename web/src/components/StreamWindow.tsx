@@ -6,13 +6,14 @@
 // Pencerede video, kaynağın gerçek oranında (kırpma yok, letterbox) ve
 // "izle" durumunda yayın sesi de duyulur.
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { X, Volume2, VolumeX } from 'lucide-react';
 import { ParticipantTile, AudioTrack, useIsMuted } from '@livekit/components-react';
 import type { TrackReference } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { useT } from '../i18n/I18nProvider';
 import { useVoiceStore } from '../state/voiceStore';
+import { hasOpenModal } from './Modal';
 import { nickFor } from '../lib/nick';
 
 export default function StreamWindow({
@@ -29,11 +30,17 @@ export default function StreamWindow({
   const setShareVolume = useVoiceStore((s) => s.setShareVolume);
   const volume = useVoiceStore((s) => s.volume);
   const deafened = useVoiceStore((s) => s.deafened);
+  // backdrop click: yalnız basış backdrop'ta başladıysa kapansın
+  const downOnBackdrop = useRef(false);
 
-  // Escape ile kapat (Discord davranışı)
+  // Escape ile kapat (Discord davranışı) — üstte modal/gelen arama varsa
+  // Escape onların olsun, yayın penceresi birden kapanmasın
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (hasOpenModal() || document.querySelector('[data-incoming-call]')) return;
+        onClose();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -47,8 +54,14 @@ export default function StreamWindow({
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-night-950/85 p-4"
-      onClick={onClose}
       role="presentation"
+      onPointerDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        downOnBackdrop.current = false;
+      }}
     >
       <div
         role="dialog"

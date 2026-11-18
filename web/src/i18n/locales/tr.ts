@@ -35,6 +35,7 @@ export default {
     audioOn: 'sekme/sistem sesi yayında',
     audioOff: 'sessiz yayın',
     audioNoTrack: 'tarayıcı ses vermedi — ses için sekmeyi paylaş ve "sekme sesini de paylaş" kutusunu işaretle (pencere paylaşımında ses olmaz)',
+    toggleFail: 'cihaz güncellenemedi — cihaz bağlı mı ve izin var mı?',
     noiseFilter: 'gürültü engelleyici',
     noiseFilterHint: 'RNNoise (tarayıcıda çalışır, ses sunucuya işlenmiş gider). Yalnız karşı taraf duyar; kendi mikrofonunu duymaya devam edersin.',
     noiseFilterOn: 'gürültü engelleyici açık',
@@ -79,6 +80,7 @@ export default {
     subtitle: 'şifreli hat — uçtan uca',
     declineAria: 'aramayı reddet',
     acceptAria: 'aramayı kabul et',
+    acceptFailed: 'arama açılamadı',
   },
   // CallStage yayın izleme
   stream: {

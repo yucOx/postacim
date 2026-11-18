@@ -410,6 +410,15 @@ async function connectRoom(
   room.on(RoomEvent.EncryptionError, () => {
     useVoiceStore.setState({ error: 'E2EE hatası: anahtarlar uyuşmuyor' });
   });
+  // tarayıcı/OS track'i bizden habersiz bitirirse (Chrome "paylaşımı durdur"
+  // çubuğu, kulaklık çıkarma, cihaz kaybı) düğme bayrakları bayat kalıyordu —
+  // gerçek unpublish'ten bayrakları sync et
+  room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
+    const src = pub.track?.source;
+    if (src === Track.Source.Microphone) useVoiceStore.setState({ micOn: false });
+    else if (src === Track.Source.Camera) useVoiceStore.setState({ camOn: false, camPausedByHide: false });
+    else if (src === Track.Source.ScreenShare) useVoiceStore.setState({ screenOn: false });
+  });
   room.on(RoomEvent.Disconnected, onDisconnected);
   // mid-call kesilmelerin teşhisi: LiveKit reconnect döngüsünü kendi içinde
   // yönetir; burada yalnız gözlemliyoruz. "Sunucudaki odaya girince 3 kez
@@ -811,7 +820,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     const room = get().room;
     if (!room) return;
     const next = !get().micOn;
-    await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(next, next ? withMicDevice() : undefined);
+    try {
+      await (room.localParticipant as LocalParticipant).setMicrophoneEnabled(next, next ? withMicDevice() : undefined);
+    } catch {
+      // cihaz gitmiş / izin geri alınmış — sessiz no-op yerine haber ver
+      toast.error(t('call.toggleFail'));
+      return;
+    }
     // mikrofon yeniden yakalandı (unmute) → filtreyi (yeniden) uygula
     if (next) await applyNoiseFilter(room, get().noiseFilter);
     set({ micOn: next });
@@ -849,11 +864,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     if (!room) return;
     const next = !get().camOn;
     const q = qualityTiers[get().quality];
-    await (room.localParticipant as LocalParticipant).setCameraEnabled(
-      next,
-      next ? withCamDevice(q.camCapture) : undefined,
-      next ? q.camPublish : undefined,
-    );
+    try {
+      await (room.localParticipant as LocalParticipant).setCameraEnabled(
+        next,
+        next ? withCamDevice(q.camCapture) : undefined,
+        next ? q.camPublish : undefined,
+      );
+    } catch {
+      toast.error(t('call.toggleFail'));
+      return;
+    }
     if (next) hintTrack(Track.Source.Camera);
     set({ camOn: next, camPausedByHide: false });
     // yerel geri bildirim: açılınca tiz, kapanınca pes tek tık
@@ -1131,7 +1151,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       wsSend({ type: 'call:cancel', channel_id: callState.channelId });
     }
     cleanup(room);
-    set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false });
+    set({ room: null, keyProvider: null, joinedChannelId: null, micOn: false, camOn: false, screenOn: false, isDmCall: false, callState: null, pip: false, popoutOpen: false });
   },
 
   wire: () => {
@@ -1228,6 +1248,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
               } catch {
                 // track zaten yok — sessizce geç
               }
+              // oda geri arama için canlı kalıyor — ama ekran paylaşımı bizim
+              // track'imiz: kapatmazsak UI "bitti" derken ekran yayınlanmaya
+              // devam ederdi (karşı taraf StreamWindow ile izleyebilirdi)
+              try {
+                await room.localParticipant.setScreenShareEnabled(false);
+              } catch {
+                // paylaşım yok — geç
+              }
+              stopSystemAudioTrack(room);
             })();
           }
         }

@@ -124,6 +124,7 @@ export default function CallControls({
         </button>
         <button
           type="button"
+          data-device-trigger
           onClick={() => setDeviceMenu((m) => (m === 'mic' ? null : 'mic'))}
           className={`${round(micOn)} !-ml-px !w-7 !rounded-l-none`}
           title={t('devices.mic')}
@@ -147,6 +148,7 @@ export default function CallControls({
         </button>
         <button
           type="button"
+          data-device-trigger
           onClick={() => setDeviceMenu((m) => (m === 'cam' ? null : 'cam'))}
           className={`${round(camOn)} !-ml-px !w-7 !rounded-l-none`}
           title={t('devices.cam')}

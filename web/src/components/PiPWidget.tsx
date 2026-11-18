@@ -148,7 +148,12 @@ export default function PiPWidget(): React.ReactNode {
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      onDoubleClick={snapToCorner}
+      onDoubleClick={(e) => {
+        // çift tık köşeye çekiyor — ama kontrollerin üstünde değil (mikrofon
+        // düğmesine çift tık widget'ı ışınlamamalı)
+        if ((e.target as HTMLElement).closest('button')) return;
+        snapToCorner();
+      }}
       className={`fixed cursor-grab select-none overflow-hidden rounded-xl border border-brass-600/70 bg-night-950 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] transition-all duration-200 active:cursor-grabbing ${
         pipPinned ? 'z-[60]' : 'z-40'
       } ${expanded ? 'w-[460px]' : 'w-[310px]'}`}

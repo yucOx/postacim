@@ -31,6 +31,7 @@ export default {
     audioOn: 'audio onglet/système dans le stream',
     audioOff: 'stream silencieux',
     audioNoTrack: 'le navigateur n a pas partagé le son — partage un onglet et coche « partager aussi l audio de l onglet » (les fenêtres n ont pas de son)',
+    toggleFail: 'impossible de mettre à jour le périphérique — est-il branché et autorisé ?',
     noiseFilter: 'suppression du bruit',
     noiseFilterHint: "RNNoise (s'exécute dans le navigateur ; seul le son filtré part vers le serveur). Seule l'autre partie entend le son filtré — ton propre micro reste brut.",
     noiseFilterOn: 'suppression du bruit activée',
@@ -74,6 +75,7 @@ export default {
     subtitle: 'ligne chiffrée — de bout en bout',
     declineAria: 'refuser l appel',
     acceptAria: 'accepter l appel',
+    acceptFailed: 'impossible de démarrer l appel',
   },
   stream: {
     joinPrompt: 'rejoindre le stream ?',

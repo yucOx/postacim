@@ -45,10 +45,12 @@ export default function DeviceMenu({
     return () => navigator.mediaDevices?.removeEventListener('devicechange', onChange);
   }, [loadDevices]);
 
-  // bar varyantı: dışarı tıklayınca kapansın
+  // bar varyantı: dışarı tıklayınca kapansın (tetikleyici chevron hariç —
+  // mousedown menüyü kapatır, click yeniden açardı; chevron asla kapanamazdı)
   useEffect(() => {
     if (variant !== 'bar' || !onClose) return;
     const onDoc = (e: MouseEvent): void => {
+      if (e.target instanceof Element && e.target.closest('[data-device-trigger]')) return;
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent): void => {

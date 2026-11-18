@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Phone, X } from 'lucide-react';
 import { useVoiceStore } from '../state/voiceStore';
 import { useT } from '../i18n/I18nProvider';
+import { toast } from './Toast';
 import { PigeonMark } from './Brand';
 
 // WebAudio ring — no audio files, two-tone pattern like a phone
@@ -54,7 +55,7 @@ export default function IncomingCall(): React.ReactNode {
   if (!callState || callState.phase !== 'incoming') return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-night-950/50 px-4 pt-20">
+    <div data-incoming-call className="fixed inset-0 z-[60] flex items-start justify-center bg-night-950/50 px-4 pt-20">
       <div className="animate-seal-in w-80 rounded-lg border border-brass-600/80 bg-night-900 p-6 text-center shadow-[0_24px_70px_-12px_rgba(0,0,0,0.9)]">
         <div className="relative mx-auto flex h-16 w-16 items-center justify-center">
           <span className="absolute inset-0 animate-ping rounded-full border border-lamp-600/50" aria-hidden />
@@ -69,7 +70,7 @@ export default function IncomingCall(): React.ReactNode {
         <p className="mt-0.5 text-xs text-paper-500">{t('incoming.subtitle')}</p>
         <div className="mt-5 flex justify-center gap-4">
           <button
-            onClick={() => void declineIncoming()}
+            onClick={() => void declineIncoming().catch(() => {})}
             className="flex h-12 w-12 items-center justify-center rounded-full border border-stamp-500/70 bg-stamp-100 text-stamp-400 transition-colors hover:bg-stamp-500 hover:text-white"
             title={t('incoming.decline')}
             aria-label={t('incoming.declineAria')}
@@ -77,7 +78,11 @@ export default function IncomingCall(): React.ReactNode {
             <X size={19} />
           </button>
           <button
-            onClick={() => void acceptIncoming().catch(() => {})}
+            onClick={() =>
+              // hata yutulmasın: kabul başarısızsa zil durur, ekranda ipucu yok
+              // — kullanıcıya toast ile haber ver
+              void acceptIncoming().catch(() => toast.error(t('incoming.acceptFailed')))
+            }
             className="flex h-12 w-12 items-center justify-center rounded-full bg-lamp-500 text-night-950 transition-colors hover:bg-lamp-400"
             title={t('incoming.accept')}
             aria-label={t('incoming.acceptAria')}

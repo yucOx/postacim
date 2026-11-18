@@ -31,6 +31,7 @@ export default {
     audioOn: 'audio de pestaña/sistema en la transmisión',
     audioOff: 'transmisión silenciosa',
     audioNoTrack: 'el navegador no compartió audio — comparte una pestaña y marca «compartir también el audio de la pestaña» (las ventanas no tienen audio)',
+    toggleFail: 'no se pudo actualizar el dispositivo — ¿está conectado y permitido?',
     noiseFilter: 'supresión de ruido',
     noiseFilterHint: 'RNNoise (se ejecuta en tu navegador; solo el audio procesado llega al servidor). Solo la otra parte oye el audio filtrado — tu propio micrófono sigue en crudo.',
     noiseFilterOn: 'supresión de ruido activada',
@@ -74,6 +75,7 @@ export default {
     subtitle: 'línea cifrada — extremo a extremo',
     declineAria: 'rechazar llamada',
     acceptAria: 'aceptar llamada',
+    acceptFailed: 'no se pudo iniciar la llamada',
   },
   stream: {
     joinPrompt: '¿quieres unirte a la transmisión?',

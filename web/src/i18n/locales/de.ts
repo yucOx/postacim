@@ -31,6 +31,7 @@ export default {
     audioOn: 'tab-/systemaudio im stream',
     audioOff: 'stummer stream',
     audioNoTrack: 'der browser hat keinen ton geteilt — tab teilen und „tab-audio ebenfalls teilen" anhaken (fenster-freigabe hat keinen ton)',
+    toggleFail: 'gerät konnte nicht aktualisiert werden — angeschlossen und erlaubt?',
     noiseFilter: 'geräuschunterdrückung',
     noiseFilterHint: 'RNNoise (läuft im browser; nur gefilterter ton erreicht den server). Nur die gegenstelle hört gefilterten ton — dein eigenes mikrofon klingt weiter roh.',
     noiseFilterOn: 'geräuschunterdrückung an',
@@ -74,6 +75,7 @@ export default {
     subtitle: 'verschlüsselte leitung — ende zu ende',
     declineAria: 'anruf ablehnen',
     acceptAria: 'anruf annehmen',
+    acceptFailed: 'anruf konnte nicht gestartet werden',
   },
   stream: {
     joinPrompt: 'möchtest du dem stream beitreten?',

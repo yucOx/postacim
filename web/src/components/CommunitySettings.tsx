@@ -427,24 +427,33 @@ function PasswordTab({ communityId }: { communityId: string }) {
           ? t('community.passwordActive')
           : t('community.passwordInactive')}
       </p>
-      <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('community.passwordPlaceholder')} minLength={4}
-        className="input" />
-      <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder={t('community.passwordAgain')} minLength={4}
-        className="input" />
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      {msg && <p className="text-sm text-emerald-400">{msg}</p>}
-      <div className="flex gap-2">
-        <button onClick={() => void submit()} disabled={busy || pw.length < 4}
-          className="btn-lamp flex-1">
-          {busy ? t('nav.creating') : hasPassword ? t('community.passwordChange') : t('community.passwordSetup')}
-        </button>
-        {hasPassword && (
-          <button onClick={() => void removeJoinPassword(communityId).then(() => setMsg(t('community.passwordRemoved')))}
-            className="btn-ghost">
-            {t('community.passwordRemove')}
+      {/* form: parola alanında Enter göndersin */}
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy && pw.length >= 4) void submit();
+        }}
+      >
+        <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('community.passwordPlaceholder')} minLength={4}
+          className="input" />
+        <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder={t('community.passwordAgain')} minLength={4}
+          className="input" />
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        {msg && <p className="text-sm text-emerald-400">{msg}</p>}
+        <div className="flex gap-2">
+          <button type="submit" disabled={busy || pw.length < 4}
+            className="btn-lamp flex-1">
+            {busy ? t('nav.creating') : hasPassword ? t('community.passwordChange') : t('community.passwordSetup')}
           </button>
-        )}
-      </div>
+          {hasPassword && (
+            <button type="button" onClick={() => void removeJoinPassword(communityId).then(() => setMsg(t('community.passwordRemoved')))}
+              className="btn-ghost">
+              {t('community.passwordRemove')}
+            </button>
+          )}
+        </div>
+      </form>
       <p className="text-[11px] text-paper-700">
         {t('community.passwordRotatedHint')}
       </p>
