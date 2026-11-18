@@ -272,3 +272,14 @@ body {
     background: color-mix(in srgb, var(--color-lamp-100) 40%, transparent);
   }
 }
+
+/* hover-only afforanslar — dokunmatikte hover yok, araç çubukları hep görünür.
+   Katmansız (unlayered): .hidden/.opacity-0 utility'leri her zaman altında kalır */
+@media (pointer: coarse) {
+  .coarse-flex {
+    display: flex;
+  }
+  .coarse-opacity {
+    opacity: 1;
+  }
+}

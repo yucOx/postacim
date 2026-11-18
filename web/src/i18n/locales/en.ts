@@ -404,6 +404,9 @@ export default {
     loadOlder: 'older messages',
     empty: 'no cargo yet — drop the first sealed envelope',
     newDivider: 'NEW',
+    placeholder: 'encrypted message…  (Enter: send, Shift+Enter: newline)',
+    placeholderLocked: 'locked until the channel is rekeyed…',
+    placeholderReply: 'reply to {name}…  (Enter: send)',
   },
   dm: {
     sealed: 'sealed end to end',
@@ -428,6 +431,9 @@ export default {
     placeholderReply: 'reply to {name}…  (Enter: send)',
     placeholderDm: '@{name} — encrypted message…  (Enter: send)',
     placeholderGdm: '{name} — encrypted message…  (Enter: send)',
+    voiceCallShort: 'call',
+    videoCallShort: 'video',
+    leaveFailed: 'could not leave the group',
   },
   addMember: {
     title: 'Add member',

@@ -48,6 +48,7 @@ export default function MemberList() {
   const isStaff = isOwner || myRole === 'admin';
 
   const submit = async (): Promise<void> => {
+    if (busy) return; // Enter tuş tekrarı → davet iki kez gönderilmesin
     setBusy(true);
     setError(null);
     try {
@@ -131,7 +132,7 @@ export default function MemberList() {
                 </button>
               )}
               {canActOn && (
-                <div className="hidden items-center gap-0.5 group-hover:flex">
+                <div className="hidden items-center gap-0.5 group-hover:flex coarse-flex">
                   {isOwner && (
                     <button
                       onClick={() => void act(() => setRole(community.id, m.id, m.role === 'member'))}
@@ -169,7 +170,7 @@ export default function MemberList() {
               autoFocus
               value={nick}
               onChange={(e) => setNick(e.target.value)}
-              onKeyDown={(e) => nick.trim() && e.key === 'Enter' && void submit()}
+              onKeyDown={(e) => nick.trim() && e.key === 'Enter' && !e.nativeEvent.isComposing && void submit()}
               placeholder={t('members.nickPlaceholder')}
               maxLength={24}
               className="input"

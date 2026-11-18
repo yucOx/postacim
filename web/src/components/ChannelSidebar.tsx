@@ -43,6 +43,7 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
 
   const submit = async (): Promise<void> => {
     if (!modalType) return;
+    if (busy) return; // Enter tuş tekrarı → kanal iki kez oluşturulmasın
     setBusy(true);
     setError(null);
     try {
@@ -256,7 +257,7 @@ export default function ChannelSidebar({ onNavigate }: { onNavigate?: () => void
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => name.trim() && e.key === 'Enter' && void submit()}
+              onKeyDown={(e) => name.trim() && e.key === 'Enter' && !e.nativeEvent.isComposing && void submit()}
               placeholder={t('nav.channelNamePlaceholder')}
               maxLength={64}
               className="input"

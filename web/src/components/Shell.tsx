@@ -330,12 +330,13 @@ export default function Shell() {
                 <CallView showChat={showCallChat} onToggleChat={() => setShowCallChat((v) => !v)} />
                 {showCallChat && activeDm && (
                   <div className="hidden w-80 shrink-0 flex-col border-l border-night-700 md:flex">
-                    <DmChat dmId={activeDm.id} />
+                    {/* key: DM değişince taslak/reply/scroll state'i taşımasın */}
+                    <DmChat key={activeDm.id} dmId={activeDm.id} />
                   </div>
                 )}
               </>
             ) : activeDm ? (
-              <DmChat dmId={activeDm.id} />
+              <DmChat key={activeDm.id} dmId={activeDm.id} />
             ) : (
               <DmHome />
             )}
@@ -346,7 +347,8 @@ export default function Shell() {
               <div className="flex flex-1 items-center justify-center text-paper-500">{t('shell.loading')}</div>
             ) : channel ? (
               channel.type === 'text' ? (
-                <ChatView channelId={channel.id} channelName={channel.name} />
+                // key: kanal değişince taslak/reply/scroll state'i taşımasın
+                <ChatView key={channel.id} channelId={channel.id} channelName={channel.name} />
               ) : (
                 <VoiceRoom channelId={channel.id} channelName={channel.name} />
               )

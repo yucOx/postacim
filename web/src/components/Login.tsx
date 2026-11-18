@@ -611,7 +611,14 @@ function ForgotStep({ onBack }: { onBack: () => void }) {
           </p>
         </div>
       </div>
-      <div className="flex flex-col gap-4">
+      {/* form: parola alanında Enter göndersin */}
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy && canGo) void submit();
+        }}
+      >
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-paper-300">{t('auth.labelNick')}</span>
           <input value={nick} onChange={(e) => setNick(e.target.value)} autoComplete="username" className="input" />
@@ -641,16 +648,17 @@ function ForgotStep({ onBack }: { onBack: () => void }) {
         {error && (
           <p className="rounded-md border border-stamp-500/60 bg-stamp-100 px-3 py-2 text-sm text-stamp-400">{error}</p>
         )}
-        <button onClick={() => void submit()} disabled={busy || !canGo} className="btn-lamp w-full">
+        <button type="submit" disabled={busy || !canGo} className="btn-lamp w-full">
           {busy ? t('auth.restoring') : t('auth.resetBtn')}
         </button>
         <button
+          type="button"
           onClick={onBack}
           className="w-full text-center text-xs text-paper-500 transition-colors hover:text-paper-300"
         >
           {t('auth.backToLogin')}
         </button>
-      </div>
+      </form>
     </div>
   );
 }

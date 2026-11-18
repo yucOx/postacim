@@ -64,6 +64,8 @@ export default function JoinScreen({ invite }: { invite: ParsedInvite }) {
               onKeyDown={(e) =>
                 password &&
                 e.key === 'Enter' &&
+                !e.nativeEvent.isComposing &&
+                !pwBusy &&
                 void (async () => {
                   setPwBusy(true);
                   await submitPassword(password);

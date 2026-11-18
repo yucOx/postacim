@@ -96,13 +96,13 @@ export default function ChatView({ channelId, channelName }: { channelId: string
         </span>
         <span className="sealed-band">
           <ShieldCheck size={11} />
-          uçtan uca mühürlü
+          {t('chat.sealed')}
         </span>
       </div>
       {needsRekey && (
         <div className="flex flex-wrap items-center gap-2 border-b border-lamp-600/40 bg-lamp-100/70 px-4 py-2 text-xs text-lamp-300">
           <AlertTriangle size={14} className="shrink-0 text-lamp-500" />
-          <span>Bir üye çıkarıldı — eski anahtar risk altında, yazışma kilitli.</span>
+          <span>{t('chat.rekeyWarning')}</span>
           {isStaff && communityId && (
             <button
               onClick={() => {
@@ -115,7 +115,7 @@ export default function ChatView({ channelId, channelName }: { channelId: string
               className="btn-ghost !border-lamp-600/70 !py-0.5 !text-xs !text-lamp-300"
             >
               <Lock size={11} />
-              {rekeying ? 'yenileniyor…' : 'anahtarı yenile'}
+              {rekeying ? t('chat.rekeying') : t('chat.rekeyButton')}
             </button>
           )}
         </div>
@@ -124,13 +124,13 @@ export default function ChatView({ channelId, channelName }: { channelId: string
         {hasMore && (
           <div className="flex justify-center py-2">
             <button onClick={() => void loadOlder(channelId)} className="btn-ghost !py-1 !text-xs">
-              daha eski mesajlar
+              {t('chat.loadOlder')}
             </button>
           </div>
         )}
         {visible.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-paper-500">
-            <p className="text-sm">henüz yük yok — ilk mühürlü zarfı sen bırak</p>
+            <p className="text-sm">{t('chat.empty')}</p>
           </div>
         )}
         {visible.map((m, i) => {
@@ -203,10 +203,10 @@ export default function ChatView({ channelId, channelName }: { channelId: string
         onTyping={() => wsSend({ type: 'typing', channel_id: channelId })}
         placeholder={
           needsRekey
-            ? 'kanal yeniden anahtarlanana kadar kilitli…'
+            ? t('chat.placeholderLocked')
             : reply
-              ? `${reply.nick} kişisine yanıt yaz…  (Enter: gönder)`
-              : 'şifreli mesaj yaz…  (Enter: gönder, Shift+Enter: satır)'
+              ? t('chat.placeholderReply', { name: reply.nick })
+              : t('chat.placeholder')
         }
       />
     </div>

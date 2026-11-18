@@ -15,6 +15,8 @@ import { onServerEvent } from '../ws/socket';
 
 // dm_/gdm_ ids never collide with chatStore's channel ids — separate filter is safe
 const replays = new ReplayFilter();
+// "daha eski mesajlar" uçuşta mı — çift tık aynı sayfayı iki kez basmasın
+const loadingOlder = new Set<string>();
 
 // kalıcı çözümleme başarısızları — bkz. chatStore'daki aynı adlı set
 // (çapa öncesi v4 DM satırları her açılışta 20k'lık taramayı yeniden
@@ -235,21 +237,27 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
   },
 
   loadOlder: async (dmId) => {
+    if (loadingOlder.has(dmId)) return;
     const list = get().messages[dmId] ?? [];
     const oldest = list[0]?.id;
     if (!oldest) return;
-    const res = await api<{ messages: ChatMessage[]; has_more: boolean }>(
-      `${baseOf(dmId)}/${dmId}/messages?before=${oldest}&limit=50`,
-    );
-    const filtered = res.messages.filter((m) => !(m.client_id && replays.check(dmId, m.client_id)));
-    const older = await mapBatched(filtered, toDisplay);
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [dmId]: [...older, ...(s.messages[dmId] ?? [])],
-      },
-      hasMore: { ...s.hasMore, [dmId]: res.has_more },
-    }));
+    loadingOlder.add(dmId);
+    try {
+      const res = await api<{ messages: ChatMessage[]; has_more: boolean }>(
+        `${baseOf(dmId)}/${dmId}/messages?before=${oldest}&limit=50`,
+      );
+      const filtered = res.messages.filter((m) => !(m.client_id && replays.check(dmId, m.client_id)));
+      const older = await mapBatched(filtered, toDisplay);
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [dmId]: [...older, ...(s.messages[dmId] ?? [])],
+        },
+        hasMore: { ...s.hasMore, [dmId]: res.has_more },
+      }));
+    } finally {
+      loadingOlder.delete(dmId);
+    }
   },
 
   send: async (dmId, body, replyTo) => {

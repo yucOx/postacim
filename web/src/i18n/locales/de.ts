@@ -399,6 +399,9 @@ export default {
     loadOlder: 'Ältere Nachrichten',
     empty: 'noch keine Fracht — wirf den ersten versiegelten Umschlag',
     newDivider: 'NEU',
+    placeholder: 'verschlüsselte nachricht…  (Enter: senden, Shift+Enter: zeilenumbruch)',
+    placeholderLocked: 'gesperrt, bis der kanal neu verschlüsselt ist…',
+    placeholderReply: 'Antwort an {name}…  (Enter: senden)',
   },
   dm: {
     sealed: 'ende zu ende versiegelt',
@@ -423,6 +426,9 @@ export default {
     placeholderReply: 'Antwort an {name}…  (Enter: senden)',
     placeholderDm: '@{name} — verschlüsselte nachricht…  (Enter: senden)',
     placeholderGdm: '{name} — verschlüsselte nachricht…  (Enter: senden)',
+    voiceCallShort: 'anrufen',
+    videoCallShort: 'video',
+    leaveFailed: 'gruppe konnte nicht verlassen werden',
   },
   addMember: {
     title: 'Mitglied hinzufügen',

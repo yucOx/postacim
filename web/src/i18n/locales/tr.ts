@@ -424,6 +424,9 @@ export default {
     loadOlder: 'daha eski mesajlar',
     empty: 'henüz yük yok — ilk mühürlü zarfı sen bırak',
     newDivider: 'YENİ',
+    placeholder: 'şifreli mesaj yaz…  (Enter: gönder, Shift+Enter: satır)',
+    placeholderLocked: 'kanal yeniden anahtarlanana kadar kilitli…',
+    placeholderReply: '{name} kişisine yanıt yaz…  (Enter: gönder)',
   },
   // DM ve grup DM başlığı, arama düğmeleri, modal ve onay diyaloğu
   dm: {
@@ -449,6 +452,9 @@ export default {
     placeholderReply: '{name} kişisine yanıt yaz…  (Enter: gönder)',
     placeholderDm: '@{name} — şifreli mesaj…  (Enter: gönder)',
     placeholderGdm: '{name} — şifreli mesaj…  (Enter: gönder)',
+    voiceCallShort: 'ara',
+    videoCallShort: 'görüntülü',
+    leaveFailed: 'gruptan ayrılamadı',
   },
   // AddMemberModal (grup DM)
   addMember: {

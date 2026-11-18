@@ -10,6 +10,7 @@ import { useVoiceStore } from '../state/voiceStore';
 import { formatDay, sameDay } from '../lib/format';
 import { wsSend } from '../ws/socket';
 import ConfirmDialog from './ConfirmDialog';
+import { toast } from './Toast';
 import MessageRow from './MessageRow';
 import TypingLine from './TypingLine';
 import ReplyBar from './ReplyBar';
@@ -193,7 +194,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
                     title={callLocked && callChannelId === dmId ? t('dm.voiceCallActive') : t('dm.voiceCall')}
                   >
                     <Phone size={13} />
-                    <span className="hidden 2xl:inline">ara</span>
+                    <span className="hidden 2xl:inline">{t('dm.voiceCallShort')}</span>
                   </button>
                   <button
                     onClick={() => void startDmCall(dmId, true).catch(() => {})}
@@ -202,7 +203,7 @@ export default function DmChat({ dmId }: { dmId: string }) {
                     title={callLocked && callChannelId === dmId ? t('dm.videoCallActive') : t('dm.videoCall')}
                   >
                     <Video size={13} />
-                    <span className="hidden 2xl:inline">görüntülü</span>
+                    <span className="hidden 2xl:inline">{t('dm.videoCallShort')}</span>
                   </button>
                 </>
               )}
@@ -344,7 +345,9 @@ export default function DmChat({ dmId }: { dmId: string }) {
           onConfirm={() => {
             void leaveGdm(gdm.id)
               .then(() => showDmHome())
-              .catch(() => {});
+              .catch((err) => {
+                toast.error(err instanceof Error ? err.message : t('dm.leaveFailed'));
+              });
           }}
           onCancel={() => setShowLeave(false)}
         />

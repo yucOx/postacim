@@ -95,7 +95,7 @@ export function HoverActions({
   return (
     <div
       ref={wrapRef}
-      className={`absolute right-4 top-1 z-10 items-center gap-1 ${picking ? 'flex' : 'hidden group-hover:flex'}`}
+      className={`absolute right-4 top-1 z-10 items-center gap-1 coarse-flex ${picking ? 'flex' : 'hidden group-hover:flex'}`}
     >
       <button type="button" onClick={onReply} title={t('delete.reply')} aria-label={t('delete.reply')} className={cls(false)}>
         <Reply size={12} />

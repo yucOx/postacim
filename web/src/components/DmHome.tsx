@@ -30,6 +30,7 @@ function NewGroupModal({ onClose }: { onClose: () => void }) {
   };
 
   const submit = async (): Promise<void> => {
+    if (busy) return; // çift tık → grup iki kez oluşturulmasın
     setBusy(true);
     setError(null);
     try {
@@ -156,6 +157,7 @@ export default function DmHome() {
   })();
 
   const submit = async (): Promise<void> => {
+    if (busy) return; // Enter tuş tekrarı → istek iki kez gönderilmesin
     setBusy(true);
     setError(null);
     setMsg(null);
@@ -209,7 +211,7 @@ export default function DmHome() {
             <input
               value={nick}
               onChange={(e) => setNick(e.target.value)}
-              onKeyDown={(e) => nick.trim() && e.key === 'Enter' && void submit()}
+              onKeyDown={(e) => nick.trim() && e.key === 'Enter' && !e.nativeEvent.isComposing && void submit()}
               placeholder={t('dmHome.nickPlaceholder')}
               maxLength={24}
               className="input flex-1"
@@ -374,13 +376,13 @@ export default function DmHome() {
               </button>
               <button
                 onClick={() => void openDm(f.id)}
-                className="btn-ghost !py-0.5 !text-xs opacity-0 transition-opacity group-hover:opacity-100"
+                className="btn-ghost !py-0.5 !text-xs opacity-0 transition-opacity group-hover:opacity-100 coarse-opacity"
               >
                 {t('dmHome.message')}
               </button>
               <button
                 onClick={() => setUnfriendNick(f.nick)}
-                className="rounded p-1 text-paper-700 opacity-0 transition-opacity hover:text-stamp-400 group-hover:opacity-100"
+                className="rounded p-1 text-paper-700 opacity-0 transition-opacity hover:text-stamp-400 group-hover:opacity-100 coarse-opacity"
                 title={t('dmHome.unfriendTitle')}
                 aria-label={t('dmHome.unfriendOf', { name: f.nick })}
               >

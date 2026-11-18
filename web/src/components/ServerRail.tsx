@@ -120,6 +120,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
   const [inviteLink, setInviteLink] = useState('');
   const [applyName, setApplyName] = useState('');
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
+  const [applyBusy, setApplyBusy] = useState(false);
   // sürükle-bırak sıralama — bilinmeyenler (yeni katılan) en sona düşer
   const [order, setOrder] = useState<string[]>(loadOrder);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -141,6 +142,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
   };
 
   const submit = async (): Promise<void> => {
+    if (busy) return; // Enter tuş tekrarı → topluluk iki kez oluşturulmasın
     setBusy(true);
     setError(null);
     try {
@@ -228,7 +230,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
             >
               <Avatar userId={d.peer.id} label={d.peer.nick} size={38} />
               {unread > 0 && !active && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-night-900 bg-lamp-500 px-0.5 font-display text-[9px] font-bold text-night-950">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-night-900 bg-lamp-500 px-0.5 font-display text-[9px] font-bold text-night-950 group-hover:hidden">
                   {unread > 99 ? '99+' : unread}
                 </span>
               )}
@@ -353,6 +355,8 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
             {applyMsg && <p className="text-sm text-lamp-300">{applyMsg}</p>}
             <button
               onClick={async () => {
+                if (applyBusy) return; // çift tık → iki katılma talebi oluşmasın
+                setApplyBusy(true);
                 setError(null);
                 setApplyMsg(null);
                 try {
@@ -362,9 +366,11 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
                   setApplyName('');
                 } catch (err) {
                   setError(err instanceof Error ? err.message : 'hata');
+                } finally {
+                  setApplyBusy(false);
                 }
               }}
-              disabled={!applyName.trim()}
+              disabled={!applyName.trim() || applyBusy}
               className="btn-ghost"
             >
               {t('nav.applySubmit')}
@@ -381,7 +387,7 @@ export default function ServerRail({ onNavigate }: { onNavigate?: () => void }) 
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => name.trim() && e.key === 'Enter' && void submit()}
+              onKeyDown={(e) => name.trim() && e.key === 'Enter' && !e.nativeEvent.isComposing && void submit()}
               placeholder={t('nav.newCommunityPlaceholder')}
               maxLength={64}
               className="input"

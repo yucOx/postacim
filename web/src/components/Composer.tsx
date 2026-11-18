@@ -74,6 +74,8 @@ export default function Composer({
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
+    // IME kompozisyon ortasındaki Enter metni göndermesin (ja/ko/zh girişi)
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void submit();
@@ -139,6 +141,8 @@ export default function Composer({
           }}
           onKeyDown={onKey}
           rows={1}
+          // kanal/DM değişince Composer yeniden monte edilir (key) — odak buraya döner
+          autoFocus
           placeholder={placeholder}
           disabled={disabled}
           aria-label={t('composer.ariaWrite')}

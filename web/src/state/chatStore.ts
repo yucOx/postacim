@@ -15,6 +15,8 @@ import { onServerEvent } from '../ws/socket';
 
 // server replay sightings for this session; channel ids never collide with dmChatStore's
 const replays = new ReplayFilter();
+// "daha eski mesajlar" uçuşta mı — çift tık aynı sayfayı iki kez basmasın
+const loadingOlder = new Set<string>();
 
 // kalıcı çözümleme başarısızları (çapa öncesi v4 satırlar, bozuk kayıtlar):
 // tam bağlamla açılamayan satır sonsuza dek açılamaz — her karşılaşmada
@@ -215,21 +217,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   loadOlder: async (channelId) => {
+    if (loadingOlder.has(channelId)) return;
     const list = get().messages[channelId] ?? [];
     const oldest = list[0]?.id;
     if (!oldest) return;
-    const res = await api<{ messages: ChatMessage[]; has_more: boolean }>(
-      `/channels/${channelId}/messages?before=${oldest}&limit=50`,
-    );
-    const filtered = res.messages.filter((m) => !(m.client_id && replays.check(channelId, m.client_id)));
-    const older = await mapBatched(filtered, toDisplay);
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [channelId]: [...older, ...(s.messages[channelId] ?? [])],
-      },
-      hasMore: { ...s.hasMore, [channelId]: res.has_more },
-    }));
+    loadingOlder.add(channelId);
+    try {
+      const res = await api<{ messages: ChatMessage[]; has_more: boolean }>(
+        `/channels/${channelId}/messages?before=${oldest}&limit=50`,
+      );
+      const filtered = res.messages.filter((m) => !(m.client_id && replays.check(channelId, m.client_id)));
+      const older = await mapBatched(filtered, toDisplay);
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [channelId]: [...older, ...(s.messages[channelId] ?? [])],
+        },
+        hasMore: { ...s.hasMore, [channelId]: res.has_more },
+      }));
+    } finally {
+      loadingOlder.delete(channelId);
+    }
   },
 
   send: async (channelId, body, replyTo) => {

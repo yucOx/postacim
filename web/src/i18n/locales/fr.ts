@@ -399,6 +399,9 @@ export default {
     loadOlder: 'messages plus anciens',
     empty: 'pas encore de cargaison — dépose la première enveloppe scellée',
     newDivider: 'NOUVEAU',
+    placeholder: 'message chiffré…  (Entrée : envoyer, Maj+Entrée : saut de ligne)',
+    placeholderLocked: 'verrouillé jusqu au renouvellement de la clé du salon…',
+    placeholderReply: 'répondre à {name}…  (Entrée : envoyer)',
   },
   dm: {
     sealed: 'scellé de bout en bout',
@@ -423,6 +426,9 @@ export default {
     placeholderReply: 'répondre à {name}…  (Entrée : envoyer)',
     placeholderDm: '@{name} — message chiffré…  (Entrée : envoyer)',
     placeholderGdm: '{name} — message chiffré…  (Entrée : envoyer)',
+    voiceCallShort: 'appeler',
+    videoCallShort: 'vidéo',
+    leaveFailed: 'impossible de quitter le groupe',
   },
   addMember: {
     title: 'Ajouter un membre',

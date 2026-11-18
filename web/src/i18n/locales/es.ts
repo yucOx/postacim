@@ -399,6 +399,9 @@ export default {
     loadOlder: 'mensajes más antiguos',
     empty: 'aún no hay carga — deja el primer sobre sellado',
     newDivider: 'NUEVO',
+    placeholder: 'mensaje cifrado…  (Enter: enviar, Shift+Enter: salto de línea)',
+    placeholderLocked: 'bloqueado hasta que se renueve la clave del canal…',
+    placeholderReply: 'responder a {name}…  (Enter: enviar)',
   },
   dm: {
     sealed: 'sellado de extremo a extremo',
@@ -423,6 +426,9 @@ export default {
     placeholderReply: 'responder a {name}…  (Enter: enviar)',
     placeholderDm: '@{name} — mensaje cifrado…  (Enter: enviar)',
     placeholderGdm: '{name} — mensaje cifrado…  (Enter: enviar)',
+    voiceCallShort: 'llamar',
+    videoCallShort: 'vídeo',
+    leaveFailed: 'no se pudo salir del grupo',
   },
   addMember: {
     title: 'Añadir miembro',
