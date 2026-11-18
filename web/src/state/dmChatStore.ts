@@ -77,7 +77,7 @@ interface DmChatState {
   send: (dmId: string, body: string, replyTo?: number) => Promise<void>;
   /** optimistic own reaction toggle; server errors revert it */
   toggleReaction: (dmId: string, messageId: number, emoji: string, mine: boolean) => Promise<void>;
-  wire: () => void;
+  wire: () => () => void;
 }
 
 // reply/reactions metadata shared by every display shape
@@ -352,12 +352,13 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
       set((s) => ({
         messages: { ...s.messages, [raw.channel_id]: insertSorted(s.messages[raw.channel_id] ?? [], display) },
       }));
-      // notification for background DMs (never for own messages sent from another tab)
+      // notification for background DMs (never for own messages sent from another tab).
+      // Sekme arkadayken açık sohbet "okundu" sayılmamalı — habersiz kalma:
+      // gizli sekmede aktif kanala gelen mesaj da bildirir.
       const app = useAppStore.getState();
-      if (
-        app.activeDmId !== raw.channel_id &&
-        display.senderId !== useAuthStore.getState().user?.id
-      ) {
+      const activeVisible =
+        app.activeDmId === raw.channel_id && document.visibilityState === 'visible';
+      if (!activeVisible && display.senderId !== useAuthStore.getState().user?.id) {
         const title =
           app.dms.find((d) => d.id === raw.channel_id)?.peer.nick ??
           app.gdms.find((g) => g.id === raw.channel_id)?.name ??
@@ -369,7 +370,8 @@ export const useDmChatStore = create<DmChatState>((set, get) => ({
         notifyIncomingMessage({ channelId: raw.channel_id, title, nick: display.nick, mention });
       }
     };
-    onServerEvent((e) => {
+    // unsub döndürür — Shell remount'ta handler katlanmasın
+    return onServerEvent((e) => {
       const me = useAuthStore.getState().user?.id;
       if (e.type === 'dm:message') onMsg(e.message as ChatMessage);
       else if (e.type === 'gdm:message') onMsg(e.message as ChatMessage);

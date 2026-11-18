@@ -7,7 +7,7 @@ import { useAppStore } from '../state/appStore';
 import { useVoiceStore } from '../state/voiceStore';
 import { documentPip } from '../lib/documentPip';
 import { PiPControls, PiPStage } from './PiPWidget';
-import { toast } from './Toast';
+import { toast, ToastContainer } from './Toast';
 
 /** Discord tarzı "her şeyin üstünde" arama penceresi — Document
  *  Picture-in-Picture. Açıkken köşedeki mini widget gizlenir (Discord'da
@@ -118,6 +118,9 @@ export default function CallPopout(): React.ReactNode {
           <PiPStage expanded className="h-full" />
         </div>
         <PiPControls onEnd={onEnd} />
+        {/* popout içindeki hatalar da görünsün — ana penceredeki toast
+            kullanıcı buraya bakmazken görünmüyordu */}
+        <ToastContainer />
       </RoomContext.Provider>
     </div>,
     pipDoc.document.body,

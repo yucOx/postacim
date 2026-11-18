@@ -68,7 +68,7 @@ interface ChatState {
   send: (channelId: string, body: string, replyTo?: number) => Promise<void>;
   /** optimistic own reaction toggle; server errors revert it */
   toggleReaction: (channelId: string, messageId: number, emoji: string, mine: boolean) => Promise<void>;
-  wire: () => void;
+  wire: () => () => void;
 }
 
 // reply/reactions metadata shared by every display shape
@@ -348,7 +348,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   wire: () => {
-    onServerEvent((e) => {
+    // unsub döndürür — Shell remount'ta handler katlanmasın
+    return onServerEvent((e) => {
       const me = useAuthStore.getState().user?.id;
       // dm_/gdm_ channel ids belong to dmChatStore (its wire handles those)
       if (e.type === 'message:deleted') {
@@ -405,8 +406,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!app.channelKeys[raw.channel_id]?.[raw.key_version]) void app.loadBootstrap();
         else void refreshSignKeys();
       }
-      // chime + OS toast for messages in rooms we're not looking at
-      if (!amSender(display) && !(app.view === 'community' && app.activeChannelId === raw.channel_id)) {
+      // chime + OS toast for messages in rooms we're not looking at.
+      // Sekme gizliyken açık kanal da bildirir — gizli sekmede mesajlar
+      // sessizce "okundu" oluyordu, dönen kullanıcı hiçbir sinyal bulamıyordu
+      const activeVisible =
+        app.view === 'community' &&
+        app.activeChannelId === raw.channel_id &&
+        document.visibilityState === 'visible';
+      if (!amSender(display) && !activeVisible) {
         const com = app.communities.find((c) => c.channels.some((ch) => ch.id === raw.channel_id));
         const chName = com?.channels.find((ch) => ch.id === raw.channel_id)?.name;
         if (com && chName) {

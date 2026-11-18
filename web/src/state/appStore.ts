@@ -132,7 +132,7 @@ interface AppState {
   createGroupDm: (name: string, memberIds: string[]) => Promise<void>;
   addGdmMember: (gdmId: string, userId: string) => Promise<void>;
   leaveGdm: (gdmId: string) => Promise<void>;
-  wireEvents: () => void;
+  wireEvents: () => () => void;
 }
 
 const setKeyEpoch = (keys: KeyEpochs, channelId: string, version: number, key: Uint8Array): KeyEpochs => ({
@@ -250,13 +250,16 @@ export const useAppStore = create<AppState>((set, get) => {
       dmChannelKeys: dmKeys,
       channelKeys: keys,
     });
-    // keep selection if still valid, otherwise pick first text channel of first community
+    // keep selection if still valid, otherwise pick first text channel of first
+    // community — yalnız kullanıcı DAHA ÖNCE bir kanal seçtiyse: DM-öncelikli
+    // kullanıcının seçimi (null) her bootstrap'ta hayali toplulukla
+    // dolduruluyordu, rayda seçilmemiş topluluk vurgulanıyordu
     const stillThere = communities.some((c) => c.channels.some((ch) => ch.id === prevActiveChannel));
-    if (!stillThere) {
+    if (prevActiveChannel && !stillThere) {
       const first = communities[0];
       const firstText = first?.channels.find((ch) => ch.type === 'text');
       set({ activeCommunityId: first?.id ?? null, activeChannelId: firstText?.id ?? null });
-    } else if (!get().activeCommunityId) {
+    } else if (prevActiveChannel && stillThere && !get().activeCommunityId) {
       const com = communities.find((c) => c.channels.some((ch) => ch.id === prevActiveChannel));
       set({ activeCommunityId: com?.id ?? null });
     }
@@ -641,7 +644,23 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   wireEvents: () => {
-    onServerEvent((e) => {
+    // Faz 6 — gossip publisher kaydı + periyodik loop başlat.
+    // Üye olunan topluluklar bootstrap'ten gelir (yeni topluluk eklendikçe
+    // güncellenir). Head securityStore'dan okunur (syncKeyLog sonrası).
+    const userId = useAuthStore.getState().user?.id;
+    if (userId) {
+      registerGossipPublisher({
+        userId,
+        communities: () => get().communities.map((c) => c.id),
+        head: () => useSecurityStore.getState().keylogHead,
+      });
+      startGossipLoop();
+      // JIT: ilk publish bir sonraki periyotu beklemeden — boot senkronundan
+      // sonra aynı topluluktaki diğer istemciler hemen fark etsin
+      publishKeylogHead();
+    }
+    // unsub döndürür — Shell remount'ta handler katlanmasın
+    return onServerEvent((e) => {
       const me = useAuthStore.getState().user?.id;
       if (e.type === 'community:member_added') {
         void get().loadBootstrap();
@@ -741,21 +760,5 @@ export const useAppStore = create<AppState>((set, get) => {
         }));
       }
     });
-
-    // Faz 6 — gossip publisher kaydı + periyodik loop başlat.
-    // Üye olunan topluluklar bootstrap'ten gelir (yeni topluluk eklendikçe
-    // güncellenir). Head securityStore'dan okunur (syncKeyLog sonrası).
-    const userId = useAuthStore.getState().user?.id;
-    if (userId) {
-      registerGossipPublisher({
-        userId,
-        communities: () => get().communities.map((c) => c.id),
-        head: () => useSecurityStore.getState().keylogHead,
-      });
-      startGossipLoop();
-      // JIT: ilk publish bir sonraki periyotu beklemeden — boot senkronundan
-      // sonra aynı topluluktaki diğer istemciler hemen fark etsin
-      publishKeylogHead();
-    }
   },
 }) });

@@ -124,14 +124,20 @@ export default function Shell() {
 
   useEffect(() => {
     const stopNoise = startNoise();
-    wireEvents();
-    useChatStore.getState().wire();
-    useDmChatStore.getState().wire();
-    useTypingStore.getState().wire();
-    useVoiceStore.getState().wire();
+    // her wire bir unsub döndürür — Shell remount'ta (çıkış→giriş, davet
+    // ekranı, nasıl çalışır) handler'lar katlanıyordu: tek message:new N kez
+    // çalıyor, N paralel loadBootstrap atıyordu
+    const unsubs = [
+      wireEvents(),
+      useChatStore.getState().wire(),
+      useDmChatStore.getState().wire(),
+      useTypingStore.getState().wire(),
+      useVoiceStore.getState().wire(),
+    ];
     wsConnect();
     void loadBootstrap();
     return () => {
+      unsubs.forEach((u) => u());
       stopNoise();
       wsDisconnect();
     };

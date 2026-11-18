@@ -1,56 +1,18 @@
-import { useEffect, useRef } from 'react';
 import { Phone, X } from 'lucide-react';
 import { useVoiceStore } from '../state/voiceStore';
 import { useT } from '../i18n/I18nProvider';
 import { toast } from './Toast';
 import { PigeonMark } from './Brand';
 
-// WebAudio ring — no audio files, two-tone pattern like a phone
-function useRing(active: boolean): void {
-  const ctxRef = useRef<AudioContext | null>(null);
-  useEffect(() => {
-    if (!active) return;
-    const ctx = new AudioContext();
-    ctxRef.current = ctx;
-    let stopped = false;
-    const tone = (freq: number, at: number, dur: number): void => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.value = freq;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      const t = ctx.currentTime + at;
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
-      gain.gain.setValueAtTime(0.12, t + dur - 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      osc.start(t);
-      osc.stop(t + dur + 0.05);
-    };
-    const ring = (): void => {
-      tone(440, 0, 0.35);
-      tone(480, 0, 0.35);
-      tone(440, 0.5, 0.35);
-      tone(480, 0.5, 0.35);
-    };
-    ring();
-    const interval = setInterval(() => {
-      if (!stopped) ring();
-    }, 2000);
-    return () => {
-      stopped = true;
-      clearInterval(interval);
-      void ctx.close();
-    };
-  }, [active]);
-}
+// zil sesi voiceStore.wire'daki startRing() ile çalınır (ayarlarla kapatılabilir).
+// Buradaki ikinci WebAudio döngüsü kaldırıldı: her gelen aramada iki farklı
+// ritim üst üste biniyordu ve çağrı sesleri kapalıyken bile çalıyordu.
 
 export default function IncomingCall(): React.ReactNode {
   const { t } = useT();
   const callState = useVoiceStore((s) => s.callState);
   const acceptIncoming = useVoiceStore((s) => s.acceptIncoming);
   const declineIncoming = useVoiceStore((s) => s.declineIncoming);
-  useRing(callState?.phase === 'incoming');
 
   if (!callState || callState.phase !== 'incoming') return null;
 

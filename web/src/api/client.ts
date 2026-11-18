@@ -22,6 +22,11 @@ export async function api<T>(
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   if (!res.ok) {
+    // oturum sunucuda ölümüş (401) — "zombi" yarım giriş ekranı yerine giriş
+    // ekranına dön. /auth/* istisna: parola yanlış da 401'dir, çıkış yapma.
+    if (res.status === 401 && !path.startsWith('/auth/')) {
+      void import('../state/authStore').then((m) => m.useAuthStore.getState().expireSession());
+    }
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new ApiError(res.status, body.error ?? `HTTP ${res.status}`);
   }

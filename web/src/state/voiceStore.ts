@@ -118,7 +118,9 @@ interface VoiceState {
   /** ended fazından geri arama: oda hâlâ canlı (yalnız karşı taraf ayrıldı),
    *  bu yüzden yeni LiveKit bağlantısı kurmadan aynı odada zil çalar. */
   recallCall: () => Promise<void>;
-  wire: () => void;
+  wire: () => () => void;
+  /** tam sökülme — Shell dışına çıkarken (çıkış, davet ekranı) App çağırır */
+  teardownAll: (keepCallState?: boolean) => void;
 }
 
 const PIP_POS_KEY = 'postacim.pipPos';
@@ -612,6 +614,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   };
 
   return {
+    teardownAll,
   joinedChannelId: null,
   leftChannelId: null,
   room: null,
@@ -992,6 +995,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
         }
       }
       if (!key) throw new Error('DM anahtarı yok');
+      // bekleyen gelen arama varsa red gönder — modal yok olur ama arayan
+      // taraf cevap gelmesini sonsuza dek beklemesin
+      const pending = get().callState;
+      if (pending?.phase === 'incoming') {
+        stopRing();
+        wsSend({ type: 'call:decline', channel_id: pending.channelId });
+      }
       const peerId = app.dms.find((d) => d.id === dmId)?.peer.id;
       const voiceKey = await sframeKey(key, 'dm', peerId);
       // fresh start: tear down any previous room/community channel first
@@ -1053,8 +1063,11 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
     // Geri arama yolu: karşı taraf 'ended' fazından recallCall ile yeniden
     // zil çaldı ve odamız hâlâ canlı. Yeni connect kurmak yerine aynı
     // odada mikrofonu açıp 'active' ol — reconnect gereksiz kesinti demek.
+    // YALNIZ oda BU aramanın odası olmalı: topluluk ses odasındayken gelen
+    // DM aramasını kabul edince 'accept' topluluk odasında 'active' gösteriyor
+    // ve hiç medya akmıyordu (iki taraf da kilitli kalıyordu).
     const existing = get().room;
-    if (existing) {
+    if (existing && get().joinedChannelId === call.channelId) {
       wsSend({ type: 'call:accept', channel_id: call.channelId });
       set({ callState: { phase: 'active', channelId: call.channelId } });
       try {
@@ -1066,6 +1079,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
       }
       return;
     }
+    // başka bir odada canlıysak (topluluk ses odası) bırak — tek oda modeli
+    if (existing) teardownAll();
     try {
       wsSend({ type: 'call:accept', channel_id: call.channelId });
       const app = useAppStore.getState();
@@ -1155,7 +1170,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => {  // full teardow
   },
 
   wire: () => {
-    onServerEvent((e) => {
+    // unsub döndürür — Shell remount'ta handler katlanmasın
+    return onServerEvent((e) => {
       if (e.type === 'voice:update') {
         const channelId = e.channel_id as string;
         const participants = (e.participants as VoiceParticipant[]) ?? [];

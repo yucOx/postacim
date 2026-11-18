@@ -12,14 +12,15 @@ interface Typer {
 }
 interface TypingState {
   byChannel: Record<string, Record<string, Typer>>;
-  wire: () => void;
+  wire: () => () => void;
 }
 
 export const useTypingStore = create<TypingState>((set) => ({
   byChannel: {},
 
   wire: () => {
-    onServerEvent((e) => {
+    // unsub döndürür — Shell remount'ta handler katlanmasın
+    return onServerEvent((e) => {
       if (e.type !== 'channel:typing') return;
       const channelId = e.channel_id as string;
       const user = e.user as { id: string; nick: string };

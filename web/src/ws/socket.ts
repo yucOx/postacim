@@ -75,6 +75,13 @@ function open(): void {
   ws.onclose = (ev) => {
     lastClose = { code: ev.code, reason: ev.reason, at: Date.now() };
     setStatus('offline');
+    // 4003: oturum ölü (sunucu reddetti) — sonsuz connect/düşme döngüsü ve
+    // yarım giriş yapmış "zombi" ekran yerine giriş ekranına dön
+    if (ev.code === 4003) {
+      stopped = true;
+      void import('../state/authStore').then((m) => m.useAuthStore.getState().expireSession());
+      return;
+    }
     scheduleReconnect();
   };
   ws.onerror = () => ws?.close();

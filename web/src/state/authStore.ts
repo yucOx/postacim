@@ -114,6 +114,8 @@ interface AuthState {
   setupRecovery: (recoveryWords: string[]) => Promise<void>;
   recoverLogin: (nick: string, recoveryWords: string[], newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** oturum sunucuda öldü (401 / WS 4003) — api çağrısı yapmadan giriş ekranına dön */
+  expireSession: () => void;
   restore: () => Promise<void>;
   /** upload a processed avatar data URL; bumps the local timestamp. */
   setAvatar: (dataUrl: string) => Promise<void>;
@@ -398,6 +400,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
     // cihaz kilidi kaydı bilinçli olarak kalır — login ekranındaki passkey
     // butonu ona bağlı; RAM'deki anahtarlar temizlenir
+    set({
+      status: 'anonymous',
+      user: null,
+      publicKey: null,
+      privateKey: null,
+      signPublicKey: null,
+      signPrivateKey: null,
+      deviceId: null,
+      kek: null,
+      authMaterial: null,
+    });
+  },
+
+  // oturum zaten ölü — sunucuya logout isteği anlamsız; RAM temizliği yeter
+  expireSession: () => {
     set({
       status: 'anonymous',
       user: null,
