@@ -51,6 +51,8 @@ export default function Modal({
     scrollLocks++;
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        // gelen arama örtüsü en üst katman — modal onu kapatmasın
+        if (document.querySelector('[data-incoming-call]')) return;
         // En üstteki modal dışında alttaki modallar Escape tuşuyla kapanmasın
         if (modalStack.length > 0 && modalStack[modalStack.length - 1] !== panelRef.current) {
           return;

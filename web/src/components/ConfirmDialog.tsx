@@ -36,6 +36,7 @@ export default function ConfirmDialog({
       // üstte başka katman varsa (gelen arama örtüsü, üst modal) bu dialog
       // görünmez durumdadır — Escape/Enter'ı yutmasın
       if (!isInTopModal(wrapRef.current)) return;
+      if (document.querySelector('[data-incoming-call]')) return;
       if (e.key === 'Escape') {
         onCancel();
         return;
