@@ -15,3 +15,7 @@
 - markRead gizli sekmede yine okur (bildirim gider ama unread 0 kalır) — Discord benzeri davranış için visibilitychange listener'lı mark-read gerekir
 - popout'ta toast'lar iki pencerede de gösterilir (aynı store)
 - HoverActions coarse-pointer'da her satırda görünür (kalabalık ama erişilebilir)
+
+## i18n dil sızıntısı + deploy (aynı gün)
+- Sunucu 108 hata mesajı Türkçe döner → web/src/lib/serverMsg.ts çeviri tablosu (api() katmanında), 42 gösterim noktası dokunulmadan çözüldü; istemci throw'ları sarıldı; UI'da kalan 4 sabit metin t()'ye bağlandı (commit 106c38d)
+- Deploy (lokal): server 4000 ✓, web 8081 ✓ (8080 = gui.py çakışması, .env WEB_PORT=8081), livekit ✓ — livekit/livekit.yaml boş dizindi (Docker bind-mount tuzağı), example'dan lokal config yazıldı (use_external_ip: false). .env ve livekit.yaml gitignored — VPS'te WEB_PORT 8080 kalır
